@@ -1,0 +1,21 @@
+# Never commit
+CREDENTIALS.md
+LOCAL.md
+*.secret
+*.key
+.env
+.env.*
+
+# Editor / local tooling
+*.code-workspace
+.vscode/
+mixxx-watchdog.vbs
+
+# Service noise (messages/*.jsonl ARE tracked)
+*.log
+messages/service.log
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wild n Loyal Radio</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📻</text></svg>">
+<style>
+  :root {
+    --bg: #0b0b0e; --panel: #131318; --line: #24242c;
+    --fg: #ecebe8; --dim: #8b8b96; --accent: #4ade80;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 28px 20px; min-height: 100vh;
+  }
+  .wrap { width: 100%; max-width: 900px; }
+
+  header { text-align: center; margin-bottom: 24px; }
+  h1 { font-size: 1.5rem; font-weight: 650; letter-spacing: -.01em; margin: 0 0 5px; }
+  .desc { color: var(--dim); font-size: .9rem; }
+  .live { display: inline-flex; align-items: center; gap: 7px; font-size: .72rem;
+          letter-spacing: .14em; color: var(--dim); margin-bottom: 14px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #6b7280; }
+  .on .dot { background: var(--accent); animation: pulse 2s ease-in-out infinite; }
+  .on .lbl { color: var(--accent); }
+  @keyframes pulse { 0%,100%{opacity:1; box-shadow:0 0 0 0 rgba(74,222,128,.5)} 50%{opacity:.75; box-shadow:0 0 0 6px rgba(74,222,128,0)} }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px 22px; }
+
+  .np-label, .panel h2 { font-size: .68rem; letter-spacing: .16em; color: var(--dim);
+                         text-align: center; font-weight: 500; margin: 0; }
+  .panel h2 { text-align: left; margin-bottom: 12px; }
+  .np { text-align: center; font-size: 1.02rem; font-weight: 550; margin: 6px 0 22px;
+        min-height: 1.6em; overflow-wrap: anywhere; }
+
+  .controls { display: flex; align-items: center; gap: 16px; }
+  button.play { flex: none; width: 62px; height: 62px; border-radius: 50%; cursor: pointer;
+    border: none; background: var(--fg); color: var(--bg); font-size: 1.4rem;
+    display: grid; place-items: center; transition: transform .12s ease; }
+  button.play:hover:not(:disabled) { transform: scale(1.05); }
+  button.play:disabled { opacity: .28; cursor: not-allowed; }
+  .vol { flex: 1; display: flex; align-items: center; gap: 9px; color: var(--dim); }
+  input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+
+  .meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px;
+          padding-top: 16px; border-top: 1px solid var(--line); font-size: .76rem; color: var(--dim); }
+  .meta b { display: block; color: var(--fg); font-weight: 550; font-size: .88rem; }
+
+  /* guestbook */
+  input[type=text], textarea {
+    width: 100%; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 11px; font: inherit; font-size: .88rem; margin-bottom: 9px;
+  }
+  textarea { resize: vertical; min-height: 74px; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 9px; align-items: center; }
+  button.send {
+    background: var(--accent); color: #06210f; border: 0; border-radius: 9px;
+    padding: 9px 18px; font: inherit; font-weight: 600; font-size: .85rem; cursor: pointer;
+  }
+  button.send:disabled { opacity: .4; cursor: not-allowed; }
+  .hint { font-size: .74rem; color: var(--dim); }
+  .hp { position: absolute; left: -9999px; }
+
+  .msgs { margin-top: 18px; max-height: 320px; overflow-y: auto; }
+  .msg { padding: 10px 0; border-top: 1px solid var(--line); }
+  .msg .who { font-size: .82rem; font-weight: 600; }
+  .msg .when { font-size: .7rem; color: var(--dim); margin-left: 6px; font-weight: 400; }
+  .msg .body { font-size: .88rem; margin: 3px 0 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .msg .track { font-size: .7rem; color: var(--dim); font-style: italic; overflow-wrap: anywhere; }
+  .empty { font-size: .84rem; color: var(--dim); padding: 12px 0; }
+
+  footer { margin-top: 18px; display: flex; justify-content: center; gap: 18px; font-size: .76rem; }
+  footer a, footer button.link { color: var(--dim); text-decoration: none;
+    background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+  footer a:hover, footer button.link:hover { color: var(--fg); }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="live" id="live"><span class="dot"></span><span class="lbl" id="lbl">connecting</span></div>
+    <h1 id="name">&nbsp;</h1>
+    <div class="desc" id="desc">&nbsp;</div>
+  </header>
+
+  <div class="cols">
+
+    <!-- player -->
+    <div class="panel">
+      <div class="np-label">NOW PLAYING</div>
+      <div class="np" id="np">—</div>
+      <div class="controls">
+        <button class="play" id="btn" disabled aria-label="Play or pause">▶</button>
+        <div class="vol">
+          <span aria-hidden="true">🔉</span>
+          <input type="range" id="vol" min="0" max="100" value="85" aria-label="Volume">
+        </div>
+      </div>
+      <div class="meta">
+        <div>listeners <b id="listeners">–</b></div>
+        <div>on air <b id="uptime">–</b></div>
+        <div>quality <b id="bitrate">–</b></div>
+      </div>
+    </div>
+
+    <!-- guestbook -->
+    <div class="panel">
+      <h2>LEAVE A MESSAGE</h2>
+      <form id="form" autocomplete="off">
+        <input type="text" id="who" maxlength="40" placeholder="your name (optional)">
+        <textarea id="text" maxlength="500" placeholder="say something…" required></textarea>
+        <input type="text" id="website" class="hp" tabindex="-1" aria-hidden="true">
+        <div class="row">
+          <button type="submit" class="send" id="send">Send</button>
+          <span class="hint" id="hint">stamped with whatever is playing</span>
+        </div>
+      </form>
+      <div class="msgs" id="msgs"><div class="empty">no messages yet</div></div>
+    </div>
+
+  </div>
+
+  <footer>
+    <a id="direct" href="/stream">open in player</a>
+    <button class="link" id="share">copy link</button>
+  </footer>
+</div>
+
+<audio id="audio" preload="none"></audio>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const audio = $('audio'), btn = $('btn'), vol = $('vol');
+  let lastTitle = null;
+
+  vol.addEventListener('input', () => { audio.volume = vol.value / 100; });
+  audio.volume = vol.value / 100;
+
+  function start() {
+    audio.src = '/stream?t=' + Date.now();   // always join live, never a stale buffer
+    audio.load();
+    return audio.play();
+  }
+  btn.addEventListener('click', () => {
+    if (audio.paused) start().catch(() => setLive(false, 'could not start'));
+    else { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+  });
+  audio.addEventListener('playing', () => { btn.textContent = '❚❚'; });
+  audio.addEventListener('pause',   () => { btn.textContent = '▶'; });
+
+  function setLive(on, label) {
+    $('live').className = 'live' + (on ? ' on' : '');
+    $('lbl').textContent = label || (on ? 'ON AIR' : 'OFF AIR');
+    btn.disabled = !on;
+    if (!on) $('np').textContent = '—';
+  }
+
+  function fmtUptime(s) {
+    if (!s) return '–';
+    const secs = Math.max(0, (Date.now() - new Date(s).getTime()) / 1000);
+    const h = Math.floor(secs / 3600), m = Math.floor(secs % 3600 / 60);
+    return h ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  async function poll() {
+    try {
+      const j = await (await fetch('/status-json.xsl', { cache: 'no-store' })).json();
+      let s = j.icestats && j.icestats.source;
+      if (!s) return setLive(false);
+      if (!Array.isArray(s)) s = [s];
+      const src = s.find(x => (x.listenurl || '').endsWith('/stream')) || s[0];
+      if (!src) return setLive(false);
+
+      if (src.server_name) { $('name').textContent = src.server_name; document.title = src.server_name; }
+      $('desc').textContent = src.server_description || '';
+      const title = src.title || '';
+      $('np').textContent = title || 'live';
+      lastTitle = title;
+
+      $('listeners').textContent = src.listeners ?? '–';
+      $('uptime').textContent = fmtUptime(src.stream_start_iso8601 || src.stream_start);
+      const br = (src.audio_info || '').match(/bitrate=(\d+)/);
+      $('bitrate').textContent = br ? br[1] + ' kbps' : '–';
+      setLive(true);
+
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: title || 'Live', artist: src.server_name || '', album: src.server_description || ''
+        });
+      }
+    } catch { setLive(false, 'unreachable'); }
+  }
+
+  // --- guestbook ---------------------------------------------------------
+  function when(iso) {
+    const d = new Date(iso), diff = (Date.now() - d) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return d.toLocaleDateString();
+  }
+
+  function render(list) {
+    const box = $('msgs');
+    box.textContent = '';
+    if (!list.length) {
+      const e = document.createElement('div');
+      e.className = 'empty'; e.textContent = 'no messages yet';
+      box.appendChild(e);
+      return;
+    }
+    for (const m of list) {
+      const d = document.createElement('div'); d.className = 'msg';
+      const who = document.createElement('div'); who.className = 'who';
+      who.textContent = m.name || 'anonymous';           // textContent - never innerHTML
+      const t = document.createElement('span'); t.className = 'when'; t.textContent = when(m.at);
+      who.appendChild(t);
+      const body = document.createElement('div'); body.className = 'body'; body.textContent = m.text;
+      d.append(who, body);
+      if (m.playing) {
+        const tr = document.createElement('div'); tr.className = 'track';
+        tr.textContent = '♪ ' + m.playing;
+        d.appendChild(tr);
+      }
+      box.appendChild(d);
+    }
+  }
+
+  async function loadMessages() {
+    try {
+      const j = await (await fetch('/api/messages', { cache: 'no-store' })).json();
+      render(j.messages || []);
+    } catch { /* service may be down; leave whatever is shown */ }
+  }
+
+  $('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const text = $('text').value.trim();
+    if (!text) return;
+    $('send').disabled = true;
+    try {
+      const r = await fetch('/api/message', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: $('who').value, text, website: $('website').value })
+      });
+      const j = await r.json();
+      if (!r.ok) { $('hint').textContent = j.error || 'could not send'; }
+      else { $('text').value = ''; $('hint').textContent = 'thanks!'; await loadMessages(); }
+    } catch { $('hint').textContent = 'could not send'; }
+    setTimeout(() => { $('hint').textContent = 'stamped with whatever is playing'; }, 4000);
+    $('send').disabled = false;
+  });
+
+  $('share').addEventListener('click', async () => {
+    const url = location.href;
+    try {
+      if (navigator.share) await navigator.share({ title: document.title, url });
+      else { await navigator.clipboard.writeText(url); $('share').textContent = 'copied';
+             setTimeout(() => $('share').textContent = 'copy link', 1600); }
+    } catch {}
+  });
+
+  poll(); loadMessages();
+  setInterval(poll, 8000);
+  setInterval(loadMessages, 30000);
+})();
+</script>
+</body>
+</html>
