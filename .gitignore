@@ -27,3 +27,6 @@ NOTES.md
 
 # holds the source and admin passwords
 icecast.xml
+
+# liquidsoap writes ./cache relative to the working directory
+cache/
