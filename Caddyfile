@@ -154,6 +154,15 @@
 			flush_interval -1
 		}
 	}
+	# Liquidsoap's own mixing desk - live knobs for the voice chain and the
+	# ducking, changeable while on air. It has no authentication of its own and
+	# can silence the station, so it does not go out unprotected.
+	handle /interactive* {
+		basic_auth {
+			dj $2a$14$z3BAcN.A4sO0MSHo80Pg.ucS9QQqWlcmDIdu.vD/R/8JVCp2pJdty
+		}
+		reverse_proxy 127.0.0.1:8005
+	}
 	handle /stream* {
 		reverse_proxy 127.0.0.1:8000 {
 			flush_interval -1
