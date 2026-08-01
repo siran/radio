@@ -37,8 +37,10 @@ off_thresh = interactive.float("off_thresh", min = 0.0,  max = 0.2,  step = 0.00
 hold       = interactive.float("hold",       min = 0.0,  max = 6.0,  step = 0.25, 1.5)
 glide      = interactive.float("glide",      min = 0.01, max = 0.5,  step = 0.01, 0.05)
 
-# Expose all of the above over harbor's http server, so the desk can read and
-# set them. Same process, no extra service.
+
+# The mixing desk: liquidsoap's own page for the knobs above, at
+# /interactive on the harbor port. Must NOT use the default port - that is
+# 8000, which icecast owns, and the collision takes the station off air.
 interactive.harbor(port = 8005)
 
 # The library. randomize + watch so new files appear without a restart.
@@ -64,7 +66,7 @@ live = input.harbor(
   password      = environment.get("RADIO_HARBOR_PASSWORD"),
   buffer        = 1.0,
   max           = 10.0,
-  timeout       = 8.0,
+  timeout       = 20.0,
   on_connect    = fun (_) -> connected := true,
   on_disconnect = fun () -> connected := false
 )
