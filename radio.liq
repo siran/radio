@@ -9,6 +9,13 @@ settings.log.file         := true
 settings.log.file.path    := "D:/Liquidsoap/log/radio.log"
 settings.log.stdout       := true
 
+# Control socket: skip a track, inspect what is playing. Bound to loopback,
+# so it is reachable only from Dolly itself (i.e. over ssh).
+#   telnet localhost 1234   ->   help / skip / uptime
+settings.server.telnet           := true
+settings.server.telnet.bind_addr := "127.0.0.1"
+settings.server.telnet.port      := 1234
+
 # The library. randomize + watch so new files appear without a restart.
 music = playlist(
   id          = "library",
