@@ -70,6 +70,43 @@
 
 	# Private email sidecars: WRITE ONLY. A PUT is accepted so the page can
 	# leave an address, but nothing can ever read them back over HTTP.
+	# Voice notes. Whatever lands here is played on the air within seconds, so
+	# unlike the guestbook it is not open to the world - audio cannot be
+	# unsaid. Same credentials as the mixing desk.
+	handle /messages/voice/* {
+		basic_auth {
+			dj $2a$14$J7vPlBTuh7W5LqBCimuOe.qhj5o6VCIux1uvhiQehAp1CO.7QXKtq
+		}
+		@putaudio {
+			method PUT
+			path *.webm *.ogg *.oga *.opus *.mp3 *.m4a *.wav
+		}
+		handle @putaudio {
+			rate_limit {
+				zone voice_writes {
+					key {remote_host}
+					events 20
+					window 5m
+				}
+			}
+			request_body {
+				max_size 4MB
+			}
+			webdav {
+				root C:/Users/an/src/radio/messages/voice
+				prefix /messages/voice
+			}
+		}
+		@putother method PUT
+		handle @putother {
+			respond 403
+		}
+		# never readable over http - these are someone's voice
+		handle {
+			respond 404
+		}
+	}
+
 	handle /messages/private/* {
 		@put {
 			method PUT

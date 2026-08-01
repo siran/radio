@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Talk &middot; wild n loyal radio</title>
+<style>
+  :root {
+    --bg:#0e0e10; --panel:#17171a; --line:#2a2a30;
+    --fg:#e8e8ea; --dim:#8a8a93; --on:#4ade80; --rec:#f87171;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         -webkit-text-size-adjust:100%; }
+  .wrap { max-width:460px; margin:0 auto; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 2px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:18px; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:12px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:12px; color:var(--dim);
+          text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
+  input, select { width:100%; padding:11px 12px; margin-bottom:12px; background:#101013;
+          border:1px solid var(--line); border-radius:8px; color:var(--fg);
+          font:inherit; font-size:16px; }
+  input:focus, select:focus { outline:none; border-color:#4a4a55; }
+
+  /* One big button. This is a walkie-talkie, not a console. */
+  #rec { width:100%; padding:26px; border:0; border-radius:14px; font:inherit;
+         font-weight:700; font-size:19px; cursor:pointer; background:var(--fg); color:#000;
+         transition:background .15s; }
+  #rec.recording { background:var(--rec); color:#fff; }
+  #rec:disabled { opacity:.4; cursor:not-allowed; }
+
+  .meter { height:8px; background:#101013; border-radius:99px; overflow:hidden;
+           border:1px solid var(--line); margin-top:12px; }
+  .meter i { display:block; height:100%; width:0%;
+             background:linear-gradient(90deg, var(--on), #fbbf24 75%, var(--rec));
+             transition:width .06s linear; }
+  .status { font-size:13px; color:var(--dim); margin-top:10px; text-align:center; }
+  .err { color:var(--rec); font-size:13px; margin-top:10px; white-space:pre-wrap; }
+
+  ul { list-style:none; padding:0; margin:10px 0 0; }
+  li { display:flex; justify-content:space-between; gap:10px; font-size:13px;
+       color:var(--dim); padding:7px 0; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  li .ok { color:var(--on); }
+  li .bad { color:var(--rec); }
+  .foot { text-align:center; font-size:12px; color:var(--dim); margin-top:18px; }
+  a { color:var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>wild n loyal &middot; talk</h1>
+  <div class="sub">Record a note. It goes out over the music, which ducks underneath.</div>
+
+  <div class="panel" id="setup">
+    <label for="pass">Password</label>
+    <input id="pass" type="password" autocomplete="current-password" placeholder="same as the mixing desk">
+    <label for="dev">Microphone</label>
+    <select id="dev"><option value="">default</option></select>
+  </div>
+
+  <div class="panel">
+    <button id="rec">Hold to talk</button>
+    <div class="meter"><i id="vu"></i></div>
+    <div class="status" id="status">ready</div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="panel">
+    <label>This session</label>
+    <ul id="sent"><li><span>nothing sent yet</span></li></ul>
+  </div>
+
+  <div class="foot"><a href="/">&larr; back to the station</a></div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KEY = 'wnl-talk';
+
+  let stream = null, rec = null, ac = null, analyser = null, raf = 0;
+  let parts = [], recording = false, startedAt = 0, first = true;
+
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (s.pass) $('pass').value = s.pass;
+  } catch {}
+
+  const setStatus = t => { $('status').textContent = t; };
+  const fail = m => { $('err').textContent = m; };
+
+  async function listDevices() {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const sel = $('dev'), cur = sel.value;
+      sel.innerHTML = '<option value="">default</option>';
+      all.filter(d => d.kind === 'audioinput').forEach((d, i) => {
+        const o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || ('microphone ' + (i + 1));
+        sel.appendChild(o);
+      });
+      sel.value = cur;
+    } catch {}
+  }
+  listDevices();
+
+  function meter() {
+    if (!analyser) return;
+    const buf = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    $('vu').style.width = Math.min(100, Math.sqrt(sum / buf.length) * 300) + '%';
+    raf = requestAnimationFrame(meter);
+  }
+
+  function pickMime() {
+    for (const m of ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4']) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return '';
+  }
+  const extFor = m => m.includes('ogg') ? 'ogg' : m.includes('mp4') ? 'm4a' : 'webm';
+
+  function row(name, state, detail) {
+    if (first) { $('sent').innerHTML = ''; first = false; }
+    const li = document.createElement('li');
+    li.innerHTML = '<span>' + name + '</span><span class="' +
+                   (state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : '') + '">' +
+                   detail + '</span>';
+    $('sent').prepend(li);
+    return li;
+  }
+
+  async function begin() {
+    $('err').textContent = '';
+    if (!window.isSecureContext) return fail('Needs https to use the microphone.');
+    if (!navigator.mediaDevices || !window.MediaRecorder) return fail('This browser cannot record audio.');
+    const mime = pickMime();
+    if (!mime) return fail('This browser cannot encode audio.');
+    if (!$('pass').value) return fail('Enter the password first.');
+    try { localStorage.setItem(KEY, JSON.stringify({ pass: $('pass').value })); } catch {}
+
+    const devId = $('dev').value;
+    const constraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    if (devId) constraints.deviceId = { exact: devId };
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+    } catch (e) { return fail('Microphone refused: ' + e.name); }
+    listDevices();
+
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 1024;
+    ac.createMediaStreamSource(stream).connect(analyser);
+    meter();
+
+    parts = [];
+    rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 96000 });
+    rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+    rec.onstop = () => finish(mime);
+    rec.start();          // no timeslice: one whole clip, one whole file
+    recording = true;
+    startedAt = Date.now();
+    $('rec').textContent = 'Release to send';
+    $('rec').classList.add('recording');
+    setStatus('recording');
+  }
+
+  function end() {
+    if (!recording) return;
+    recording = false;
+    $('rec').textContent = 'Hold to talk';
+    $('rec').classList.remove('recording');
+    setStatus('sending');
+    try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
+  }
+
+  // The whole point: an ordinary upload with a length, not a live stream.
+  async function finish(mime) {
+    try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
+    try { ac && ac.close(); } catch {}
+    cancelAnimationFrame(raf); analyser = null; $('vu').style.width = '0%';
+
+    const secs = ((Date.now() - startedAt) / 1000);
+    const blob = new Blob(parts, { type: mime.split(';')[0] });
+    if (blob.size < 2000 || secs < 0.6) { setStatus('too short - not sent'); return; }
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const name = stamp + '-' + Math.random().toString(36).slice(2, 8) + '.' + extFor(mime);
+    const li = row(secs.toFixed(1) + 's · ' + Math.round(blob.size / 1024) + ' KB', '', 'sending…');
+
+    try {
+      const res = await fetch('/messages/voice/' + name, {
+        method: 'PUT',
+        headers: {
+          'Authorization': 'Basic ' + btoa('dj:' + $('pass').value),
+          'Content-Type': blob.type || 'application/octet-stream'
+        },
+        body: blob                       // a Blob: the browser sets Content-Length
+      });
+      if (res.ok || res.status === 201 || res.status === 204) {
+        li.lastChild.className = 'ok';
+        li.lastChild.textContent = 'on air';
+        setStatus('sent - it plays within a couple of seconds');
+      } else {
+        li.lastChild.className = 'bad';
+        li.lastChild.textContent = 'HTTP ' + res.status;
+        setStatus('rejected');
+        if (res.status === 401) fail('Wrong password.');
+        else if (res.status === 403) fail('That file type is not accepted.');
+        else if (res.status === 429) fail('Too many notes too quickly - wait a moment.');
+      }
+    } catch (e) {
+      li.lastChild.className = 'bad';
+      li.lastChild.textContent = 'failed';
+      fail('Upload failed: ' + e.message);
+      setStatus('not sent');
+    }
+  }
+
+  const btn = $('rec');
+  // Press and hold, on a mouse or a finger.
+  btn.addEventListener('mousedown', begin);
+  btn.addEventListener('mouseup', end);
+  btn.addEventListener('mouseleave', () => { if (recording) end(); });
+  btn.addEventListener('touchstart', e => { e.preventDefault(); begin(); }, { passive: false });
+  btn.addEventListener('touchend', e => { e.preventDefault(); end(); }, { passive: false });
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+})();
+</script>
+</body>
+</html>
