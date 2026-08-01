@@ -49,6 +49,16 @@
   li .bad { color:var(--rec); }
   .foot { text-align:center; font-size:12px; color:var(--dim); margin-top:18px; }
   a { color:var(--dim); }
+
+  summary { cursor:pointer; font-size:12px; color:var(--dim);
+            text-transform:uppercase; letter-spacing:.06em; }
+  summary::marker { color:var(--line); }
+  .hint { font-size:12px; color:var(--dim); margin:10px 0; }
+  code { background:#101013; border:1px solid var(--line); border-radius:4px;
+         padding:1px 5px; font-size:11px; color:var(--fg); }
+  /* liquidsoap's own page is light; keep it readable rather than restyling it */
+  #desk { width:100%; height:460px; border:1px solid var(--line);
+          border-radius:8px; background:#fff; margin-top:6px; }
 </style>
 </head>
 <body>
@@ -76,7 +86,22 @@
     <ul id="sent"><li><span>nothing sent yet</span></li></ul>
   </div>
 
-  <div class="foot"><a href="/">&larr; back to the station</a></div>
+  <details class="panel" id="deskwrap">
+    <summary>Mixing desk &mdash; tune while you talk</summary>
+    <div class="hint">
+      <code>voice_gain</code> if you are too quiet &middot;
+      <code>duck_to</code> for how far the music dips &middot;
+      <code>hold</code> for how long it stays down.
+      Changes apply immediately, on air.
+    </div>
+    <iframe id="desk" title="mixing desk"></iframe>
+  </details>
+
+  <div class="foot">
+    <a href="/">&larr; back to the station</a>
+    <span class="sep"> &middot; </span>
+    <a href="/interactive" target="_blank" rel="noopener">desk in its own tab</a>
+  </div>
 </div>
 
 <script>
@@ -255,6 +280,13 @@
       setStatus('not sent');
     }
   }
+
+  // Load the desk only when the panel is opened. It sits behind the same
+  // password, so loading it eagerly would pop an auth prompt on arrival.
+  $('deskwrap').addEventListener('toggle', () => {
+    const f = $('desk');
+    if ($('deskwrap').open && !f.src) f.src = '/interactive';
+  });
 
   const btn = $('rec');
   // Press and hold, on a mouse or a finger.
