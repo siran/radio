@@ -105,7 +105,7 @@
   const KEY = 'wnl-dj';
 
   let stream = null, rec = null, ac = null, analyser = null, raf = 0;
-  let controller = null, live = false;
+  let controller = null, live = false, closing = false, stopBody = null;
 
   // --- remembered settings (password only if explicitly asked for)
   try {
@@ -214,18 +214,37 @@
 
     // Feed recorder chunks into the request body as they arrive.
     let push = null, done = false;
+    closing = false;
     const body = new ReadableStream({
       start(c) { push = c; },
       cancel() { done = true; }
     });
 
     rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 96000 });
+
+    // Chunks are handed over asynchronously, so the stream must not be closed
+    // until the last one has actually been enqueued - otherwise the final
+    // enqueue throws and the body ends raggedly.
+    let pending = 0;
     rec.ondataavailable = async ev => {
       if (done || !push || !ev.data || !ev.data.size) return;
+      pending++;
       try { push.enqueue(new Uint8Array(await ev.data.arrayBuffer())); } catch {}
+      pending--;
+      if (closing && pending === 0) finishBody();
     };
-    rec.onstop = () => { done = true; try { push && push.close(); } catch {} };
+    rec.onstop = () => { closing = true; if (pending === 0) finishBody(); };
     rec.start(250);   // emit a chunk 4x a second
+
+    // Closing the body ends the PUT normally. That matters more than it looks:
+    // harbor otherwise waits out its timeout before it believes we are gone,
+    // which leaves the music ducked and the mount held against a reconnect.
+    function finishBody() {
+      if (done) return;
+      done = true;
+      try { push && push.close(); } catch {}
+    }
+    stopBody = finishBody;
 
     controller = new AbortController();
     const auth = btoa($('user').value + ':' + pass);
@@ -265,14 +284,21 @@
     live = false;
     $('go').textContent = 'Go on air';
     $('go').classList.remove('live');
+    setStatus('closing', '');
+
+    // End the recording, which ends the body, which ends the PUT. Aborting
+    // instead would leave the server waiting for a timeout - so abort is only
+    // a fallback if the graceful path does not complete.
     try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
-    try { controller && controller.abort(); } catch {}
+    try { stopBody && stopBody(); } catch {}
+    setTimeout(() => { try { controller && controller.abort(); } catch {} }, 2000);
+
     try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
     try { ac && ac.close(); } catch {}
     cancelAnimationFrame(raf);
     analyser = null;
     $('vu').style.width = '0%';
-    setStatus('idle', '');
+    setTimeout(() => { if (!live) setStatus('idle', ''); }, 500);
   }
 
   // Once the request is open and the recorder is running, we are on the air.

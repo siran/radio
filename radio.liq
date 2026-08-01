@@ -20,9 +20,11 @@ settings.server.telnet.bind_addr := "127.0.0.1"
 settings.server.telnet.port      := 1234
 
 # --- tuning, all by ear ---------------------------------------------------
-duck_to   = 0.15   # music level while you talk. 1.0 = untouched, 0.0 = silent
-threshold = 0.02   # mic loudness above this counts as speech
-glide     = 0.05   # how fast the fader moves. smaller = slower and smoother
+duck_to    = 0.35   # music level while you talk. 1.0 = untouched, 0.0 = silent
+on_thresh  = 0.02   # get this loud and the music dips
+off_thresh = 0.01   # drop below this to start counting as quiet
+hold       = 1.5    # seconds of quiet before the music comes back
+glide      = 0.05   # how fast the fader moves. smaller = slower and smoother
 
 # The library. randomize + watch so new files appear without a restart.
 music = playlist(
@@ -48,6 +50,7 @@ live = input.harbor(
   password      = environment.get("RADIO_HARBOR_PASSWORD"),
   buffer        = 2.0,
   max           = 10.0,
+  timeout       = 8.0,
   on_connect    = fun (_) -> connected := true,
   on_disconnect = fun () -> connected := false
 )
@@ -59,14 +62,32 @@ live = rms(id = "mic", duration = 0.3, live)
 # Glide the music gain toward its target instead of stepping to it, so the dip
 # sounds like a hand on a fader rather than a click.
 music_gain = ref(1.0)
-talking   = ref(false)
+talking    = ref(false)
+quiet_for  = ref(0.0)
+
 def duck_gain() =
-  loud = connected() and live.rms() > threshold
-  if loud != talking() then
-    talking := loud
-    log.important(label = "duck", if loud then "music down" else "music back up" end)
+  # is_ready is the honest signal: rms keeps reporting its last value after a
+  # source drops, so on its own it would leave the music dipped.
+  ready = connected() and live.is_ready()
+  level = if ready then live.rms() else 0.0 end
+
+  if talking() then
+    if not ready or level < off_thresh then
+      quiet_for := quiet_for() + 0.04
+      if quiet_for() >= hold then
+        talking := false
+        log.important(label = "duck", "music back up")
+      end
+    else
+      quiet_for := 0.0
+    end
+  elsif ready and level > on_thresh then
+    talking   := true
+    quiet_for := 0.0
+    log.important(label = "duck", "music down")
   end
-  target = if loud then duck_to else 1.0 end
+
+  target = if talking() then duck_to else 1.0 end
   music_gain := music_gain() + (target - music_gain()) * glide
   music_gain()
 end
