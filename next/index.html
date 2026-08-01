@@ -213,7 +213,7 @@
   </div>
 
   <footer>
-    <a href="/liq" id="rawlink" title="open the raw stream in VLC or any audio player">stream</a>
+    <a href="/stream" title="open the raw stream in VLC or any audio player">stream</a>
     <span class="sep">·</span>
     <button class="flink" id="share">copy link</button>
     <span class="sep">·</span>
@@ -230,28 +230,14 @@
   let lastTitle = null, titleSince = Date.now();
   let replyTo = null;   // filename of the message being replied to
 
-  // Two mounts exist: /liq is Liquidsoap (autodj, and whoever is live via
-  // harbor), /stream is Mixxx direct. Prefer /liq and fall back, so the page
-  // still works if either source is down. Listeners keep one URL either way.
-  const MOUNTS = ['/liq', '/stream'];
-  let mount = MOUNTS[0];
-
   vol.addEventListener('input', () => { audio.volume = vol.value / 100; });
   audio.volume = vol.value / 100;
 
   function start() {
-    audio.src = mount + '?t=' + Date.now();   // always join live, never a stale buffer
+    audio.src = '/stream?t=' + Date.now();   // always join live, never a stale buffer
     audio.load();
     return audio.play();
   }
-  // If the source we are listening to goes away, follow the other one rather
-  // than sitting on a dead socket.
-  function onMountChange() {
-    const link = $('rawlink');
-    if (link) link.setAttribute('href', mount);
-    if (!audio.paused) start().catch(() => setLive(false, 'could not start'));
-  }
-
   btn.addEventListener('click', () => {
     if (audio.paused) start().catch(() => setLive(false, 'could not start'));
     else { audio.pause(); audio.removeAttribute('src'); audio.load(); }
@@ -279,13 +265,7 @@
       let s = j.icestats && j.icestats.source;
       if (!s) return setLive(false);
       if (!Array.isArray(s)) s = [s];
-      // pick the first preferred mount that is actually on air
-      let src = null;
-      for (const m of MOUNTS) {
-        const hit = s.find(x => (x.listenurl || '').endsWith(m));
-        if (hit) { src = hit; if (mount !== m) { mount = m; onMountChange(); } break; }
-      }
-      if (!src) { src = s[0]; }
+      const src = s.find(x => (x.listenurl || '').endsWith('/stream')) || s[0];
       if (!src) return setLive(false);
 
       if (src.server_name) { $('name').textContent = src.server_name; document.title = src.server_name; }
