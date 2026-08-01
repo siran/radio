@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>DJ &middot; wild n loyal radio</title>
+<style>
+  :root {
+    --bg: #0e0e10; --panel: #17171a; --line: #2a2a30;
+    --fg: #e8e8ea; --dim: #8a8a93; --on: #4ade80; --off: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 460px; margin: 0 auto; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 2px; letter-spacing: .01em; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line);
+           border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+
+  label { display: block; font-size: 12px; color: var(--dim);
+          text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+  input, select {
+    width: 100%; padding: 11px 12px; margin-bottom: 12px; background: #101013;
+    border: 1px solid var(--line); border-radius: 8px; color: var(--fg);
+    font: inherit; font-size: 16px; /* 16px stops iOS zooming on focus */
+  }
+  input:focus, select:focus { outline: none; border-color: #4a4a55; }
+
+  button {
+    width: 100%; padding: 15px; border: 0; border-radius: 10px;
+    font: inherit; font-weight: 600; font-size: 16px; cursor: pointer;
+    background: var(--fg); color: #000;
+  }
+  button.live { background: var(--off); color: #fff; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
+  .dot.on { background: var(--on); }
+  .dot.live { background: var(--off); }
+  .status { font-size: 13px; color: var(--dim); }
+
+  /* VU meter: you must cross the threshold for the music to duck */
+  .meter { height: 8px; background: #101013; border-radius: 99px;
+           overflow: hidden; border: 1px solid var(--line); }
+  .meter i { display: block; height: 100%; width: 0%;
+             background: linear-gradient(90deg, var(--on), #fbbf24 75%, var(--off));
+             transition: width .06s linear; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .err { color: var(--off); font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
+  .warn { background: #2a1f10; border-color: #4a3a1a; }
+  a { color: var(--dim); }
+  .foot { text-align: center; font-size: 12px; color: var(--dim); margin-top: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>wild n loyal &middot; dj</h1>
+  <div class="sub">Your microphone, over the music. The station keeps playing underneath.</div>
+
+  <div class="panel" id="setup">
+    <label for="mount">Mount</label>
+    <input id="mount" value="live" autocapitalize="off" autocorrect="off" spellcheck="false">
+
+    <label for="user">User</label>
+    <input id="user" value="source" autocapitalize="off" autocorrect="off" spellcheck="false">
+
+    <label for="pass">Password</label>
+    <input id="pass" type="password" autocomplete="current-password" placeholder="harbor password">
+
+    <label for="dev">Microphone</label>
+    <select id="dev"><option value="">default</option></select>
+
+    <div class="row">
+      <input type="checkbox" id="remember" style="width:auto;margin:0">
+      <span class="status">remember on this device</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <span class="dot" id="dot"></span>
+      <span class="status" id="status">idle</span>
+    </div>
+    <div class="meter"><i id="vu"></i></div>
+    <div class="hint" id="hint">The music only dips once you are loud enough &mdash; watch the bar.</div>
+    <div class="hint" id="stats"></div>
+  </div>
+
+  <button id="go">Go on air</button>
+  <div class="err" id="err"></div>
+
+  <div class="foot"><a href="/">&larr; back to the station</a></div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KEY = 'wnl-dj';
+
+  let stream = null, rec = null, ac = null, analyser = null, raf = 0;
+  let controller = null, live = false, closing = false, stopBody = null;
+  let sent = 0, chunks = 0, startedAt = 0, lastChunk = 0, wakeLock = null, statTimer = 0;
+
+  const fmtBytes = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB'
+                      : n > 1024 ? Math.round(n / 1024) + ' KB' : n + ' B';
+
+  // --- remembered settings (password only if explicitly asked for)
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (saved.mount) $('mount').value = saved.mount;
+    if (saved.user) $('user').value = saved.user;
+    if (saved.pass) { $('pass').value = saved.pass; $('remember').checked = true; }
+  } catch {}
+
+  function remember() {
+    const o = { mount: $('mount').value, user: $('user').value };
+    if ($('remember').checked) o.pass = $('pass').value;
+    try { localStorage.setItem(KEY, JSON.stringify(o)); } catch {}
+  }
+
+  function setStatus(text, cls) {
+    $('status').textContent = text;
+    $('dot').className = 'dot' + (cls ? ' ' + cls : '');
+  }
+  function fail(msg) { $('err').textContent = msg; }
+
+  // --- list microphones once we are allowed to see their labels
+  async function listDevices() {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const sel = $('dev'), cur = sel.value;
+      sel.innerHTML = '<option value="">default</option>';
+      all.filter(d => d.kind === 'audioinput').forEach((d, i) => {
+        const o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || ('microphone ' + (i + 1));
+        sel.appendChild(o);
+      });
+      sel.value = cur;
+    } catch {}
+  }
+  listDevices();
+
+  // --- the level bar, so you can see whether you will trigger the ducking
+  function meter() {
+    if (!analyser) return;
+    const buf = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length);
+    $('vu').style.width = Math.min(100, rms * 300) + '%';
+    raf = requestAnimationFrame(meter);
+  }
+
+  function pickMime() {
+    const want = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+    for (const m of want) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return '';
+  }
+
+  async function start() {
+    $('err').textContent = '';
+
+    if (!window.isSecureContext) {
+      return fail('This page must be served over https to use the microphone.');
+    }
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      return fail('This browser cannot capture audio (needs getUserMedia + MediaRecorder).');
+    }
+    const mime = pickMime();
+    if (!mime) return fail('This browser cannot encode Opus.');
+
+    // Streaming upload is the whole trick: one long PUT whose body is fed
+    // as we record. Chrome supports it over HTTP/2; Firefox does not yet.
+    let supportsStream = false;
+    try {
+      new Request('/', { method: 'POST', body: new ReadableStream(), duplex: 'half' });
+      supportsStream = true;
+    } catch {}
+    if (!supportsStream) {
+      return fail('This browser cannot stream an upload.\nChrome or Edge works; Firefox and Safari do not yet.');
+    }
+
+    const pass = $('pass').value;
+    if (!pass) return fail('Enter the harbor password.');
+    remember();
+
+    setStatus('asking for the microphone', '');
+    const devId = $('dev').value;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: devId
+          ? { deviceId: { exact: devId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+          : { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+    } catch (e) {
+      setStatus('idle', '');
+      return fail('Microphone refused: ' + e.name);
+    }
+    listDevices();
+
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 1024;
+    src.connect(analyser);
+    meter();
+
+    // Feed recorder chunks into the request body as they arrive.
+    let push = null, done = false;
+    closing = false;
+    const body = new ReadableStream({
+      start(c) { push = c; },
+      cancel() { done = true; }
+    });
+
+    rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 96000 });
+
+    // Chunks are handed over asynchronously, so the stream must not be closed
+    // until the last one has actually been enqueued - otherwise the final
+    // enqueue throws and the body ends raggedly.
+    let pending = 0;
+    rec.ondataavailable = async ev => {
+      if (done || !push || !ev.data || !ev.data.size) return;
+      pending++;
+      try {
+        push.enqueue(new Uint8Array(await ev.data.arrayBuffer()));
+        sent += ev.data.size;
+        chunks++;
+        lastChunk = Date.now();
+      } catch (e) {
+        // If the body errors we would otherwise just go quiet - say so.
+        fail('Upload stream stopped after ' + fmtBytes(sent) + ': ' + (e && e.message ? e.message : e));
+        stop();
+      }
+      pending--;
+      if (closing && pending === 0) finishBody();
+    };
+    rec.onerror = e => { fail('Recorder error: ' + (e.error ? e.error.name : 'unknown')); stop(); };
+    rec.onstop = () => { closing = true; if (pending === 0) finishBody(); };
+    rec.start(250);   // emit a chunk 4x a second
+
+    // Closing the body ends the PUT normally. That matters more than it looks:
+    // harbor otherwise waits out its timeout before it believes we are gone,
+    // which leaves the music ducked and the mount held against a reconnect.
+    function finishBody() {
+      if (done) return;
+      done = true;
+      try { push && push.close(); } catch {}
+    }
+    stopBody = finishBody;
+
+    // A locked screen suspends the recorder on a phone, which looks exactly
+    // like a crash. Ask the system to keep the screen awake while on air.
+    try {
+      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+    } catch {}
+
+    // Show that data really is moving, and how long since the last chunk -
+    // "it broke" is much easier to diagnose with a number attached.
+    sent = 0; chunks = 0; startedAt = Date.now(); lastChunk = Date.now();
+    clearInterval(statTimer);
+    statTimer = setInterval(() => {
+      if (!live) return;
+      const secs = Math.round((Date.now() - startedAt) / 1000);
+      const gap = ((Date.now() - lastChunk) / 1000).toFixed(1);
+      $('stats').textContent = secs + 's · ' + fmtBytes(sent) + ' sent · ' +
+                               chunks + ' chunks · last ' + gap + 's ago';
+      if (Date.now() - lastChunk > 5000) {
+        fail('No audio has been sent for ' + gap + 's - the browser stopped feeding the stream.');
+      }
+    }, 1000);
+
+    controller = new AbortController();
+    const auth = btoa($('user').value + ':' + pass);
+    const mount = '/' + $('mount').value.replace(/^\/+/, '');
+
+    setStatus('connecting', '');
+    live = true;
+    $('go').textContent = 'Off air';
+    $('go').classList.add('live');
+
+    try {
+      const res = await fetch(mount, {
+        method: 'PUT',
+        headers: {
+          'Authorization': 'Basic ' + auth,
+          'Content-Type': mime.split(';')[0],
+          'Ice-Public': '0',
+          'Ice-Name': 'live from the dj page'
+        },
+        body, duplex: 'half', signal: controller.signal
+      });
+      if (!res.ok) {
+        fail(res.status === 401
+          ? 'Rejected: wrong password.'
+          : 'Server said ' + res.status + ' ' + res.statusText);
+        stop();
+      } else {
+        setStatus('connection closed by the server', '');
+        stop();
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') { fail('Connection failed: ' + e.message); stop(); }
+    }
+  }
+
+  function stop() {
+    live = false;
+    $('go').textContent = 'Go on air';
+    $('go').classList.remove('live');
+    setStatus('closing', '');
+
+    // End the recording, which ends the body, which ends the PUT. Aborting
+    // instead would leave the server waiting for a timeout - so abort is only
+    // a fallback if the graceful path does not complete.
+    try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
+    try { stopBody && stopBody(); } catch {}
+    setTimeout(() => { try { controller && controller.abort(); } catch {} }, 2000);
+
+    try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
+    try { ac && ac.close(); } catch {}
+    try { wakeLock && wakeLock.release(); } catch {}
+    wakeLock = null;
+    clearInterval(statTimer);
+    cancelAnimationFrame(raf);
+    analyser = null;
+    $('vu').style.width = '0%';
+    if (sent) {
+      $('stats').textContent = 'last run: ' + Math.round((Date.now() - startedAt) / 1000) +
+                               's · ' + fmtBytes(sent) + ' · ' + chunks + ' chunks';
+    }
+    setTimeout(() => { if (!live) setStatus('idle', ''); }, 500);
+  }
+
+  // If the tab is backgrounded the browser may throttle or suspend us, which
+  // reads as a crash. Say so rather than dying quietly.
+  document.addEventListener('visibilitychange', () => {
+    if (live && document.hidden) {
+      $('hint').textContent = 'Keep this page open and the screen on while broadcasting.';
+    }
+  });
+
+  // Once the request is open and the recorder is running, we are on the air.
+  setInterval(() => {
+    if (live && rec && rec.state === 'recording') setStatus('ON AIR', 'live');
+  }, 1000);
+
+  $('go').addEventListener('click', () => live ? stop() : start());
+  window.addEventListener('beforeunload', e => {
+    if (live) { e.preventDefault(); e.returnValue = ''; }
+  });
+})();
+</script>
+</body>
+</html>
