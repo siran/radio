@@ -1,6 +1,7 @@
 # Never commit
 CREDENTIALS.md
 LOCAL.md
+messages/private/
 *.secret
 *.key
 .env
@@ -19,3 +20,7 @@ messages/service.log
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# chat is ephemeral - delete the folder any time
+chat/
+NOTES.md
