@@ -73,6 +73,16 @@
 	# Voice notes. Whatever lands here is played on the air within seconds, so
 	# unlike the guestbook it is not open to the world - audio cannot be
 	# unsaid. Same credentials as the mixing desk.
+	# The talk page sits behind the same credential as the upload it makes, so
+	# the browser holds it and the page never asks. Same realm means one prompt
+	# covers both.
+	handle /talk* {
+		basic_auth {
+			dj $2a$14$J7vPlBTuh7W5LqBCimuOe.qhj5o6VCIux1uvhiQehAp1CO.7QXKtq
+		}
+		file_server
+	}
+
 	handle /messages/voice/* {
 		basic_auth {
 			dj $2a$14$J7vPlBTuh7W5LqBCimuOe.qhj5o6VCIux1uvhiQehAp1CO.7QXKtq

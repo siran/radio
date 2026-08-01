@@ -24,19 +24,50 @@ settings.server.telnet.port      := 1234
 # mixing desk page. No restart, no gap in the audio.
 
 # voice chain
-mic_gain   = interactive.float("mic_gain",   min = 0.0,   max = 4.0,   step = 0.1, 1.0)
-voice_gain = interactive.float("voice_gain", min = 0.0,   max = 8.0,   step = 0.25, 3.0)
-hp_freq    = interactive.float("hp_freq",    min = 40.0,  max = 300.0, step = 5.0, 90.0)
-comp_thr   = interactive.float("comp_thr",   min = -40.0, max = 0.0,   step = 1.0, -18.0)
-comp_ratio = interactive.float("comp_ratio", min = 1.0,   max = 20.0,  step = 0.5, 4.0)
-comp_gain  = interactive.float("comp_gain",  min = 0.0,   max = 24.0,  step = 0.5, 6.0)
+mic_gain   = interactive.float("mic_gain",
+  description = "Live microphone volume. Raise if the mic sounds far away.",
+  unit = "x", min = 0.0, max = 4.0, step = 0.1, 1.0)
+
+voice_gain = interactive.float("voice_gain",
+  description = "Volume of uploaded voice notes. Phone recordings arrive quiet, so this sits high.",
+  unit = "x", min = 0.0, max = 12.0, step = 0.25, 5.0)
+
+hp_freq    = interactive.float("hp_freq",
+  description = "Cuts rumble below this. Handling noise and desk bumps live down here.",
+  unit = "Hz", min = 40.0, max = 300.0, step = 5.0, 90.0)
+
+comp_thr   = interactive.float("comp_thr",
+  description = "Compressor: the level above which your voice starts being held back. Lower = more evening out.",
+  unit = "dB", min = -40.0, max = 0.0, step = 1.0, -18.0)
+
+comp_ratio = interactive.float("comp_ratio",
+  description = "Compressor: how hard it holds back. 1 = off, 4 = normal speech, 10+ = squashed.",
+  unit = ":1", min = 1.0, max = 20.0, step = 0.5, 4.0)
+
+comp_gain  = interactive.float("comp_gain",
+  description = "Make-up volume, added AFTER the compressor. This is the one to raise if you are still too quiet.",
+  unit = "dB", min = 0.0, max = 24.0, step = 0.5, 9.0)
 
 # ducking
-duck_to    = interactive.float("duck_to",    min = 0.0,  max = 1.0,  step = 0.05, 0.3)
-on_thresh  = interactive.float("on_thresh",  min = 0.0,  max = 0.2,  step = 0.005, 0.02)
-off_thresh = interactive.float("off_thresh", min = 0.0,  max = 0.2,  step = 0.005, 0.01)
-hold       = interactive.float("hold",       min = 0.0,  max = 30.0, step = 0.5,  1.5)
-glide      = interactive.float("glide",      min = 0.01, max = 0.5,  step = 0.01, 0.05)
+duck_to    = interactive.float("duck_to",
+  description = "How loud the music stays while someone talks. 1.0 = untouched, 0.0 = silent.",
+  unit = "x", min = 0.0, max = 1.0, step = 0.05, 0.3)
+
+on_thresh  = interactive.float("on_thresh",
+  description = "How loud you must be before the music dips.",
+  unit = "rms", min = 0.0, max = 0.2, step = 0.005, 0.02)
+
+off_thresh = interactive.float("off_thresh",
+  description = "How quiet counts as having stopped talking.",
+  unit = "rms", min = 0.0, max = 0.2, step = 0.005, 0.01)
+
+hold       = interactive.float("hold",
+  description = "Seconds of quiet before the music comes back up. Covers pauses and gaps between clips.",
+  unit = "s", min = 0.0, max = 30.0, step = 0.5, 1.5)
+
+glide      = interactive.float("glide",
+  description = "How fast the music fader moves. Smaller is slower and smoother.",
+  unit = "", min = 0.01, max = 0.5, step = 0.01, 0.05)
 
 
 # The mixing desk: liquidsoap's own page for the knobs above, at

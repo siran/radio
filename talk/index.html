@@ -65,17 +65,20 @@
 <div class="wrap">
 
   <h1>wild n loyal &middot; talk</h1>
-  <div class="sub">Hold and talk. It goes out in three-second slices, over the music, which ducks underneath.</div>
+  <div class="sub">Click once to open the mic, once more to close it. Your voice goes out in three-second slices, over the music, which ducks underneath.</div>
 
   <div class="panel" id="setup">
-    <label for="pass">Password</label>
-    <input id="pass" type="password" autocomplete="current-password" placeholder="same as the mixing desk">
     <label for="dev">Microphone</label>
     <select id="dev"><option value="">default</option></select>
+    <div id="passwrap" hidden>
+      <label for="pass">Password</label>
+      <input id="pass" type="password" autocomplete="current-password"
+             placeholder="only needed if the browser did not remember">
+    </div>
   </div>
 
   <div class="panel">
-    <button id="rec">Hold to talk</button>
+    <button id="rec">Start talking</button>
     <div class="meter"><i id="vu"></i></div>
     <div class="status" id="status">ready</div>
     <div class="err" id="err"></div>
@@ -99,8 +102,6 @@
 
   <div class="foot">
     <a href="/">&larr; back to the station</a>
-    <span class="sep"> &middot; </span>
-    <a href="/interactive" target="_blank" rel="noopener">desk in its own tab</a>
   </div>
 </div>
 
@@ -123,6 +124,19 @@
   } catch {}
 
   const setStatus = t => { $('status').textContent = t; };
+
+  // The page is behind basic auth, so the browser already holds the credential
+  // and normally sends it. Only if an upload comes back 401 do we ask.
+  function authHeaders(blob) {
+    const h = { 'Content-Type': blob.type || 'application/octet-stream' };
+    const typed = $('pass') && $('pass').value;
+    if (typed) h['Authorization'] = 'Basic ' + btoa('dj:' + typed);
+    return h;
+  }
+  function needPassword() {
+    $('passwrap').hidden = false;
+    fail('The browser did not pass its credential on. Enter the password once here.');
+  }
   const fail = m => { $('err').textContent = m; };
 
   async function listDevices() {
@@ -175,9 +189,6 @@
     if (!navigator.mediaDevices || !window.MediaRecorder) return fail('This browser cannot record audio.');
     const mime = pickMime();
     if (!mime) return fail('This browser cannot encode audio.');
-    if (!$('pass').value) return fail('Enter the password first.');
-    try { localStorage.setItem(KEY, JSON.stringify({ pass: $('pass').value })); } catch {}
-
     const devId = $('dev').value;
     const constraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
     if (devId) constraints.deviceId = { exact: devId };
@@ -194,7 +205,7 @@
 
     recording = true;
     seq = 0;
-    $('rec').textContent = 'Release to send';
+    $('rec').textContent = 'Stop talking';
     $('rec').classList.add('recording');
     setStatus('on air');
     segment(mime);          // start the first slice
@@ -228,7 +239,7 @@
     if (!recording) return;
     recording = false;
     clearTimeout(segTimer);
-    $('rec').textContent = 'Hold to talk';
+    $('rec').textContent = 'Start talking';
     $('rec').classList.remove('recording');
     setStatus('sending the last slice');
     try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
@@ -255,10 +266,8 @@
     try {
       const res = await fetch('/messages/voice/' + name, {
         method: 'PUT',
-        headers: {
-          'Authorization': 'Basic ' + btoa('dj:' + $('pass').value),
-          'Content-Type': blob.type || 'application/octet-stream'
-        },
+        headers: authHeaders(blob),
+        credentials: 'same-origin',      // let the browser send what it already holds
         body: blob                       // a Blob: the browser sets Content-Length
       });
       if (res.ok || res.status === 201 || res.status === 204) {
@@ -269,7 +278,7 @@
         li.lastChild.className = 'bad';
         li.lastChild.textContent = 'HTTP ' + res.status;
         setStatus('rejected');
-        if (res.status === 401) fail('Wrong password.');
+        if (res.status === 401) needPassword();
         else if (res.status === 403) fail('That file type is not accepted.');
         else if (res.status === 429) fail('Too many notes too quickly - wait a moment.');
       }
@@ -288,14 +297,12 @@
     if ($('deskwrap').open && !f.src) f.src = '/interactive';
   });
 
-  const btn = $('rec');
-  // Press and hold, on a mouse or a finger.
-  btn.addEventListener('mousedown', begin);
-  btn.addEventListener('mouseup', end);
-  btn.addEventListener('mouseleave', () => { if (recording) end(); });
-  btn.addEventListener('touchstart', e => { e.preventDefault(); begin(); }, { passive: false });
-  btn.addEventListener('touchend', e => { e.preventDefault(); end(); }, { passive: false });
-  btn.addEventListener('contextmenu', e => e.preventDefault());
+  // One click opens the mic, another closes it. Holding a phone button for a
+  // whole thought is miserable, and this makes a back-and-forth possible.
+  $('rec').addEventListener('click', () => recording ? end() : begin());
+  window.addEventListener('beforeunload', e => {
+    if (recording) { e.preventDefault(); e.returnValue = ''; }
+  });
 })();
 </script>
 </body>
