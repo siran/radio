@@ -71,6 +71,37 @@ live = input.harbor(
   on_disconnect = fun () -> connected := false
 )
 
+# --- voice notes -----------------------------------------------------------
+# A folder that anything can drop audio into - the browser over webdav, a
+# script, eGPT. Whatever appears is played once, over the ducked music. No
+# streaming protocol involved: each file arrives as an ordinary upload with a
+# content length, which is the part that has proven reliable.
+
+voice_dir = "C:/Users/an/src/radio/messages/voice"
+voice     = request.queue(id = "voice")
+seen      = ref([])
+
+def pickup() =
+  # whatsapp sends ogg/opus, telegram .oga, ios .m4a, the browser .webm
+  files =
+    list.fold(
+      fun (acc, ext) -> list.append(acc,
+        file.ls(voice_dir, absolute = true, sorted = true, pattern = "*.#{ext}")),
+      [],
+      ["webm", "ogg", "oga", "opus", "mp3", "m4a", "wav"])
+
+  list.iter(
+    fun (f) ->
+      if not list.mem(f, seen()) then
+        seen := list.add(f, seen())
+        voice.push.uri(f)
+        log.important(label = "voice", "queued #{f}")
+      end,
+    files)
+end
+
+thread.run(every = 2.0, pickup)
+
 # --- the voice chain -------------------------------------------------------
 # This is what makes a phone microphone sound like radio rather than like a
 # phone. The compressor matters more than any amount of EQ: it closes the gap
@@ -96,7 +127,10 @@ live = compress(
 
 # 4. measure AFTER the chain, so the ducking follows what listeners hear
 #    rather than the raw input.
-live = rms(id = "mic", duration = 0.3, live)
+# The mic and the voice notes are one bus, so either of them ducks the music
+# and they can overlap rather than interrupt.
+talk = add(id = "talk", normalize = false, [live, voice])
+talk = rms(id = "mic", duration = 0.3, talk)
 
 # --- ducking ---------------------------------------------------------------
 music_gain = ref(1.0)
@@ -106,8 +140,8 @@ quiet_for  = ref(0.0)
 def duck_gain() =
   # is_ready is the honest signal: rms keeps reporting its last value after a
   # source drops, so on its own it would leave the music dipped.
-  ready = connected() and live.is_ready()
-  level = if ready then live.rms() else 0.0 end
+  ready = talk.is_ready() and (connected() or not list.is_empty(seen()))
+  level = if ready then talk.rms() else 0.0 end
 
   if talking() then
     if not ready or level < off_thresh() then
@@ -134,7 +168,7 @@ music = amplify(duck_gain, music)
 
 # Music first, so the track title still shows while you are talking over it.
 # normalize=false so levels do not jump when the live source connects.
-radio = add(id = "mix", normalize = false, [music, live])
+radio = add(id = "mix", normalize = false, [music, talk])
 
 # `add` drops track marks, and the title rides with them - without this the
 # stream plays fine and the song name never reaches icecast.

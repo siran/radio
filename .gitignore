@@ -30,3 +30,7 @@ icecast.xml
 
 # liquidsoap writes ./cache relative to the working directory
 cache/
+
+# voice notes are ephemeral - the folder is tracked, the audio is not
+messages/voice/*
+!messages/voice/.keep
