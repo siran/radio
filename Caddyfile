@@ -1,0 +1,189 @@
+{
+	email {env.ACME_EMAIL}
+
+	# One global ACME policy: DNS-01 via Route 53 for every site below.
+	acme_dns route53
+
+	# webdav is not a standard directive; give it an explicit position
+	order webdav before file_server
+	order rate_limit before webdav
+
+	# Port 1111 keeps serving BOTH schemes (shared links depend on it).
+	# TLS handshakes start with 0x16 -> peek and route.
+	layer4 {
+		:1111 {
+			@tls tls
+			route @tls {
+				proxy 127.0.0.1:8443
+			}
+			route {
+				proxy 127.0.0.1:80
+			}
+		}
+	}
+}
+
+(jellyfin) {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8096
+}
+
+(radio) {
+	root * C:/Users/an/src/radio
+
+	# Live chat. Same idea as the guestbook: one small file per line.
+	# Ephemeral by nature - delete the folder any time.
+	handle /chat/* {
+		@putmd {
+			method PUT
+			path *.md
+		}
+		handle @putmd {
+			rate_limit {
+				zone chat_writes {
+					key {remote_host}
+					events 20
+					window 1m
+				}
+			}
+			request_body {
+				max_size 2KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/chat
+				prefix /chat
+			}
+		}
+		# any other PUT (.html, .js, .exe ...) is refused
+		@putother method PUT
+		handle @putother {
+			respond 403
+		}
+		handle {
+			# never let visitor-written bytes execute as markup
+			header Content-Type "text/plain; charset=utf-8"
+			header X-Content-Type-Options "nosniff"
+			header Content-Security-Policy "default-src 'none'; sandbox"
+			file_server browse
+		}
+	}
+
+	# Private email sidecars: WRITE ONLY. A PUT is accepted so the page can
+	# leave an address, but nothing can ever read them back over HTTP.
+	handle /messages/private/* {
+		@put {
+			method PUT
+			path *.txt
+		}
+		handle @put {
+			rate_limit {
+				zone private_writes {
+					key {remote_host}
+					events 5
+					window 1m
+				}
+			}
+			request_body {
+				max_size 1KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/messages/private
+				prefix /messages/private
+			}
+		}
+		handle {
+			respond 404
+		}
+	}
+
+	# Guestbook. Browser PUTs one .md file per comment; Caddy writes it.
+	# No application process involved - webdav is a module in this binary.
+	handle /messages/* {
+		@putmd {
+			method PUT
+			path *.md
+		}
+		handle @putmd {
+			rate_limit {
+				zone message_writes {
+					key {remote_host}
+					events 5
+					window 1m
+				}
+			}
+			request_body {
+				max_size 8KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/messages
+				prefix /messages
+			}
+		}
+		@putother method PUT
+		handle @putother {
+			respond 403
+		}
+		handle {
+			header Content-Type "text/plain; charset=utf-8"
+			header X-Content-Type-Options "nosniff"
+			header Content-Security-Policy "default-src 'none'; sandbox"
+			file_server browse
+		}
+	}
+
+	# Staging copy of the UI. Same stream, same messages, different file.
+	# Break it freely - the live page at / is untouched.
+	handle /next/* {
+		header Cache-Control "no-cache, must-revalidate"
+		file_server
+	}
+
+	# Source notes live alongside the page - keep them off the internet.
+	@docs path *.md *.markdown
+	handle @docs {
+		respond 404
+	}
+
+	# Live audio: never buffer, never compress.
+	handle /stream* {
+		reverse_proxy 127.0.0.1:8000 {
+			flush_interval -1
+		}
+	}
+
+	handle /status-json.xsl* {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		# the page is edited live - never let a browser cache it
+		header Cache-Control "no-cache, must-revalidate"
+		encode zstd gzip
+		file_server
+	}
+}
+
+# --- plaintext on :80 (deliberately not redirected) ---
+http://music.wildnloyal.org {
+	import jellyfin
+}
+http://radio.wildnloyal.org {
+	import radio
+}
+
+# --- HTTPS on :443, bare hostnames ---
+music.wildnloyal.org {
+	import jellyfin
+}
+radio.wildnloyal.org {
+	import radio
+}
+
+# --- loopback HTTPS, fed by the :1111 multiplexer ---
+music.wildnloyal.org:8443 {
+	bind 127.0.0.1
+	import jellyfin
+}
+radio.wildnloyal.org:8443 {
+	bind 127.0.0.1
+	import radio
+}

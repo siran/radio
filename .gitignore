@@ -24,3 +24,6 @@ desktop.ini
 # chat is ephemeral - delete the folder any time
 chat/
 NOTES.md
+
+# holds the source and admin passwords
+icecast.xml
