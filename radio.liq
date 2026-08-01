@@ -46,8 +46,8 @@ live = input.harbor(
   "live",
   port          = 8005,
   password      = environment.get("RADIO_HARBOR_PASSWORD"),
-  buffer        = 5.0,
-  max           = 15.0,
+  buffer        = 2.0,
+  max           = 10.0,
   on_connect    = fun (_) -> connected := true,
   on_disconnect = fun () -> connected := false
 )
