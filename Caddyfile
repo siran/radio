@@ -145,6 +145,15 @@
 	}
 
 	# Live audio: never buffer, never compress.
+	# Live DJ input, over TLS. The icecast source protocol sends its password
+	# in the clear, so it must not cross the internet on its own port - it
+	# comes in here instead, where caddy already terminates TLS with a
+	# certificate it renews itself.
+	handle /live {
+		reverse_proxy 127.0.0.1:8005 {
+			flush_interval -1
+		}
+	}
 	handle /stream* {
 		reverse_proxy 127.0.0.1:8000 {
 			flush_interval -1
