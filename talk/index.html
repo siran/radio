@@ -55,7 +55,7 @@
 <div class="wrap">
 
   <h1>wild n loyal &middot; talk</h1>
-  <div class="sub">Record a note. It goes out over the music, which ducks underneath.</div>
+  <div class="sub">Hold and talk. It goes out in three-second slices, over the music, which ducks underneath.</div>
 
   <div class="panel" id="setup">
     <label for="pass">Password</label>
@@ -86,6 +86,11 @@
 
   let stream = null, rec = null, ac = null, analyser = null, raf = 0;
   let parts = [], recording = false, startedAt = 0, first = true;
+  let seq = 0, segTimer = 0;
+
+  // Seconds per slice. Short enough to feel live, long enough that the seam
+  // between slices is not constant.
+  const SEG = 3;
 
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
@@ -162,40 +167,65 @@
     ac.createMediaStreamSource(stream).connect(analyser);
     meter();
 
-    parts = [];
-    rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 96000 });
-    rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
-    rec.onstop = () => finish(mime);
-    rec.start();          // no timeslice: one whole clip, one whole file
     recording = true;
-    startedAt = Date.now();
+    seq = 0;
     $('rec').textContent = 'Release to send';
     $('rec').classList.add('recording');
-    setStatus('recording');
+    setStatus('on air');
+    segment(mime);          // start the first slice
+  }
+
+  // A slice is a whole self-contained recording: start, run for SEG seconds,
+  // stop. Stopping is what produces a complete file with its own header, so
+  // each one plays on its own. Then immediately begin the next.
+  // Liquidsoap's 10s ducking tail spans the seams, so the music stays down
+  // between slices instead of jumping back in.
+  function segment(mime) {
+    if (!recording) return;
+    parts = [];
+    startedAt = Date.now();
+    rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 96000 });
+    rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+    rec.onstop = () => {
+      const secs = (Date.now() - startedAt) / 1000;
+      send(new Blob(parts, { type: mime.split(';')[0] }), mime, secs);
+      if (recording) segment(mime);   // seamless-ish: next slice starts at once
+      else teardown();
+    };
+    rec.start();
+    clearTimeout(segTimer);
+    segTimer = setTimeout(() => {
+      try { rec && rec.state === 'recording' && rec.stop(); } catch {}
+    }, SEG * 1000);
   }
 
   function end() {
     if (!recording) return;
     recording = false;
+    clearTimeout(segTimer);
     $('rec').textContent = 'Hold to talk';
     $('rec').classList.remove('recording');
-    setStatus('sending');
+    setStatus('sending the last slice');
     try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
   }
 
-  // The whole point: an ordinary upload with a length, not a live stream.
-  async function finish(mime) {
+  function teardown() {
     try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
     try { ac && ac.close(); } catch {}
     cancelAnimationFrame(raf); analyser = null; $('vu').style.width = '0%';
+    setStatus('ready');
+  }
 
-    const secs = ((Date.now() - startedAt) / 1000);
-    const blob = new Blob(parts, { type: mime.split(';')[0] });
-    if (blob.size < 2000 || secs < 0.6) { setStatus('too short - not sent'); return; }
+  // The whole point: an ordinary upload with a length, not a live stream.
+  async function send(blob, mime, secs) {
+    if (blob.size < 1500 || secs < 0.4) return;   // silence between slices
 
+    // Name carries the order: liquidsoap lists the folder sorted, so slices
+    // play in the order they were spoken even if one arrives late.
+    const n = String(++seq).padStart(4, '0');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const name = stamp + '-' + Math.random().toString(36).slice(2, 8) + '.' + extFor(mime);
-    const li = row(secs.toFixed(1) + 's · ' + Math.round(blob.size / 1024) + ' KB', '', 'sending…');
+    const name = stamp + '-' + n + '-' + Math.random().toString(36).slice(2, 6) + '.' + extFor(mime);
+    const li = row('#' + n + ' · ' + secs.toFixed(1) + 's · ' + Math.round(blob.size / 1024) + ' KB', '', 'sending…');
 
     try {
       const res = await fetch('/messages/voice/' + name, {
@@ -209,7 +239,7 @@
       if (res.ok || res.status === 201 || res.status === 204) {
         li.lastChild.className = 'ok';
         li.lastChild.textContent = 'on air';
-        setStatus('sent - it plays within a couple of seconds');
+        if (!recording) setStatus('sent');
       } else {
         li.lastChild.className = 'bad';
         li.lastChild.textContent = 'HTTP ' + res.status;

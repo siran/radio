@@ -25,6 +25,7 @@ settings.server.telnet.port      := 1234
 
 # voice chain
 mic_gain   = interactive.float("mic_gain",   min = 0.0,   max = 4.0,   step = 0.1, 1.0)
+voice_gain = interactive.float("voice_gain", min = 0.0,   max = 8.0,   step = 0.25, 3.0)
 hp_freq    = interactive.float("hp_freq",    min = 40.0,  max = 300.0, step = 5.0, 90.0)
 comp_thr   = interactive.float("comp_thr",   min = -40.0, max = 0.0,   step = 1.0, -18.0)
 comp_ratio = interactive.float("comp_ratio", min = 1.0,   max = 20.0,  step = 0.5, 4.0)
@@ -114,22 +115,24 @@ live = amplify(mic_gain, live)
 #    and only eat headroom.
 live = filter(freq = hp_freq, mode = "high", live)
 
-# 3. compressor: even out the level. attack fast enough to catch a shout,
-#    release slow enough not to breathe between words.
-live = compress(
+# 3. the mic and the voice notes are one bus, so either ducks the music and
+#    the two can overlap rather than interrupt. Notes get their own gain -
+#    a phone recording arrives far quieter than a headset.
+talk = add(id = "talk", normalize = false, [live, amplify(voice_gain, voice)])
+
+# 4. compressor on the WHOLE bus, so an uploaded note is levelled exactly like
+#    the live mic. Putting it on the mic alone left notes uncompressed and
+#    inaudible.
+talk = compress(
   threshold = comp_thr,
   ratio     = comp_ratio,
   attack    = 10.0,
   release   = 200.0,
   gain      = comp_gain,
-  live
+  talk
 )
 
-# 4. measure AFTER the chain, so the ducking follows what listeners hear
-#    rather than the raw input.
-# The mic and the voice notes are one bus, so either of them ducks the music
-# and they can overlap rather than interrupt.
-talk = add(id = "talk", normalize = false, [live, voice])
+# 5. measure AFTER the chain, so the ducking follows what listeners hear.
 talk = rms(id = "mic", duration = 0.3, talk)
 
 # --- ducking ---------------------------------------------------------------
