@@ -31,10 +31,10 @@ comp_ratio = interactive.float("comp_ratio", min = 1.0,   max = 20.0,  step = 0.
 comp_gain  = interactive.float("comp_gain",  min = 0.0,   max = 24.0,  step = 0.5, 6.0)
 
 # ducking
-duck_to    = interactive.float("duck_to",    min = 0.0,  max = 1.0,  step = 0.05, 0.35)
+duck_to    = interactive.float("duck_to",    min = 0.0,  max = 1.0,  step = 0.05, 0.2)
 on_thresh  = interactive.float("on_thresh",  min = 0.0,  max = 0.2,  step = 0.005, 0.02)
 off_thresh = interactive.float("off_thresh", min = 0.0,  max = 0.2,  step = 0.005, 0.01)
-hold       = interactive.float("hold",       min = 0.0,  max = 6.0,  step = 0.25, 1.5)
+hold       = interactive.float("hold",       min = 0.0,  max = 30.0, step = 0.5,  10.0)
 glide      = interactive.float("glide",      min = 0.01, max = 0.5,  step = 0.01, 0.05)
 
 

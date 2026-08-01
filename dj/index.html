@@ -91,6 +91,7 @@
     </div>
     <div class="meter"><i id="vu"></i></div>
     <div class="hint" id="hint">The music only dips once you are loud enough &mdash; watch the bar.</div>
+    <div class="hint" id="stats"></div>
   </div>
 
   <button id="go">Go on air</button>
@@ -106,6 +107,10 @@
 
   let stream = null, rec = null, ac = null, analyser = null, raf = 0;
   let controller = null, live = false, closing = false, stopBody = null;
+  let sent = 0, chunks = 0, startedAt = 0, lastChunk = 0, wakeLock = null, statTimer = 0;
+
+  const fmtBytes = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB'
+                      : n > 1024 ? Math.round(n / 1024) + ' KB' : n + ' B';
 
   // --- remembered settings (password only if explicitly asked for)
   try {
@@ -229,10 +234,20 @@
     rec.ondataavailable = async ev => {
       if (done || !push || !ev.data || !ev.data.size) return;
       pending++;
-      try { push.enqueue(new Uint8Array(await ev.data.arrayBuffer())); } catch {}
+      try {
+        push.enqueue(new Uint8Array(await ev.data.arrayBuffer()));
+        sent += ev.data.size;
+        chunks++;
+        lastChunk = Date.now();
+      } catch (e) {
+        // If the body errors we would otherwise just go quiet - say so.
+        fail('Upload stream stopped after ' + fmtBytes(sent) + ': ' + (e && e.message ? e.message : e));
+        stop();
+      }
       pending--;
       if (closing && pending === 0) finishBody();
     };
+    rec.onerror = e => { fail('Recorder error: ' + (e.error ? e.error.name : 'unknown')); stop(); };
     rec.onstop = () => { closing = true; if (pending === 0) finishBody(); };
     rec.start(250);   // emit a chunk 4x a second
 
@@ -245,6 +260,27 @@
       try { push && push.close(); } catch {}
     }
     stopBody = finishBody;
+
+    // A locked screen suspends the recorder on a phone, which looks exactly
+    // like a crash. Ask the system to keep the screen awake while on air.
+    try {
+      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+    } catch {}
+
+    // Show that data really is moving, and how long since the last chunk -
+    // "it broke" is much easier to diagnose with a number attached.
+    sent = 0; chunks = 0; startedAt = Date.now(); lastChunk = Date.now();
+    clearInterval(statTimer);
+    statTimer = setInterval(() => {
+      if (!live) return;
+      const secs = Math.round((Date.now() - startedAt) / 1000);
+      const gap = ((Date.now() - lastChunk) / 1000).toFixed(1);
+      $('stats').textContent = secs + 's · ' + fmtBytes(sent) + ' sent · ' +
+                               chunks + ' chunks · last ' + gap + 's ago';
+      if (Date.now() - lastChunk > 5000) {
+        fail('No audio has been sent for ' + gap + 's - the browser stopped feeding the stream.');
+      }
+    }, 1000);
 
     controller = new AbortController();
     const auth = btoa($('user').value + ':' + pass);
@@ -295,11 +331,26 @@
 
     try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
     try { ac && ac.close(); } catch {}
+    try { wakeLock && wakeLock.release(); } catch {}
+    wakeLock = null;
+    clearInterval(statTimer);
     cancelAnimationFrame(raf);
     analyser = null;
     $('vu').style.width = '0%';
+    if (sent) {
+      $('stats').textContent = 'last run: ' + Math.round((Date.now() - startedAt) / 1000) +
+                               's · ' + fmtBytes(sent) + ' · ' + chunks + ' chunks';
+    }
     setTimeout(() => { if (!live) setStatus('idle', ''); }, 500);
   }
+
+  // If the tab is backgrounded the browser may throttle or suspend us, which
+  // reads as a crash. Say so rather than dying quietly.
+  document.addEventListener('visibilitychange', () => {
+    if (live && document.hidden) {
+      $('hint').textContent = 'Keep this page open and the screen on while broadcasting.';
+    }
+  });
 
   // Once the request is open and the recorder is running, we are on the air.
   setInterval(() => {
