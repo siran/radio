@@ -75,8 +75,114 @@ music = playlist(
   "D:/Music"
 )
 
+# The control endpoints further down reach into the playlist itself: `current`,
+# `queue`, `set_queue` and `skip` are methods of THIS value. mksafe and amplify
+# below hand back plain sources that no longer carry them, and `music` is the
+# name that gets reassigned - so hold on to the playlist here, before it is
+# wrapped, or the endpoints have nothing to talk to.
+library = music
+
 # Never go silent, whatever happens upstream.
 music = mksafe(music)
+
+# --- driving the music -----------------------------------------------------
+# Music off and paused are both SILENCE, never a missing source. Take the music
+# out of the mix and the icecast output loses its source, the mount drops and
+# every listener is disconnected - which is exactly what the mksafe above
+# exists to prevent. So "off" is a gain of zero and "pause" is a switch to
+# blank(); both leave something that is always ready to stream.
+#
+# They are not two names for one thing. With the music off the record keeps
+# turning, so you come back partway into whatever is playing by then. Pause
+# stops pulling the playlist at all - liquidsoap sources only advance when
+# something asks them for a frame - so it resumes on the note it stopped on.
+music_on  = ref(true)
+paused    = ref(false)
+repeating = ref(false)
+
+music = amplify({if music_on() then 1.0 else 0.0 end}, music)
+
+# replay_metadata = false: on the way back from a pause the switch would
+# otherwise re-announce the child's last metadata, and forward_meta at the
+# bottom of this file turns every metadata into a NEW TRACK in the mix. The
+# stream would report a fresh song starting for one that never restarted.
+music = switch(
+  track_sensitive = false,
+  replay_metadata = false,
+  [({not paused()}, music), ({true}, blank())]
+)
+
+# What is on the air right now. The path is the point - it is how the operator
+# finds the actual file in D:/Music - so it comes from the request rather than
+# from metadata, which carries a title and an artist but no reliable filename.
+def current_file() =
+  r = library.current()
+  if null.defined(r) then request.filename(null.get(r)) else "" end
+end
+
+def now_playing() =
+  m = library.last_metadata() ?? []
+  {
+    path   = current_file(),
+    title  = m["title"],
+    artist = m["artist"],
+    music  = music_on(),
+    paused = paused(),
+    repeat = repeating()
+  }
+end
+
+# Play the current track once more: a fresh request for the same file, put at
+# the FRONT of the playlist's queue. `library.add` is the obvious call and it
+# is the wrong one - it appends BEHIND whatever the playlist has already
+# prefetched, so the repeat would land a track late.
+def again() =
+  f = current_file()
+  if f != "" then
+    library.set_queue(list.add(request.create(f), library.queue()))
+    log.important(label = "control", "playing again: #{f}")
+  end
+end
+
+# Repeat re-queues the track shortly before it ends rather than when it starts.
+# Deciding late is what makes switching repeat off take effect immediately: do
+# it at the start of a track and there is always one more copy already
+# committed to the queue that nobody asked for.
+library.on_position(position = 2.0, remaining = true, synchronous = false,
+  fun (_, _) -> if repeating() then again() end)
+
+# The HTTP surface. It rides on the harbor that is already up on 8005, the one
+# the mixing desk uses; caddy puts it behind the speaker credential. NOT 8000:
+# that is icecast's, and the collision takes the station off the air while
+# liquidsoap logs "Connection setup was successful" either way, which makes it
+# look like it worked.
+#
+# Every endpoint answers with the same state object, so a page can act and
+# redraw from one response. `on` always means "this named thing is on":
+# music?on=false is silence, pause?on=true is frozen, repeat?on=true loops.
+def endpoint(act) =
+  fun (req, response) -> begin
+    act(req)
+    response.json(now_playing())
+  end
+end
+
+def on_flag(req) =
+  req.query["on"] == "true"
+end
+
+harbor.http.register(port = 8005, method = "GET", "/control/now",
+  endpoint(fun (_) -> ()))
+harbor.http.register(port = 8005, method = "POST", "/control/skip",
+  endpoint(fun (_) -> library.skip()))
+harbor.http.register(port = 8005, method = "POST", "/control/again",
+  endpoint(fun (_) -> again()))
+harbor.http.register(port = 8005, method = "POST", "/control/repeat",
+  endpoint(fun (r) -> repeating := on_flag(r)))
+harbor.http.register(port = 8005, method = "POST", "/control/music",
+  endpoint(fun (r) -> music_on := on_flag(r)))
+harbor.http.register(port = 8005, method = "POST", "/control/pause",
+  endpoint(fun (r) -> paused := on_flag(r)))
 
 # Whether a live source is connected. Asking the source itself is not
 # reliable - a dropped one goes on looking alive for a while - so track the

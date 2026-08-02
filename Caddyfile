@@ -299,6 +299,15 @@ import admins.caddy
 		import speakers
 		reverse_proxy 127.0.0.1:8005
 	}
+	# Driving the music from a page: what is playing, skip, play again, repeat,
+	# music on/off, pause. Liquidsoap serves these on the same harbor as the
+	# mixing desk above, so this is that block again with a different path.
+	# Speakers rather than admins: any host may drive the music, nobody is
+	# competing for it.
+	handle /control/* {
+		import speakers
+		reverse_proxy 127.0.0.1:8005
+	}
 	handle /stream* {
 		reverse_proxy 127.0.0.1:8000 {
 			flush_interval -1
