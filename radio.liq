@@ -116,11 +116,12 @@ voice_dir = "C:/Users/an/src/radio/messages/voice"
 # they overlap instead of queueing behind each other. Best effort, not a
 # reconstruction of who spoke exactly when - but with a name in the filename
 # it costs almost nothing.
-lane0 = request.queue(id = "voice0")
-lane1 = request.queue(id = "voice1")
-lane2 = request.queue(id = "voice2")
-lane3 = request.queue(id = "voice3")
-lanes = [lane0, lane1, lane2, lane3]
+# How many people can be talking at once. Liquidsoap fixes its source graph at
+# startup, so this has to be a number rather than "however many turn up" - but
+# an idle queue costs essentially nothing, so it can be generous. Past this,
+# speakers share a lane and serialise behind each other; nothing is lost.
+lane_count = 8
+lanes = list.init(lane_count, fun (i) -> request.queue(id = "voice#{i}"))
 
 voice = add(id = "voices", normalize = false, lanes)
 
@@ -145,7 +146,7 @@ def lane_for(name) =
     known
   else
     l = next_lane()
-    next_lane := (l + 1) mod 4
+    next_lane := (l + 1) mod lane_count
     lane_of := list.add((name, l), lane_of())
     log.important(label = "voice", "#{name} is on lane #{l}")
     l
@@ -167,7 +168,7 @@ def pickup() =
         seen := list.add(f, seen())
         who  = speaker_of(f)
         l    = lane_for(who)
-        q    = list.nth(default = lane0, lanes, l)
+        q    = list.nth(lanes, l)
         q.push.uri(f)
         log.important(label = "voice", "queued #{who} -> lane #{l}")
       end,
