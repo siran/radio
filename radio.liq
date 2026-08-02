@@ -53,14 +53,6 @@ duck_to    = interactive.float("duck_to",
   description = "How loud the music stays while someone talks. 1.0 = untouched, 0.0 = silent.",
   unit = "x", min = 0.0, max = 1.0, step = 0.05, 0.45)
 
-on_thresh  = interactive.float("on_thresh",
-  description = "How loud you must be before the music dips.",
-  unit = "rms", min = 0.0, max = 0.2, step = 0.005, 0.0)
-
-off_thresh = interactive.float("off_thresh",
-  description = "How quiet counts as having stopped talking.",
-  unit = "rms", min = 0.0, max = 0.2, step = 0.005, 0.0)
-
 hold       = interactive.float("hold",
   description = "Seconds of quiet before the music comes back up. Covers pauses and gaps between clips.",
   unit = "s", min = 0.0, max = 30.0, step = 0.5, 28.0)
@@ -86,9 +78,9 @@ music = playlist(
 # Never go silent, whatever happens upstream.
 music = mksafe(music)
 
-# rms() keeps returning its last value after a source drops, so ducking on
-# loudness alone would leave the music dipped forever once you disconnect.
-# Track the connection itself and require both.
+# Whether a live source is connected. Asking the source itself is not
+# reliable - a dropped one goes on looking alive for a while - so track the
+# connect and disconnect callbacks, and duck the music off that.
 connected = ref(false)
 
 live = input.harbor(
@@ -126,7 +118,7 @@ queues = list.init(lane_count, fun (i) -> request.queue(id = "voice#{i}"))
 # Each speaker plays at their own volume. A lane only ever plays one note at a
 # time, so wrapping the lane - rather than the mix - makes the gain per note:
 # `override` reads liq_amplify off whatever that lane is playing right now.
-# A note with no gain file carries no annotation, and falls back to voice_gain.
+# A note with no settings carries no annotation, and falls back to voice_gain.
 lanes = list.map(fun (q) -> amplify(override = "liq_amplify", voice_gain, q), queues)
 
 voice = add(id = "voices", normalize = false, lanes)
@@ -163,6 +155,30 @@ def lane_for(name) =
   end
 end
 
+# Each speaker's settings are one json file in their own folder, written by
+# the talk page over webdav:
+#
+#   { "gain": 2.5, "duck": true }
+#
+# Both values ride with the note as annotations, so they apply to that note
+# alone: the lane reads liq_amplify, the ducking further down reads liq_duck.
+#
+# json.parse throws on anything that is not exactly that shape - no file, an
+# empty file, one caught half-written by a poll running four times a second,
+# one saved with a BOM - and every one of those means "no settings", so catch
+# the lot and queue the bare path, which falls back to voice_gain and no
+# ducking. It has to be a function of its own: `x = try ... end` does not
+# parse, a try is only allowed where a statement is.
+def note_uri(who, f) =
+  try
+    let json.parse ( cfg : { gain : float, duck : bool } ) =
+      file.contents("#{voice_dir}/#{who}/settings.json")
+    "annotate:liq_amplify=\"#{cfg.gain}\",liq_duck=\"#{cfg.duck}\":#{f}"
+  catch _ do
+    f
+  end
+end
+
 def pickup() =
   # file.ls with recursive=true ignores `pattern` entirely - patterns do not
   # cross a directory separator - and it returns directories alongside files.
@@ -187,15 +203,7 @@ def pickup() =
         who  = speaker_of(f)
         l    = lane_for(who)
         q    = list.nth(queues, l)
-        # The speaker's own volume: a plain number in a file called `gain`,
-        # sitting in their folder alongside their notes. Parsed twice with
-        # different defaults, so a missing or unparseable value is told apart
-        # from a real one and simply falls back to voice_gain. The number rides
-        # with the note as an annotation, so it applies to that note alone.
-        gpath = "#{voice_dir}/#{who}/gain"
-        g     = if file.exists(gpath) then string.trim(file.contents(gpath)) else "" end
-        ok    = g != "" and float_of_string(default = 1.0, g) == float_of_string(default = 2.0, g)
-        uri   = if ok then "annotate:liq_amplify=\"#{g}\":#{f}" else f end
+        uri  = note_uri(who, f)
         q.push.uri(uri)
         log.important(label = "voice", "queued #{who} -> lane #{l}: #{uri}")
       end,
@@ -262,34 +270,46 @@ talk = compress(
 #    keeps a crowd from turning into distortion.
 talk = limit(threshold = -2.0, talk)
 
-# 6. measure AFTER the chain, so the ducking follows what listeners hear.
-talk = rms(id = "mic", duration = 0.3, talk)
-
 # --- ducking ---------------------------------------------------------------
+# The music dips for the live mic, and for a voice note whose speaker asked
+# for it in their settings.json. Two of them can be on air at once with
+# different answers, so it is enough that ANY lane playing right now carries
+# liq_duck: the one who wanted the dip gets it, and the other simply talks
+# over music that happens to be down.
 music_gain = ref(1.0)
 talking    = ref(false)
 quiet_for  = ref(0.0)
 
 def duck_gain() =
-  # is_ready is the honest signal: rms keeps reporting its last value after a
-  # source drops, so on its own it would leave the music dipped.
-  ready = talk.is_ready() and (connected() or not list.is_empty(seen()))
-  level = if ready then talk.rms() else 0.0 end
+  # A lane keeps its last metadata after the note has finished, so is_ready is
+  # what says a note is still on air; the annotation only says what that
+  # speaker wanted.
+  ducking =
+    connected()
+    or list.exists(
+         fun (q) ->
+           if q.is_ready() then
+             m = q.last_metadata() ?? []
+             m["liq_duck"] == "true"
+           else
+             false
+           end,
+         queues)
 
-  if talking() then
-    if not ready or level < off_thresh() then
-      quiet_for := quiet_for() + 0.04
-      if quiet_for() >= hold() then
-        talking := false
-        log.important(label = "duck", "music back up")
-      end
-    else
-      quiet_for := 0.0
+  if ducking then
+    if not talking() then
+      talking := true
+      log.important(label = "duck", "music down")
     end
-  elsif ready and level > on_thresh() then
-    talking   := true
     quiet_for := 0.0
-    log.important(label = "duck", "music down")
+  elsif talking() then
+    # Slices arrive about 1.5s apart, so hold is what keeps the music from
+    # pumping back up in the gap between one clip and the next.
+    quiet_for := quiet_for() + 0.04
+    if quiet_for() >= hold() then
+      talking := false
+      log.important(label = "duck", "music back up")
+    end
   end
 
   target = if talking() then duck_to() else 1.0 end

@@ -311,36 +311,41 @@
     } catch {}
   }
 
-  // Your own volume. One number in a file called `gain` in your own folder,
-  // which liquidsoap reads when it queues your note. Caddy files it under
-  // whoever authenticated, so the page never says who you are - and no file
-  // yet simply means it was never set, which is 1.
-  const GAIN_URL = '/talk/setting/gain';
+  // Your own settings. One small json file in your own folder, which
+  // liquidsoap reads when it queues your note: how loud you play, and whether
+  // the music dips under you. Caddy files it under whoever authenticated, so
+  // the page never says who you are - and no file yet means never set, which
+  // is whatever liquidsoap falls back to.
+  const SETTINGS_URL = '/talk/setting/settings.json';
+  const settings = { gain: 12, duck: true };
   const showGain = () => { $('gainval').textContent = $('gain').value; };
 
+  // Read-modify-write: duck has no control on this page yet, and PUTting only
+  // the volume would erase it.
   async function loadGain() {
     try {
-      const res = await fetch(GAIN_URL, { credentials: 'same-origin', cache: 'no-store' });
-      if (res.status === 404) { $('gain').value = 1; showGain(); return; }  // never set
-      if (!res.ok) return fail('Could not read your volume: HTTP ' + res.status);
-      const v = parseFloat((await res.text()).trim());
-      if (isFinite(v)) $('gain').value = v;
+      const res = await fetch(SETTINGS_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (res.status !== 404) {
+        if (!res.ok) return fail('Could not read your settings: HTTP ' + res.status);
+        Object.assign(settings, await res.json());
+      }
+      if (isFinite(settings.gain)) $('gain').value = settings.gain;
       showGain();
-    } catch (e) { fail('Could not read your volume: ' + e.message); }
+    } catch (e) { fail('Could not read your settings: ' + e.message); }
   }
 
   async function saveGain() {
-    const v = $('gain').value;
+    settings.gain = parseFloat($('gain').value);
     try {
-      const res = await fetch(GAIN_URL, {
+      const res = await fetch(SETTINGS_URL, {
         method: 'PUT',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: v
+        body: JSON.stringify(settings)
       });
       if (res.ok || res.status === 201 || res.status === 204) {
         $('err').textContent = '';
-        setStatus(recording ? 'on air' : 'volume saved: ' + v + '×');
+        setStatus(recording ? 'on air' : 'volume saved: ' + settings.gain + '\u00d7');
       } else {
         setStatus('volume not saved');
         fail(res.status === 401
