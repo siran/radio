@@ -23,6 +23,8 @@
 	}
 }
 
+import speakers.caddy
+
 (jellyfin) {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:8096
@@ -77,16 +79,12 @@
 	# the browser holds it and the page never asks. Same realm means one prompt
 	# covers both.
 	handle /talk* {
-		basic_auth {
-			dj $2a$14$J7vPlBTuh7W5LqBCimuOe.qhj5o6VCIux1uvhiQehAp1CO.7QXKtq
-		}
+		import speakers
 		file_server
 	}
 
 	handle /messages/voice/* {
-		basic_auth {
-			dj $2a$14$J7vPlBTuh7W5LqBCimuOe.qhj5o6VCIux1uvhiQehAp1CO.7QXKtq
-		}
+		import speakers
 		@putaudio {
 			method PUT
 			path *.webm *.ogg *.oga *.opus *.mp3 *.m4a *.wav
@@ -105,8 +103,10 @@
 			request_body {
 				max_size 4MB
 			}
+			# The folder comes from WHO authenticated, not from anything the
+			# client says. Adding a speaker is one line in basic_auth above.
 			webdav {
-				root C:/Users/an/src/radio/messages/voice
+				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
 				prefix /messages/voice
 			}
 		}
@@ -208,9 +208,7 @@
 	# ducking, changeable while on air. It has no authentication of its own and
 	# can silence the station, so it does not go out unprotected.
 	handle /interactive* {
-		basic_auth {
-			dj $2a$14$z3BAcN.A4sO0MSHo80Pg.ucS9QQqWlcmDIdu.vD/R/8JVCp2pJdty
-		}
+		import speakers
 		reverse_proxy 127.0.0.1:8005
 	}
 	handle /stream* {

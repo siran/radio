@@ -68,8 +68,6 @@
   <div class="sub">Click once to open the mic, once more to close it. Your voice goes out in three-second slices, over the music, which ducks underneath.</div>
 
   <div class="panel" id="setup">
-    <label for="who">Your name</label>
-    <input id="who" placeholder="an" autocapitalize="off" autocorrect="off" spellcheck="false">
     <label for="dev">Microphone</label>
     <select id="dev"><option value="">default</option></select>
     <div id="passwrap" hidden>
@@ -119,7 +117,6 @@
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (s.pass) $('pass').value = s.pass;
-    if (s.who) $('who').value = s.who;
   } catch {}
 
   const setStatus = t => { $('status').textContent = t; };
@@ -254,10 +251,9 @@
     // play in the order they were spoken even if one arrives late.
     const n = String(++seq).padStart(4, '0');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    // The speaker's name picks the lane: your own slices stay in order,
-    // someone else's overlap yours instead of queueing behind them.
-    const who = ($('who').value || 'guest').toLowerCase().replace(/[^a-z0-9]/g, '') || 'guest';
-    const name = who + '--' + stamp + '-' + n + '-' +
+    // No speaker name here on purpose: caddy files the upload under whoever
+    // logged in, so identity is enforced by the server rather than claimed.
+    const name = stamp + '-' + n + '-' +
                  Math.random().toString(36).slice(2, 6) + '.' + extFor(mime);
     const li = { lastChild: {} };   // nothing to display; kept so send() reads plainly
 
@@ -325,14 +321,6 @@
 
   // One click opens the mic, another closes it. Holding a phone button for a
   // whole thought is miserable, and this makes a back-and-forth possible.
-  $('who').addEventListener('change', () => {
-    try {
-      const s = JSON.parse(localStorage.getItem(KEY) || '{}');
-      s.who = $('who').value;
-      localStorage.setItem(KEY, JSON.stringify(s));
-    } catch {}
-  });
-
   $('rec').addEventListener('click', () => recording ? end() : begin());
   window.addEventListener('beforeunload', e => {
     if (recording) { e.preventDefault(); e.returnValue = ''; }

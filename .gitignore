@@ -34,3 +34,6 @@ cache/
 # voice notes are ephemeral - the folder is tracked, the audio is not
 messages/voice/*
 !messages/voice/.keep
+
+# bcrypt hashes for each speaker - safe-ish, but it is a user list
+speakers.caddy

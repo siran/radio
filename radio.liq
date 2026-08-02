@@ -133,13 +133,17 @@ seen      = ref([])
 # Files are named  speaker--timestamp-seq-rand.ext
 # Anything without a speaker prefix is treated as "guest".
 def speaker_of(fpath) =
-  # string.split takes a REGEX, and a lone backslash is not one. basename
-  # sidesteps the whole question.
-  base  = path.basename(fpath)
-  parts = string.split(separator = "--", base)
-  if list.length(parts) > 1 then list.nth(default = "guest", parts, 0) else "guest" end
+  # The speaker is the folder the file sits in, and caddy creates that folder
+  # from whoever logged in - so it cannot be spoofed by naming a file cleverly.
+  # file.ls hands back MIXED separators: forward slashes for the directory it
+  # was given, backslashes for whatever it walked into. The path.* functions
+  # only understand "/", so split on either. The separator is a REGEX, hence a
+  # character class rather than a bare backslash.
+  parts = string.split(separator = "[\\\\/]", fpath)
+  n     = list.length(parts)
+  d     = if n >= 2 then list.nth(default = "voice", parts, n - 2) else "voice" end
+  if d == "voice" then "guest" else d end
 end
-
 def lane_for(name) =
   known = list.assoc(default = -1, name, lane_of())
   if known >= 0 then
@@ -154,13 +158,21 @@ def lane_for(name) =
 end
 
 def pickup() =
+  # file.ls with recursive=true ignores `pattern` entirely - patterns do not
+  # cross a directory separator - and it returns directories alongside files.
+  # So list everything one level down and filter on the extension ourselves.
   # whatsapp sends ogg/opus, telegram .oga, ios .m4a, the browser .webm
+  # there is no path.extension, but remove_extension exists: a file ends in
+  # .ogg exactly when stem ^ ".ogg" is the name again.
+  exts = ["webm", "ogg", "oga", "opus", "mp3", "m4a", "wav",
+          "WEBM", "OGG", "OGA", "OPUS", "MP3", "M4A", "WAV"]
+  def is_audio(f) =
+    stem = path.remove_extension(f)
+    list.exists(fun (e) -> stem ^ ".#{e}" == f, exts)
+  end
   files =
-    list.fold(
-      fun (acc, ext) -> list.append(acc,
-        file.ls(voice_dir, absolute = true, sorted = true, pattern = "*.#{ext}")),
-      [],
-      ["webm", "ogg", "oga", "opus", "mp3", "m4a", "wav"])
+    list.filter(is_audio,
+      file.ls(voice_dir, absolute = true, sorted = true, recursive = true))
 
   list.iter(
     fun (f) ->
