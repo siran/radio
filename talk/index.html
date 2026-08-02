@@ -77,6 +77,20 @@
   /* liquidsoap's own page is light; keep it readable rather than restyling it */
   #desk { width:100%; height:560px; border:1px solid var(--line);
           border-radius:8px; background:#fff; margin-top:6px; }
+
+  /* seven bands is a lot of page for something that is set once and then
+     forgotten, so it folds away and stays folded. */
+  #eqwrap { margin:0 0 12px; }
+  #eqwrap > label { margin-top:12px; }
+  #eqwrap .band { color:var(--fg); }
+
+  /* the station itself, so a host never has to leave this page to see what
+     is going on on it. Tall on purpose - a letterbox of the chat is no use
+     to anyone. It plays nothing on its own: the station page only ever
+     starts audio from its own play button. */
+  #station { display:block; width:100%; height:78vh; min-height:520px;
+             border:1px solid var(--line); border-radius:8px;
+             background:var(--bg); margin-top:6px; }
 </style>
 </head>
 <body>
@@ -84,6 +98,13 @@
 
   <h1>wild n loyal &middot; talk</h1>
   <div class="sub">Click once to open the mic, once more to close it. Your voice goes out in three-second slices, over the music, which ducks underneath.</div>
+
+  <div class="panel">
+    <button id="rec">Start talking</button>
+    <div class="meter"><i id="vu"></i></div>
+    <div class="status" id="status">ready</div>
+    <div class="err" id="err"></div>
+  </div>
 
   <div class="panel" id="setup" hidden>
     <label for="dev" id="devlabel">Microphone</label>
@@ -93,25 +114,30 @@
   <div class="panel" id="gainpanel">
     <label for="gain">Your voice volume &mdash; <span id="gainval">1</span>&times;</label>
     <input id="gain" type="range" min="0.5" max="12" step="0.5" value="1">
-    <div class="hint">Your voice EQ &mdash; 0 is flat. Low is body and rumble,
-      mid is boxiness, high is clarity.</div>
-    <label for="eqlow">Low &mdash; <span id="eqlowval">0</span> dB</label>
-    <input id="eqlow" type="range" min="-9" max="9" step="0.5" value="0">
-    <label for="eqmid">Mid &mdash; <span id="eqmidval">0</span> dB</label>
-    <input id="eqmid" type="range" min="-9" max="9" step="0.5" value="0">
-    <label for="eqhigh">High &mdash; <span id="eqhighval">0</span> dB</label>
-    <input id="eqhigh" type="range" min="-9" max="9" step="0.5" value="0">
+    <details id="eqwrap">
+      <summary>Your voice EQ &mdash; set it once</summary>
+      <div class="hint">Seven bands, in dB. 0 is flat, and all seven at 0 is
+        exactly the voice as it arrived. The low ones are weight and rumble,
+        the middle is boxiness, the top is clarity and air.</div>
+      <label for="eqf100"><span class="band">100 Hz</span> &mdash; rumble &mdash; <span id="eqf100val">0</span> dB</label>
+      <input id="eqf100" type="range" min="-9" max="9" step="0.5" value="0">
+      <label for="eqf200"><span class="band">200 Hz</span> &mdash; body &mdash; <span id="eqf200val">0</span> dB</label>
+      <input id="eqf200" type="range" min="-9" max="9" step="0.5" value="0">
+      <label for="eqf400"><span class="band">400 Hz</span> &mdash; boxiness &mdash; <span id="eqf400val">0</span> dB</label>
+      <input id="eqf400" type="range" min="-9" max="9" step="0.5" value="0">
+      <label for="eqf800"><span class="band">800 Hz</span> &mdash; honk &mdash; <span id="eqf800val">0</span> dB</label>
+      <input id="eqf800" type="range" min="-9" max="9" step="0.5" value="0">
+      <label for="eqf1600"><span class="band">1600 Hz</span> &mdash; presence &mdash; <span id="eqf1600val">0</span> dB</label>
+      <input id="eqf1600" type="range" min="-9" max="9" step="0.5" value="0">
+      <label for="eqf3150"><span class="band">3150 Hz</span> &mdash; consonants &mdash; <span id="eqf3150val">0</span> dB</label>
+      <input id="eqf3150" type="range" min="-9" max="9" step="0.5" value="0">
+      <label for="eqf6300"><span class="band">6300 Hz</span> &mdash; air &mdash; <span id="eqf6300val">0</span> dB</label>
+      <input id="eqf6300" type="range" min="-9" max="9" step="0.5" value="0">
+    </details>
     <div class="duckrow">
       <div class="hint">Applies to your next note.</div>
       <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
     </div>
-  </div>
-
-  <div class="panel">
-    <button id="rec">Start talking</button>
-    <div class="meter"><i id="vu"></i></div>
-    <div class="status" id="status">ready</div>
-    <div class="err" id="err"></div>
   </div>
 
   <div class="panel" id="musicpanel">
@@ -138,6 +164,14 @@
     </div>
     <iframe id="desk" title="mixing desk"></iframe>
   </details>
+
+  <div class="panel">
+    <label>The station</label>
+    <div class="hint">The page itself, not a copy of it &mdash; the same chat,
+      the same comments, the same likes, live. Framed rather than duplicated so
+      there is only ever one of it to keep working.</div>
+    <iframe id="station" src="/" title="wild n loyal radio"></iframe>
+  </div>
 
   <div class="foot">
     <a href="/">&larr; back to the station</a>
@@ -437,16 +471,20 @@
 
   // Your own settings. One small json file in your own folder, which
   // liquidsoap reads when it queues your note: how loud you play, whether
-  // the music dips under you, and your own three-band EQ. Caddy files it
+  // the music dips under you, and your own seven-band EQ. Caddy files it
   // under whoever authenticated, so the page never says who you are - and no
   // file yet means never set, which is whatever liquidsoap falls back to.
   const SETTINGS_URL = '/talk/setting/settings.json';
-  const settings = { gain: 12, duck: true, eq: { low: 0, mid: 0, high: 0 } };
-  const showGain = () => { $('gainval').textContent = $('gain').value; };
 
-  // The EQ is three numbers in dB, 0 meaning flat, on the same object and the
+  // The EQ is seven numbers in dB, 0 meaning flat, on the same object and the
   // same PUT as the volume - liquidsoap reads all of it out of the one file.
-  const BANDS = ['low', 'mid', 'high'];
+  // The key IS the centre frequency in Hz, so the element ids and the line
+  // the page says back after a save both come off it, and there is no second
+  // list of names to keep in step with liquidsoap.
+  const BANDS = ['f100', 'f200', 'f400', 'f800', 'f1600', 'f3150', 'f6300'];
+  const flatEq = () => Object.fromEntries(BANDS.map(b => [b, 0]));
+  const settings = { gain: 12, duck: true, eq: flatEq() };
+  const showGain = () => { $('gainval').textContent = $('gain').value; };
   const showBand = b => { $('eq' + b + 'val').textContent = $('eq' + b).value; };
 
   // Read-modify-write: the volume and the duck live in the same file, so
@@ -463,18 +501,18 @@
       if (isFinite(settings.gain)) $('gain').value = settings.gain;
       showGain();
       showDuck();
-      // Every speaker's file predates the EQ and has no `eq` at all, so the
-      // default above has to survive Object.assign - it does, because a key
-      // that is not in the response is not copied over. A file that does have
-      // one could still be null or half a number if it was hand-edited, and
-      // this runs after showDuck() on purpose: a throw here would otherwise
-      // take the volume and the duck down with it. Anything not a number
-      // means flat.
-      if (!settings.eq || typeof settings.eq !== 'object') {
-        settings.eq = { low: 0, mid: 0, high: 0 };
-      }
+      // The eq is rebuilt from flat rather than patched in place, and that is
+      // what keeps the file bounded and current: whatever came back is read
+      // for the seven keys that exist now and then dropped, so the old
+      // three-band low/mid/high cannot ride along in the next PUT. An older
+      // file therefore comes back flat - the curve is lost, the volume and
+      // the ducking are not. This runs after showDuck() on purpose: a throw
+      // here would otherwise take those two down with it. Anything that is
+      // not a number means flat.
+      const had = (settings.eq && typeof settings.eq === 'object') ? settings.eq : {};
+      settings.eq = flatEq();
       for (const b of BANDS) {
-        const v = parseFloat(settings.eq[b]);
+        const v = parseFloat(had[b]);
         settings.eq[b] = isFinite(v) ? v : 0;
         $('eq' + b).value = settings.eq[b];
         showBand(b);
@@ -518,7 +556,7 @@
     $('eq' + b).addEventListener('input', () => showBand(b));
     $('eq' + b).addEventListener('change', () => {
       settings.eq[b] = parseFloat($('eq' + b).value);
-      saveSettings(b + ' saved: ' + settings.eq[b] + ' dB');
+      saveSettings(b.slice(1) + ' Hz saved: ' + settings.eq[b] + ' dB');
     });
   }
   // Liquidsoap polls this folder, so the setting IS the button: it lands on air

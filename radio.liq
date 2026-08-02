@@ -221,7 +221,7 @@ voice_dir = "C:/Users/an/src/radio/messages/voice"
 lane_count = 8
 queues = list.init(lane_count, fun (i) -> request.queue(id = "voice#{i}"))
 
-# Each speaker plays at their own volume, through their own three-band EQ. A
+# Each speaker plays at their own volume, through their own seven-band EQ. A
 # lane only ever plays one note at a time, so wrapping the lane - rather than
 # the mix - makes both of them per note: `override` reads liq_amplify off
 # whatever that lane is playing right now, and the getters below read the eq
@@ -244,44 +244,67 @@ def eq_db(q, band) =
   float_of_string(default = 0.0, m["liq_eq_#{band}"])
 end
 
-# Three bells, not a shelf/peak/shelf. filter.iir.eq.lowshelf and .highshelf
+# Seven bells, not a shelf/peak/shelf. filter.iir.eq.lowshelf and .highshelf
 # exist in this build but neither takes a gain, only a `slope`, and measured
 # here they are not usable as tone controls: a 100Hz tone through
 # lowshelf(frequency=500) comes out 56dB DOWN, slope 1 vs 40 barely moves it,
 # and a negative slope returns inf. filter.iir.eq.peak is the one that behaves
 # - unity away from its centre, exactly +6.0dB at centre for gain=6.0 - so all
-# three bands are peaks. That also buys the property the sliders need most:
-# 0 dB everywhere is EXACTLY flat.
+# seven bands are peaks. That also buys the property the sliders need most:
+# 0 dB everywhere is EXACTLY flat, and that survived being stacked seven deep:
+# measured on this build, a tone at each of the seven centres AND at each
+# midpoint between them came back 0.00 dB against the same tone unfiltered.
 #
-# Wide bells (q 0.7) on purpose. These are bass/mid/treble on a radio, not
-# three surgical notches; they overlap, so a small move sounds like a tone
-# control rather than like a hole. Centres chosen for a phone mic outdoors:
-#   160 Hz  body and boom. Wide enough to reach down into the handling
-#           rumble and wind that a phone held in the hand picks up, and up
-#           into the chest of the voice. There is no high-pass on the notes -
-#           hp_freq only guards the live mic - so this is the only thing that
-#           can take that weight out.
-#   1000 Hz the boxy, honky middle a small capsule adds. Cutting here opens
-#           the voice up; boosting pushes it forward through the music.
-#   4000 Hz consonants and clarity. Not 8k: bluetooth and a 96kbps opus note
-#           have very little left up there, so a high shelf that far up would
-#           be boosting codec hiss rather than the voice. 4k is also where
-#           "carrasposa" lives, so this is the slider that fixes it - in
-#           whichever direction it turns out to need.
+# Octave spacing, 100Hz to 6300Hz, which is the whole of the useful range of a
+# phone held at arm's length: under 100 there is handling rumble and little
+# voice, over 6300 a 96kbps opus note has almost nothing left to lift.
 #
-# The three getters are bound BEFORE the amplify, and that order matters:
+# q = 1.4 belongs to that spacing - the usual figure for an octave graphic EQ,
+# and measured here the one that makes the sliders behave like separate
+# controls without scalloping between them. With one band up 6dB, its
+# neighbour an octave away reads +1.15dB; at q 0.7 that is +2.86dB and the
+# sliders visibly fight each other, at q 2.0 it is +0.63dB but then all seven
+# up 6dB ripples between +7.5dB on the centres and +4.6dB between them, which
+# is a comb you can hear. At q 1.4 all seven up 6dB lands between +7.2 and
+# +8.9dB - more than 6 because the bells overlap, which is what a graphic EQ
+# does, and why the volume above it is the thing to pull back afterwards.
+#
+#    100 Hz  rumble and boom - wind, a hand shifting on the phone, a knock on
+#            the table. There is no high-pass on the notes (hp_freq only
+#            guards the live mic) so this is the only thing that can take that
+#            weight out.
+#    200 Hz  the body of the voice, and where a mic held close goes chesty.
+#    400 Hz  the lower boxiness a small capsule picks up in a small room.
+#    800 Hz  the honk. Cutting here is what opens a voice up.
+#   1600 Hz  presence - where the voice cuts through the music, or gets shouty.
+#   3150 Hz  consonants and clarity. This is where "carrasposa" lives, so this
+#            is the slider that fixes it, in whichever direction it turns out
+#            to need.
+#   6300 Hz  air and sibilance. Not 12k: bluetooth and a 96kbps opus note have
+#            very little left that far up, so a lift there would be boosting
+#            codec hiss rather than the voice.
+#
+# The seven getters are bound BEFORE the amplify, and that order matters:
 # amplify's argument is a plain source, so passing the queue to it first pins
 # this function's parameter to a plain source and the later q.last_metadata()
 # stops typechecking with "this value has no method last_metadata". Reading
 # the metadata first is what keeps the queue's own methods in view.
 def voice_lane(q) =
-  low  = {eq_db(q, "low")}
-  mid  = {eq_db(q, "mid")}
-  high = {eq_db(q, "high")}
+  b100  = {eq_db(q, "f100")}
+  b200  = {eq_db(q, "f200")}
+  b400  = {eq_db(q, "f400")}
+  b800  = {eq_db(q, "f800")}
+  b1600 = {eq_db(q, "f1600")}
+  b3150 = {eq_db(q, "f3150")}
+  b6300 = {eq_db(q, "f6300")}
   l = amplify(override = "liq_amplify", voice_gain, q)
-  l = filter.iir.eq.peak(frequency =  160.0, q = 0.7, gain = low,  l)
-  l = filter.iir.eq.peak(frequency = 1000.0, q = 0.7, gain = mid,  l)
-  l = filter.iir.eq.peak(frequency = 4000.0, q = 0.7, gain = high, l)
+  l = filter.iir.eq.peak(frequency =  100.0, q = 1.4, gain = b100,  l)
+  l = filter.iir.eq.peak(frequency =  200.0, q = 1.4, gain = b200,  l)
+  l = filter.iir.eq.peak(frequency =  400.0, q = 1.4, gain = b400,  l)
+  l = filter.iir.eq.peak(frequency =  800.0, q = 1.4, gain = b800,  l)
+  l = filter.iir.eq.peak(frequency = 1600.0, q = 1.4, gain = b1600, l)
+  l = filter.iir.eq.peak(frequency = 3150.0, q = 1.4, gain = b3150, l)
+  l = filter.iir.eq.peak(frequency = 6300.0, q = 1.4, gain = b6300, l)
   l
 end
 
@@ -324,18 +347,24 @@ end
 # Each speaker's settings are one json file in their own folder, written by
 # the talk page over webdav:
 #
-#   { "gain": 2.5, "duck": true, "eq": { "low": 0, "mid": 0, "high": 0 } }
+#   { "gain": 2.5, "duck": true,
+#     "eq": { "f100": 0, "f200": 0, "f400": 0, "f800": 0,
+#             "f1600": 0, "f3150": 0, "f6300": 0 } }
 #
 # All of it rides with the note as annotations, so it applies to that note
-# alone: the lane reads liq_amplify and the three liq_eq_* bands, the ducking
+# alone: the lane reads liq_amplify and the seven liq_eq_* bands, the ducking
 # further down reads liq_duck.
 #
-# `eq` is optional - the trailing `?` on its type - because every speaker's
-# file predates it and says only gain and duck. Measured on this build: with
-# the `?` an old two-key file parses fine and cfg.eq comes back null, while
-# without it the whole parse would throw and that speaker would silently lose
-# their volume and their ducking too. Missing means flat, and flat means all
-# three bands at 0 dB, which the filters pass through untouched.
+# `eq` is optional - the trailing `?` on its type - and that `?` carries more
+# than it looks. Measured on this build, all of these parse and hand back gain
+# and duck intact with cfg.eq null: a file with no `eq` key at all (every
+# speaker's file from before the EQ existed), a file whose `eq` is null, and a
+# file still holding the OLD three-band { low, mid, high }. A field that does
+# not match its type goes null on its own rather than throwing the whole parse
+# away. So renaming the bands from low/mid/high to f100..f6300 costs an
+# existing speaker the curve they had - they come back flat, seven bands at
+# 0 dB, until they touch a slider - but it does not cost them their volume or
+# their ducking, which is what a throw here would have taken with it.
 #
 # json.parse throws on anything that is not that shape - no file, an empty
 # file, one caught half-written by a poll running four times a second, one
@@ -349,12 +378,16 @@ def note_uri(who, f) =
     let json.parse ( cfg : {
       gain : float,
       duck : bool,
-      eq   : { low : float, mid : float, high : float }?
+      eq   : { f100  : float, f200  : float, f400 : float, f800 : float,
+               f1600 : float, f3150 : float, f6300 : float }?
     } ) = file.contents("#{voice_dir}/#{who}/settings.json")
-    eq = cfg.eq ?? { low = 0.0, mid = 0.0, high = 0.0 }
+    eq = cfg.eq ?? { f100  = 0.0, f200  = 0.0, f400 = 0.0, f800 = 0.0,
+                     f1600 = 0.0, f3150 = 0.0, f6300 = 0.0 }
     "annotate:liq_amplify=\"#{cfg.gain}\",liq_duck=\"#{cfg.duck}\""
-    ^ ",liq_eq_low=\"#{eq.low}\",liq_eq_mid=\"#{eq.mid}\""
-    ^ ",liq_eq_high=\"#{eq.high}\":#{f}"
+    ^ ",liq_eq_f100=\"#{eq.f100}\",liq_eq_f200=\"#{eq.f200}\""
+    ^ ",liq_eq_f400=\"#{eq.f400}\",liq_eq_f800=\"#{eq.f800}\""
+    ^ ",liq_eq_f1600=\"#{eq.f1600}\",liq_eq_f3150=\"#{eq.f3150}\""
+    ^ ",liq_eq_f6300=\"#{eq.f6300}\":#{f}"
   catch _ do
     f
   end

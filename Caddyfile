@@ -168,7 +168,7 @@ import admins.caddy
 		}
 	}
 	# One small json file per speaker: how loud their own notes play, whether
-	# the music dips under them, and their own three-band EQ, read by
+	# the music dips under them, and their own seven-band EQ, read by
 	# liquidsoap from `settings.json` in their folder. The filename is fixed,
 	# so this can never
 	# become a way to drop an arbitrary file next to someone's voice notes.
@@ -188,11 +188,16 @@ import admins.caddy
 			# leaves a corrupt settings.json that liquidsoap's json.parse
 			# quietly falls back on. Too small a cap here is not an error the
 			# speaker can see, it is their volume and ducking silently reset.
-			# The whole object with the eq is about 64 bytes:
-			#   {"gain":12,"duck":true,"eq":{"low":-9,"mid":-9,"high":-9}}
+			# Seven bands now. The largest object the sliders can produce
+			# is 120 bytes, counted over every value each slider can take:
+			# the longest gain is 11.5 and the longest band is -8.5, four
+			# characters each, and `false` is a character longer than `true`.
+			#   {"gain":11.5,"duck":false,"eq":{"f100":-8.5,"f200":-8.5,
+			#    "f400":-8.5,"f800":-8.5,"f1600":-8.5,"f3150":-8.5,
+			#    "f6300":-8.5}}
 			# so leave real headroom rather than sizing it to the day's shape.
 			request_body {
-				max_size 128B
+				max_size 256B
 			}
 			# The folder is whoever authenticated - never what the client says.
 			webdav {
