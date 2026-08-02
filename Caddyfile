@@ -92,11 +92,14 @@
 			path *.webm *.ogg *.oga *.opus *.mp3 *.m4a *.wav
 		}
 		handle @putaudio {
+			# 3-second slices mean at most 20 uploads a minute from one person
+			# talking flat out. 45 leaves room for two people and a burst of
+			# retries, while still bounding anything silly.
 			rate_limit {
 				zone voice_writes {
 					key {remote_host}
-					events 20
-					window 5m
+					events 45
+					window 1m
 				}
 			}
 			request_body {
