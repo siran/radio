@@ -127,11 +127,11 @@
       <input id="eqf400" type="range" min="-9" max="9" step="0.5" value="0">
       <label for="eqf800"><span class="band">800 Hz</span> &mdash; honk &mdash; <span id="eqf800val">0</span> dB</label>
       <input id="eqf800" type="range" min="-9" max="9" step="0.5" value="0">
-      <label for="eqf1600"><span class="band">1600 Hz</span> &mdash; presence &mdash; <span id="eqf1600val">0</span> dB</label>
+      <label for="eqf1600"><span class="band">1.6 kHz</span> &mdash; presence &mdash; <span id="eqf1600val">0</span> dB</label>
       <input id="eqf1600" type="range" min="-9" max="9" step="0.5" value="0">
-      <label for="eqf3150"><span class="band">3150 Hz</span> &mdash; consonants &mdash; <span id="eqf3150val">0</span> dB</label>
+      <label for="eqf3150"><span class="band">3.15 kHz</span> &mdash; consonants &mdash; <span id="eqf3150val">0</span> dB</label>
       <input id="eqf3150" type="range" min="-9" max="9" step="0.5" value="0">
-      <label for="eqf6300"><span class="band">6300 Hz</span> &mdash; air &mdash; <span id="eqf6300val">0</span> dB</label>
+      <label for="eqf6300"><span class="band">6.3 kHz</span> &mdash; air &mdash; <span id="eqf6300val">0</span> dB</label>
       <input id="eqf6300" type="range" min="-9" max="9" step="0.5" value="0">
     </details>
     <div class="duckrow">
@@ -483,6 +483,10 @@
   // list of names to keep in step with liquidsoap.
   const BANDS = ['f100', 'f200', 'f400', 'f800', 'f1600', 'f3150', 'f6300'];
   const flatEq = () => Object.fromEntries(BANDS.map(b => [b, 0]));
+  // What each band is called out loud. The key stays the centre in hertz
+  // because liquidsoap reads it that way; only the label is conventional.
+  const HZ = { f100: '100 Hz', f200: '200 Hz', f400: '400 Hz', f800: '800 Hz',
+               f1600: '1.6 kHz', f3150: '3.15 kHz', f6300: '6.3 kHz' };
   const settings = { gain: 12, duck: true, eq: flatEq() };
   const showGain = () => { $('gainval').textContent = $('gain').value; };
   const showBand = b => { $('eq' + b + 'val').textContent = $('eq' + b).value; };
@@ -556,7 +560,7 @@
     $('eq' + b).addEventListener('input', () => showBand(b));
     $('eq' + b).addEventListener('change', () => {
       settings.eq[b] = parseFloat($('eq' + b).value);
-      saveSettings(b.slice(1) + ' Hz saved: ' + settings.eq[b] + ' dB');
+      saveSettings(HZ[b] + ' saved: ' + settings.eq[b] + ' dB');
     });
   }
   // Liquidsoap polls this folder, so the setting IS the button: it lands on air
