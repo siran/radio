@@ -232,9 +232,16 @@ claim to be.
   working proposal: 60 net out of 120 with ten listeners.
 - **Show the tug while it happens.** Watching the bar move is the feature. A
   vote you cannot see is admin; one you can see is a crowd.
-- **The counter lives in memory, not on disk** — votes die with the song, so a
-  restart clearing them is correct rather than data loss. The one place where
-  folder-is-the-interface is the wrong answer.
+- **Skip votes live in memory; LIKES are kept on disk.** They look like the same
+  mechanic and they are not. A skip vote dies with the song, so a restart
+  clearing it is correct rather than data loss - the one place where
+  folder-is-the-interface is the wrong answer. A like is kept forward, so it is
+  exactly the folder case, like the guestbook. An's ruling; I had lumped them
+  together.
+- **Key a like by the file path, not the title.** Untagged files come back with
+  empty title and artist - the path is the only identifier always present. Over
+  time that means the station knows which tracks are loved, which is worth
+  something to rotation later. Do not build that now.
 - `on_metadata` already fires on every track change, so the count resets itself.
 - Voting is public, so it needs its own unauthenticated route; `/control/*` is
   behind the speaker credential.
