@@ -121,7 +121,13 @@ voice_dir = "C:/Users/an/src/radio/messages/voice"
 # an idle queue costs essentially nothing, so it can be generous. Past this,
 # speakers share a lane and serialise behind each other; nothing is lost.
 lane_count = 8
-lanes = list.init(lane_count, fun (i) -> request.queue(id = "voice#{i}"))
+queues = list.init(lane_count, fun (i) -> request.queue(id = "voice#{i}"))
+
+# Each speaker plays at their own volume. A lane only ever plays one note at a
+# time, so wrapping the lane - rather than the mix - makes the gain per note:
+# `override` reads liq_amplify off whatever that lane is playing right now.
+# A note with no gain file carries no annotation, and falls back to voice_gain.
+lanes = list.map(fun (q) -> amplify(override = "liq_amplify", voice_gain, q), queues)
 
 voice = add(id = "voices", normalize = false, lanes)
 
@@ -180,9 +186,18 @@ def pickup() =
         seen := list.add(f, seen())
         who  = speaker_of(f)
         l    = lane_for(who)
-        q    = list.nth(lanes, l)
-        q.push.uri(f)
-        log.important(label = "voice", "queued #{who} -> lane #{l}")
+        q    = list.nth(queues, l)
+        # The speaker's own volume: a plain number in a file called `gain`,
+        # sitting in their folder alongside their notes. Parsed twice with
+        # different defaults, so a missing or unparseable value is told apart
+        # from a real one and simply falls back to voice_gain. The number rides
+        # with the note as an annotation, so it applies to that note alone.
+        gpath = "#{voice_dir}/#{who}/gain"
+        g     = if file.exists(gpath) then string.trim(file.contents(gpath)) else "" end
+        ok    = g != "" and float_of_string(default = 1.0, g) == float_of_string(default = 2.0, g)
+        uri   = if ok then "annotate:liq_amplify=\"#{g}\":#{f}" else f end
+        q.push.uri(uri)
+        log.important(label = "voice", "queued #{who} -> lane #{l}: #{uri}")
       end,
     files)
 
@@ -212,9 +227,9 @@ live = amplify(mic_gain, live)
 live = filter(freq = hp_freq, mode = "high", live)
 
 # 3. the mic and the voice notes are one bus, so either ducks the music and
-#    the two can overlap rather than interrupt. Notes get their own gain -
-#    a phone recording arrives far quieter than a headset.
-talk = add(id = "talk", normalize = false, [live, amplify(voice_gain, voice)])
+#    the two can overlap rather than interrupt. The notes arrive already at
+#    their own speaker's gain, applied back in the lanes.
+talk = add(id = "talk", normalize = false, [live, voice])
 
 # 4. compressor on the WHOLE bus, so an uploaded note is levelled exactly like
 #    the live mic. Putting it on the mic alone left notes uncompressed and
