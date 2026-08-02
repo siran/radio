@@ -25,6 +25,9 @@
           border:1px solid var(--line); border-radius:8px; color:var(--fg);
           font:inherit; font-size:16px; }
   input:focus, select:focus { outline:none; border-color:#4a4a55; }
+  /* the picker is locked while the mic is open, and the colour set above
+     would otherwise hide the browser's own disabled styling */
+  select:disabled { opacity:.5; }
   /* the text-input padding above makes a slider look sunken and cramped */
   input[type=range] { padding:0; margin-bottom:4px; accent-color:var(--on); }
 
@@ -82,8 +85,8 @@
   <h1>wild n loyal &middot; talk</h1>
   <div class="sub">Click once to open the mic, once more to close it. Your voice goes out in three-second slices, over the music, which ducks underneath.</div>
 
-  <div class="panel" id="setup">
-    <label for="dev">Microphone</label>
+  <div class="panel" id="setup" hidden>
+    <label for="dev" id="devlabel">Microphone</label>
     <select id="dev"><option value="">default</option></select>
   </div>
 
@@ -157,21 +160,48 @@
   // credential without being asked again, and the server decides who you are.
   const fail = m => { $('err').textContent = m; };
 
+  // A device only has a name once the browser has granted the microphone:
+  // before that enumerateDevices() reports every input with an empty label,
+  // which is why this list used to read "microphone 1". So the panel appears
+  // only once the names are real AND there is more than one to choose between
+  // - on a phone there is one mic and nothing to decide, so it stays out of
+  // the way. The first press of Start talking grants the permission and the
+  // picker arrives with it.
+  const MIC_KEY = 'talk.mic';
+
   async function listDevices() {
+    let mics = [];
     try {
-      const all = await navigator.mediaDevices.enumerateDevices();
-      const sel = $('dev'), cur = sel.value;
-      sel.innerHTML = '<option value="">default</option>';
-      all.filter(d => d.kind === 'audioinput').forEach((d, i) => {
-        const o = document.createElement('option');
-        o.value = d.deviceId;
-        o.textContent = d.label || ('microphone ' + (i + 1));
-        sel.appendChild(o);
-      });
-      sel.value = cur;
+      mics = (await navigator.mediaDevices.enumerateDevices())
+        .filter(d => d.kind === 'audioinput');
     } catch {}
+    const worth = mics.length > 1 && mics.every(d => d.label);
+    $('setup').hidden = !worth;
+    if (!worth) return;
+
+    const sel = $('dev');
+    let want = '';
+    try { want = localStorage.getItem(MIC_KEY) || ''; } catch {}
+    sel.innerHTML = '<option value="">default</option>';
+    for (const d of mics) {
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label;
+      sel.appendChild(o);
+    }
+    // An unplugged headset is simply no longer in the list. Falling back to
+    // default beats holding a deviceId that getUserMedia would refuse.
+    sel.value = mics.some(d => d.deviceId === want) ? want : '';
   }
   listDevices();
+
+  // Which mic this browser uses is a property of this laptop, not of the
+  // person talking, so it is remembered here and not in settings.json.
+  $('dev').addEventListener('change', () => {
+    try { localStorage.setItem(MIC_KEY, $('dev').value); } catch {}
+  });
+  // Plugging the headset in, or pulling it out, changes what is on offer.
+  if (navigator.mediaDevices) navigator.mediaDevices.ondevicechange = listDevices;
 
   function meter() {
     if (!analyser) return;
@@ -208,7 +238,12 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
     } catch (e) { return fail('Microphone refused: ' + e.name); }
-    listDevices();
+    listDevices();   // permission now exists, so the names are real
+    // Swapping the mic mid-slice would mean tearing down the stream, the
+    // recorder and the meter with a slice in flight - a dropped or doubled
+    // slice on air. Cheaper to say no, out loud, and let him stop first.
+    $('dev').disabled = true;
+    $('devlabel').textContent = 'Microphone \u2014 locked while you are on air';
 
     ac = new (window.AudioContext || window.webkitAudioContext)();
     analyser = ac.createAnalyser();
@@ -262,6 +297,8 @@
     try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
     try { ac && ac.close(); } catch {}
     cancelAnimationFrame(raf); analyser = null; $('vu').style.width = '0%';
+    $('dev').disabled = false;
+    $('devlabel').textContent = 'Microphone';
     setStatus('ready');
   }
 
