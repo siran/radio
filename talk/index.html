@@ -193,7 +193,12 @@
     const mime = pickMime();
     if (!mime) return fail('This browser cannot encode audio.');
     const devId = $('dev').value;
-    const constraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    // This page is voice only, so let the phone do what it is good at:
+    // noise suppression before anything is uploaded. (The DJ page kept these
+    // off because music could pass through it and they mangle music - here
+    // there is nothing but speech.) AGC stays off so it does not fight the
+    // compressor on the server.
+    const constraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: false };
     if (devId) constraints.deviceId = { exact: devId };
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });

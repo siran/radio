@@ -206,7 +206,13 @@ talk = compress(
   talk
 )
 
-# 5. measure AFTER the chain, so the ducking follows what listeners hear.
+# 5. limiter. Eight lanes summing with normalize=false means eight people
+#    talking at once can overshoot badly, and the make-up gain makes that
+#    worse. This is the guard rail: inaudible when one person speaks, and it
+#    keeps a crowd from turning into distortion.
+talk = limit(threshold = -2.0, talk)
+
+# 6. measure AFTER the chain, so the ducking follows what listeners hear.
 talk = rms(id = "mic", duration = 0.3, talk)
 
 # --- ducking ---------------------------------------------------------------
