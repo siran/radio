@@ -43,6 +43,19 @@
   .status { font-size:13px; color:var(--dim); margin-top:10px; text-align:center; }
   .err { color:var(--rec); font-size:13px; margin-top:10px; white-space:pre-wrap; }
 
+  /* the music: what is on air, and the few things a host does to it */
+  .np { font-size:15px; }
+  .path { font-size:11px; color:var(--dim); margin-top:4px; word-break:break-all;
+          font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          -webkit-user-select:all; user-select:all; }
+  .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .btns .tbtn { flex:1 1 auto; }
+  .tbtn { padding:11px 12px; border:1px solid var(--line); border-radius:8px;
+          background:#101013; color:var(--fg); font:inherit; font-size:14px;
+          cursor:pointer; }
+  .tbtn.on { border-color:var(--on); color:var(--on); }
+  .duckrow { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+
   ul { list-style:none; padding:0; margin:10px 0 0; }
   li { display:flex; justify-content:space-between; gap:10px; font-size:13px;
        color:var(--dim); padding:7px 0; border-bottom:1px solid var(--line); }
@@ -77,7 +90,10 @@
   <div class="panel" id="gainpanel">
     <label for="gain">Your voice volume &mdash; <span id="gainval">1</span>&times;</label>
     <input id="gain" type="range" min="0.5" max="12" step="0.5" value="1">
-    <div class="hint">Applies to your next note.</div>
+    <div class="duckrow">
+      <div class="hint">Applies to your next note.</div>
+      <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
+    </div>
   </div>
 
   <div class="panel">
@@ -85,6 +101,20 @@
     <div class="meter"><i id="vu"></i></div>
     <div class="status" id="status">ready</div>
     <div class="err" id="err"></div>
+  </div>
+
+  <div class="panel" id="musicpanel">
+    <label>Now playing</label>
+    <div class="np" id="npTitle">&mdash;</div>
+    <div class="path" id="npPath"></div>
+    <div class="btns">
+      <button class="tbtn" id="bSkip">Skip</button>
+      <button class="tbtn" id="bAgain" title="play this track once more">Play again</button>
+      <button class="tbtn" id="bRepeat">Repeat</button>
+      <button class="tbtn" id="bMusic" title="off is silence">Music</button>
+      <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
+    </div>
+    <div class="err" id="cerr"></div>
   </div>
 
   <details class="panel" id="deskwrap">
@@ -311,6 +341,55 @@
     } catch {}
   }
 
+  // The music. Every one of these answers with the same state object, so one
+  // draw() serves the poll and every button alike, and no button has to guess
+  // what it did.
+  let cur = { repeat: false, music: true, paused: false };
+
+  async function control(path, method) {
+    try {
+      const res = await fetch('/control/' + path,
+        { method, credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      draw(await res.json());
+      $('cerr').textContent = '';
+    } catch (e) { $('cerr').textContent = 'Music controls: ' + e.message; }
+  }
+  const nowPlaying = () => control('now', 'GET');
+
+  // A toggle says what it is, not only what colour it is.
+  function flag(id, on, text) {
+    const b = $(id);
+    b.textContent = text + (on ? ': on' : ': off');
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+
+  function draw(s) {
+    cur = s;
+    // Untagged files come back with empty title and artist. The path never does,
+    // and the path is what you need to find the file in the library anyway.
+    const named = [s.artist, s.title].filter(Boolean).join(' \u2014 ');
+    $('npTitle').textContent =
+      named || (s.path || '').split(/[\\/]/).pop() || '\u2014';
+    $('npPath').textContent = s.path || '';
+    flag('bRepeat', !!s.repeat, 'Repeat');
+    flag('bMusic', !!s.music, 'Music');
+    flag('bPause', !!s.paused, 'Pause');
+  }
+
+  $('bSkip').addEventListener('click', async () => {
+    await control('skip', 'POST');
+    nowPlaying();     // skip answers with the state before it - the next track
+  });                 // is prepared a moment later, and the poll below catches it
+  $('bAgain').addEventListener('click', () => control('again', 'POST'));
+  $('bRepeat').addEventListener('click', () => control('repeat?on=' + !cur.repeat, 'POST'));
+  $('bMusic').addEventListener('click', () => control('music?on=' + !cur.music, 'POST'));
+  $('bPause').addEventListener('click', () => control('pause?on=' + !cur.paused, 'POST'));
+
+  nowPlaying();
+  setInterval(nowPlaying, 3000);   // the track changes on its own; so must the name
+
   // Your own settings. One small json file in your own folder, which
   // liquidsoap reads when it queues your note: how loud you play, and whether
   // the music dips under you. Caddy files it under whoever authenticated, so
@@ -320,9 +399,11 @@
   const settings = { gain: 12, duck: true };
   const showGain = () => { $('gainval').textContent = $('gain').value; };
 
-  // Read-modify-write: duck has no control on this page yet, and PUTting only
-  // the volume would erase it.
-  async function loadGain() {
+  // Read-modify-write: the volume and the duck live in the same file, so
+  // always PUT the whole object - a partial one would erase the other field.
+  const showDuck = () => flag('duck', settings.duck, 'Music dips');
+
+  async function loadSettings() {
     try {
       const res = await fetch(SETTINGS_URL, { credentials: 'same-origin', cache: 'no-store' });
       if (res.status !== 404) {
@@ -331,11 +412,11 @@
       }
       if (isFinite(settings.gain)) $('gain').value = settings.gain;
       showGain();
+      showDuck();
     } catch (e) { fail('Could not read your settings: ' + e.message); }
   }
 
-  async function saveGain() {
-    settings.gain = parseFloat($('gain').value);
+  async function saveSettings(msg) {
     try {
       const res = await fetch(SETTINGS_URL, {
         method: 'PUT',
@@ -345,22 +426,32 @@
       });
       if (res.ok || res.status === 201 || res.status === 204) {
         $('err').textContent = '';
-        setStatus(recording ? 'on air' : 'volume saved: ' + settings.gain + '\u00d7');
+        setStatus(recording ? 'on air' : msg);
       } else {
-        setStatus('volume not saved');
+        setStatus('not saved');
         fail(res.status === 401
           ? 'Your sign-in expired. Reload the page and sign in again.'
-          : 'Could not save your volume: HTTP ' + res.status);
+          : 'Could not save your settings: HTTP ' + res.status);
       }
     } catch (e) {
-      setStatus('volume not saved');
-      fail('Could not save your volume: ' + e.message);
+      setStatus('not saved');
+      fail('Could not save your settings: ' + e.message);
     }
   }
 
   $('gain').addEventListener('input', showGain);   // while dragging, show only
-  $('gain').addEventListener('change', saveGain);  // on release, write it
-  loadGain();
+  $('gain').addEventListener('change', () => {     // on release, write it
+    settings.gain = parseFloat($('gain').value);
+    saveSettings('volume saved: ' + settings.gain + '\u00d7');
+  });
+  // Liquidsoap polls this folder, so the setting IS the button: it lands on air
+  // within a quarter second and there is nothing else to tell.
+  $('duck').addEventListener('click', () => {
+    settings.duck = !settings.duck;
+    showDuck();
+    saveSettings('music dips under you: ' + (settings.duck ? 'on' : 'off'));
+  });
+  loadSettings();
 
   // One click opens the mic, another closes it. Holding a phone button for a
   // whole thought is miserable, and this makes a back-and-forth possible.

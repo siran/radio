@@ -285,6 +285,29 @@ def note_uri(who, f) =
   end
 end
 
+# When this process started. A note whose file was written before this is one
+# the station was down for, and playing it late is worse than never playing
+# it: a three minute old "hello everyone" landing in the middle of a song.
+started = time()
+
+# A throw anywhere inside pickup kills the polling thread silently - the
+# station goes deaf and nothing on air says so - and this runs on every file
+# four times a second, so the mtime call is wrapped. Measured on this build
+# rather than assumed: file.mtime returns 0.0 for a file that is already gone
+# and the true mtime for one the account cannot open for reading, throwing in
+# neither case. Both of those come out "not new", which is the safe way to be
+# wrong - a note is missed, exactly like every other note that arrived while
+# we were down, and the cleanup below still bins it. The catch is there for
+# the case neither of those covers. It has to be a function of its own:
+# `x = try ... end` does not parse, a try is only allowed where a statement is.
+def is_new(f) =
+  try
+    file.mtime(f) >= started
+  catch _ do
+    false
+  end
+end
+
 def pickup() =
   # file.ls with recursive=true ignores `pattern` entirely - patterns do not
   # cross a directory separator - and it returns directories alongside files.
@@ -305,13 +328,26 @@ def pickup() =
   list.iter(
     fun (f) ->
       if not list.mem(f, seen()) then
+        # Recorded either way, so an old note costs one stat and not four a
+        # second. `seen` keeps meaning exactly what it meant - do not queue
+        # this path - and the cleanup below still forgets it once the file is
+        # really gone, so the list does not grow.
         seen := list.add(f, seen())
-        who  = speaker_of(f)
-        l    = lane_for(who)
-        q    = list.nth(queues, l)
-        uri  = note_uri(who, f)
-        q.push.uri(uri)
-        log.important(label = "voice", "queued #{who} -> lane #{l}: #{uri}")
+        # Only notes that turned up while we were on air get played. `seen`
+        # lives in memory and starts empty, so without this every note still
+        # on disk looks new again after a restart - and the cleanup only bins
+        # them at five minutes, so after a restart there are always some. On
+        # 2026-08-02 at 15:42:23 that put 21 of the operator's notes back on
+        # the air in one second, the instant the mount connected, while he was
+        # listening to it.
+        if is_new(f) then
+          who  = speaker_of(f)
+          l    = lane_for(who)
+          q    = list.nth(queues, l)
+          uri  = note_uri(who, f)
+          q.push.uri(uri)
+          log.important(label = "voice", "queued #{who} -> lane #{l}: #{uri}")
+        end
       end,
     files)
 
