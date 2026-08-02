@@ -1,7 +1,7 @@
 # Reads plain text files aloud on the air.
 #
 # Drop a .txt or .md into any speaker folder under messages\voice and this loop
-# speaks it with Windows SAPI, leaving a .wav behind in the same folder. The
+# speaks it with Piper, leaving a .wav behind in the same folder. The
 # voice-note pickup already running inside liquidsoap finds that wav and plays
 # it exactly like a phone recording - same lane, same settings.json, same
 # ducking. Liquidsoap never learns that text is a thing; the only new idea in
@@ -10,18 +10,28 @@
 #
 # Runs from a scheduled task at startup. Safe to stop and start at any time.
 $ErrorActionPreference = 'Continue'
-Add-Type -AssemblyName System.Speech
 
 $voice = 'C:\Users\an\src\radio\messages\voice'
 
-# 44100 / 16 bit / stereo, which comes out as pcm_s16le. Measured on this
-# machine: that is the one SAPI format ffmpeg inside liquidsoap accepts without
-# complaint. The default (22kHz mono) is what "Available decoders cannot decode"
-# looks like from the other end.
-$fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(
-           44100,
-           [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen,
-           [System.Speech.AudioFormat.AudioChannel]::Stereo)
+# Piper, out of its own venv. It is a python package rather than an exe, so it
+# gets invoked as a module. It writes 22050 Hz mono 16 bit, which the ffmpeg
+# inside liquidsoap reads as pcm_s16le and prepares without a murmur, so
+# nothing here resamples it or makes it stereo. A 44100/stereo format object
+# used to sit at this spot: it was working around an ACL problem that had been
+# misdiagnosed as a codec one, and the real fix for that is the write-in-place
+# dance further down, which is still here.
+#
+# Every render is a fresh process that loads the 60 MB model again - measured
+# on this machine at about 1.7 seconds for a one-sentence file, nearly all of
+# it startup. Announcements arrive one at a time and nothing is blocked waiting
+# on the result, so that is not worth a resident server.
+$python = 'D:\services\piper\venv\Scripts\python.exe'
+$model  = 'D:\services\piper\voices\en_US-lessac-medium.onnx'
+
+# What the text for piper gets written as. No BOM: piper opens its input as
+# plain UTF-8, and a byte order mark would survive that as a U+FEFF glued to
+# the front of the first line rather than being stripped off.
+$utf8 = New-Object System.Text.UTF8Encoding($false)
 
 # size+mtime of every text file as of the previous poll. A file has to look
 # identical two polls running before we touch it, because the operator may
@@ -66,14 +76,36 @@ while ($true) {
         # so the file is complete and readable the instant it is visible.
         $wav     = Join-Path $f.DirectoryName ("$($f.BaseName)-{0}.wav" -f (Get-Date -Format 'HHmmss'))
         $pending = "$wav.pending"
+
+        # Hand piper the words in a file rather than down a pipe. That is
+        # deliberate at both ends. Piper opens an --input-file as UTF-8
+        # outright, while its stdin path decodes with the process code page, so
+        # a curly apostrophe pasted out of a phone would arrive as mojibake.
+        # And PowerShell 5.1 encodes whatever it pipes into a native process
+        # using $OutputEncoding, which is ASCII until something changes it,
+        # turning that same character into a question mark before python ever
+        # sees it. A file written as UTF-8 is exactly what piper assumes.
+        #
+        # It goes beside the wav rather than in TEMP, for the ACL reason above
+        # and so that one place holds everything this render made. The pickup
+        # only looks at a whitelist of audio extensions, so a .piper-in in the
+        # folder is invisible to it.
+        $intext = "$wav.piper-in"
         try {
-            $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
-            $s.SetOutputToWaveFile($pending, $fmt)
-            $s.Speak($text)
-            # The RIFF header carries the length, and it is only filled in when
-            # the output is released. Skip this and the wav is unplayable.
-            $s.SetOutputToNull()
-            $s.Dispose()
+            [IO.File]::WriteAllText($intext, $text, $utf8)
+            & $python -m piper --model $model --input-file $intext --output-file $pending
+
+            # Piper is a separate process, so a failure is an exit code and a
+            # missing or truncated wav, not an exception. Nothing is thrown and
+            # the catch below would sit there and never fire, which would leave
+            # the text to come round again every three seconds forever. Raise it
+            # by hand. A voice model that cannot be loaded exits 1 before the
+            # wav is opened at all; a synthesis that dies partway leaves a wav
+            # on disk, and the exit code is the only thing that catches that.
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $pending)) {
+                throw "piper exited $LASTEXITCODE"
+            }
+
             Rename-Item $pending (Split-Path $wav -Leaf)
             Remove-Item $f.FullName -Force
         }
@@ -83,6 +115,11 @@ while ($true) {
             # is not an audio extension, so the pickup ignores it too.
             Remove-Item $pending -Force -ErrorAction SilentlyContinue
             Rename-Item $f.FullName "$($f.Name).failed" -Force -ErrorAction SilentlyContinue
+        }
+        finally {
+            # Both ways out leave the words sitting in an on-air folder, so this
+            # runs on both.
+            Remove-Item $intext -Force -ErrorAction SilentlyContinue
         }
     }
     $prev = $now
