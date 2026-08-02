@@ -32,6 +32,15 @@ import admins.caddy
 }
 
 (radio) {
+	# Without this only errors are recorded, and a 401 or 429 is invisible.
+	log {
+		output file C:/ProgramData/Caddy/access.log {
+			roll_size 10MiB
+			roll_keep 3
+		}
+		format json
+	}
+
 	root * C:/Users/an/src/radio
 
 	# Live chat. Same idea as the guestbook: one small file per line.
@@ -119,8 +128,11 @@ import admins.caddy
 		}
 	}
 
+	# The page itself is just UI and holds no secrets - the credential is typed
+	# into it and sent explicitly with each upload. Guarding the page as well
+	# meant two prompts, and mobile chrome would not carry the first one over
+	# to the upload, which failed with no way for the speaker to correct it.
 	handle /talk* {
-		import speakers
 		file_server
 	}
 

@@ -39,7 +39,9 @@ else {
         [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
         $Password = -join ($b | ForEach-Object { $alpha[$_ % $alpha.Length] })
     }
+    $ErrorActionPreference = 'Continue'
     $hash = & $caddy hash-password --plaintext $Password
+    $ErrorActionPreference = 'Stop'
     if (-not $hash) { throw 'hashing failed' }
 
     $kept = $lines | Where-Object { $_ -notmatch "^\s*$clean\s+" }
@@ -57,9 +59,15 @@ else {
     & icacls (Join-Path $voice $clean) /grant 'svc-radio:(OI)(CI)M' /Q | Out-Null
 }
 
+# caddy writes its progress to stderr, which powershell turns into a
+# terminating error under ErrorActionPreference=Stop even on success. Drop to
+# Continue around the native calls and judge them by their exit code.
+$ErrorActionPreference = 'Continue'
 & $caddy validate --config $cf | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'validate failed - speakers.caddy is bad, fix it before reloading' }
 & $caddy reload --config $cf | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'reload failed' }
+$ErrorActionPreference = 'Stop'
 
 Write-Output ''
 Write-Output '=== speakers now'
