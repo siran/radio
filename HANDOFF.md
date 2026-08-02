@@ -117,7 +117,7 @@ Verified on air: `music down` when a note with `liq_duck="true"` starts,
 
 ## Where we are going
 
-### 1. The host console at `/talk/` — in progress
+### 1. The host console at `/talk/` — DONE 2026-08-02
 
 One URL for everyone; the link that makes them log in, not a per-host URL. A
 per-host URL would be a name the client claims, which is the one thing this
@@ -128,23 +128,40 @@ The console shows the station plus, on top: duck on/off, recording on/off,
 music on/off, pause/play/repeat/skip, the filename being played, an equalizer,
 and liquidsoap's own controls.
 
-- **Chunk 1, done** — per-speaker `settings.json` and ducking (above).
-- **Chunk 2, in progress** — `harbor.http.register` on 8005 for transport and
-  now-playing filename, proxied by Caddy behind `import speakers`. Any host may
-  drive the music.
-- **Chunk 3** — the page itself, and a three-band EQ.
+All of it is built and on air:
+
+- per-speaker `settings.json` — gain, duck, and a three-band EQ
+- `/control/*` on the harbor at 8005 behind `import speakers`: now-playing path,
+  skip, again, repeat, music on/off, pause. Any host may drive the music.
+- the page itself, plus a microphone picker that shows real device names
+
+Three wide peak bells at 160Hz, 1kHz and 4kHz carry the EQ. NOT a shelf pair:
+`filter.iir.eq.lowshelf` and `.highshelf` exist but take a `slope` and no gain,
+and measured here they are unusable as tone controls — a 100Hz tone through
+`lowshelf(frequency=500)` came out 56dB DOWN, and a negative slope returned inf.
+A peak is unity away from its centre, so 0dB on all three sliders is exactly
+flat. An earlier note in this file said shelves were missing; they exist, they
+are just the wrong tool.
+
+The per-note trick: a filter parameter can be a GETTER, `{...}`, re-evaluated as
+it runs, so it reads `q.last_metadata()` and follows the current note without
+any `override` parameter. Bind the getters BEFORE `amplify` — amplify returns a
+plain source, and passing the queue to it first pins the type so `last_metadata`
+stops typechecking.
 
 Transport was originally headed for `/admin`. It belongs on the console
 instead; `/admin` stays the place you make speakers.
 
-### 2. Startup must not replay the backlog — known bug, fix pending
+### 2. Startup must not replay the backlog — FIXED 2026-08-02
 
 `seen` lives only in memory, so **every restart re-queues every note still on
 disk** — up to five minutes' worth, all at once. This replayed 21 notes on air
 on 2026-08-02 while the operator was recording. Fix: only queue notes whose
 mtime is after process start, and let the existing cleanup sweep the rest.
 
-Held until chunk 2 lands rather than putting a second agent into `radio.liq`.
+Fixed: `started = time()` at load, and `is_new(f)` gates the queueing while
+`seen` still records every path, so an old note costs one stat rather than four
+a second. Verified across a restart: 0 notes queued.
 
 ### 3. The narrator
 
@@ -190,6 +207,38 @@ small change once the announcer exists.
   the file is truth at startup, the `interactive` knobs are live overrides, and
   save writes the knobs back.** Otherwise a restart silently reverts a tuning.
 
+## Who anyone is — the identity model
+
+Two kinds, ordered by authority, and there is no third:
+
+- **Verified** — hosts. The server decides who they are, because they can talk
+  on air and drive liquidsoap. Authority needs proof.
+- **Claimed** — everyone else. They put a name to what they say and nobody
+  checks it. Enough, because the only thing at stake is their own words.
+
+Do NOT call the second kind anonymous. An's ruling, and he is right: that word
+describes the system's ignorance and then pins it on the person as though it
+were a property they have. If you want to know who someone is, ask who they
+claim to be.
+
+## Skip votes — designed, not built
+
+- **12 clicks per listener, per song.** The budget refills each track, so every
+  song is its own contest.
+- **Clicks go both ways.** Skip and keep. A tug of war, not a poll. The
+  counter-click IS the veto, which is why the threshold need not be the whole
+  pool — requiring every click in the room lets one absent listener veto it.
+- **Threshold is net force against a fraction of the pool.** Half is the
+  working proposal: 60 net out of 120 with ten listeners.
+- **Show the tug while it happens.** Watching the bar move is the feature. A
+  vote you cannot see is admin; one you can see is a crowd.
+- **The counter lives in memory, not on disk** — votes die with the song, so a
+  restart clearing them is correct rather than data loss. The one place where
+  folder-is-the-interface is the wrong answer.
+- `on_metadata` already fires on every track change, so the count resets itself.
+- Voting is public, so it needs its own unauthenticated route; `/control/*` is
+  behind the speaker credential.
+- The per-listener budget is browser-local and defeatable. Fine. It is a song.
 ## Traps that have already cost real time
 
 The README has the full list. These bit hardest:
@@ -228,6 +277,14 @@ The README has the full list. These bit hardest:
 - **Caddy reload, never restart.** Restarting drops listeners.
 - **Restarting Liquidsoap replays the note backlog** — see the pending fix
   above. Do not restart the service while anyone is on air.
+- **Line endings are consistent per file, deliberately**: `radio.liq` and
+  `Caddyfile` are pure LF, the HTML pure CRLF. They used to be mixed, and mixed
+  is what let a whole file get converted by accident twice in one day — once by
+  a `--tree-filter`, once by an agent's editor. Use `--index-filter` for history
+  rewrites; it never checks a file out.
+- **`file.mtime` does NOT throw on an unreadable file** on this build — it
+  returns the true mtime, and 0.0 for a missing one. An earlier note here said
+  otherwise. Measured 2026-08-02.
 - **`{http.auth.user.id}` in a webdav root works** — verified, and it is the
   whole basis of identity here.
 - **SAPI wav decodes fine** at 44100/16/stereo (`pcm_s16le`). Dolly has only
