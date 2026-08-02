@@ -168,6 +168,11 @@ import admins.caddy
 			respond 404
 		}
 	}
+	# Sign out. A 401 from a path that asks for no credential of its own is
+	# what makes a browser forget the one it cached for /talk/ and prompt again.
+	handle /talk/logout {
+		respond 401
+	}
 	handle /talk* {
 		import speakers
 		file_server
