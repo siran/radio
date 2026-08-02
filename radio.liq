@@ -110,8 +110,47 @@ live = input.harbor(
 # content length, which is the part that has proven reliable.
 
 voice_dir = "C:/Users/an/src/radio/messages/voice"
-voice     = request.queue(id = "voice")
+
+# Four lanes, mixed together. A speaker always lands in the same lane, so
+# their own slices stay in order; different speakers get different lanes, so
+# they overlap instead of queueing behind each other. Best effort, not a
+# reconstruction of who spoke exactly when - but with a name in the filename
+# it costs almost nothing.
+lane0 = request.queue(id = "voice0")
+lane1 = request.queue(id = "voice1")
+lane2 = request.queue(id = "voice2")
+lane3 = request.queue(id = "voice3")
+lanes = [lane0, lane1, lane2, lane3]
+
+voice = add(id = "voices", normalize = false, lanes)
+
+# who has which lane, assigned on first appearance
+lane_of   = ref([])
+next_lane = ref(0)
 seen      = ref([])
+
+# Files are named  speaker--timestamp-seq-rand.ext
+# Anything without a speaker prefix is treated as "guest".
+def speaker_of(fpath) =
+  # string.split takes a REGEX, and a lone backslash is not one. basename
+  # sidesteps the whole question.
+  base  = path.basename(fpath)
+  parts = string.split(separator = "--", base)
+  if list.length(parts) > 1 then list.nth(default = "guest", parts, 0) else "guest" end
+end
+
+def lane_for(name) =
+  known = list.assoc(default = -1, name, lane_of())
+  if known >= 0 then
+    known
+  else
+    l = next_lane()
+    next_lane := (l + 1) mod 4
+    lane_of := list.add((name, l), lane_of())
+    log.important(label = "voice", "#{name} is on lane #{l}")
+    l
+  end
+end
 
 def pickup() =
   # whatsapp sends ogg/opus, telegram .oga, ios .m4a, the browser .webm
@@ -126,8 +165,11 @@ def pickup() =
     fun (f) ->
       if not list.mem(f, seen()) then
         seen := list.add(f, seen())
-        voice.push.uri(f)
-        log.important(label = "voice", "queued #{f}")
+        who  = speaker_of(f)
+        l    = lane_for(who)
+        q    = list.nth(default = lane0, lanes, l)
+        q.push.uri(f)
+        log.important(label = "voice", "queued #{who} -> lane #{l}")
       end,
     files)
 end
