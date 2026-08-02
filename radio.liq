@@ -203,11 +203,24 @@ def pickup() =
 
   # These are disposable. Anything older than five minutes has certainly been
   # played, so bin it rather than accumulating someone's voice on disk.
+  #
+  # A note the service account cannot read is also one it cannot delete, and a
+  # path dropped from `seen` looks new again on the very next poll - so
+  # forgetting a file we did not actually get rid of re-queues it four times a
+  # second, forever. Only forget a path once the file is really gone; a note
+  # left on disk is much the cheaper problem. The second `seen` entry earns its
+  # keep by holding the warning to one line instead of one per poll.
   list.iter(
     fun (f) ->
       if file.mtime(f) < time() - 300.0 then
         file.remove(f)
-        seen := list.filter(fun (s) -> s != f, seen())
+        if not file.exists(f) then
+          seen := list.filter(fun (s) -> s != f, seen())
+        elsif not list.mem("undeletable:#{f}", seen()) then
+          seen := list.add("undeletable:#{f}", seen())
+          log.important(label = "voice",
+            "cannot delete #{f} - leaving it on disk, will not queue it again")
+        end
       end,
     files)
 end
