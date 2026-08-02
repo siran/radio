@@ -15,8 +15,9 @@ Four services on Dolly, all non-admin, all automatic:
 `IcecastServer` (transmitter, loopback only), `LiquidsoapRadio` (the station),
 `CaddyServer` (TLS, every public URL), `JellyfinServer` (the library).
 
-The repo now has a remote: `git@github.com:siran/radio.git`. History carries
-~40 guestbook posts from July 29-31 that predate them being gitignored.
+The repo now has a remote: `git@github.com:siran/radio.git`, and it is PUBLIC.
+History was rewritten on 2026-08-02: the ACME address and 37 guestbook posts
+were purged from every commit. Anything committed here is published.
 
 ### How a voice note travels
 
