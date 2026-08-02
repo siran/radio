@@ -173,9 +173,19 @@ def pickup() =
         log.important(label = "voice", "queued #{who} -> lane #{l}")
       end,
     files)
+
+  # These are disposable. Anything older than five minutes has certainly been
+  # played, so bin it rather than accumulating someone's voice on disk.
+  list.iter(
+    fun (f) ->
+      if file.mtime(f) < time() - 300.0 then
+        file.remove(f)
+        seen := list.filter(fun (s) -> s != f, seen())
+      end,
+    files)
 end
 
-thread.run(every = 2.0, pickup)
+thread.run(every = 0.25, pickup)
 
 # --- the voice chain -------------------------------------------------------
 # This is what makes a phone microphone sound like radio rather than like a

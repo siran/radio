@@ -86,11 +86,6 @@
     <div class="err" id="err"></div>
   </div>
 
-  <div class="panel">
-    <label>This session</label>
-    <ul id="sent"><li><span>nothing sent yet</span></li></ul>
-  </div>
-
   <details class="panel" id="deskwrap">
     <summary>Mixing desk &mdash; tune while you talk</summary>
     <div class="hint">
@@ -113,12 +108,13 @@
   const KEY = 'wnl-talk';
 
   let stream = null, rec = null, ac = null, analyser = null, raf = 0;
-  let parts = [], recording = false, startedAt = 0, first = true;
+  let parts = [], recording = false, startedAt = 0;
   let seq = 0, segTimer = 0;
 
-  // Seconds per slice. Short enough to feel live, long enough that the seam
-  // between slices is not constant.
-  const SEG = 3;
+  // Seconds per slice. This is the largest single piece of the delay you hear:
+  // nothing can be sent until the slice finishes. 1.5s roughly halves it, at
+  // the cost of twice as many seams - which the ducking tail covers anyway.
+  const SEG = 1.5;
 
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
@@ -175,16 +171,6 @@
     return '';
   }
   const extFor = m => m.includes('ogg') ? 'ogg' : m.includes('mp4') ? 'm4a' : 'webm';
-
-  function row(name, state, detail) {
-    if (first) { $('sent').innerHTML = ''; first = false; }
-    const li = document.createElement('li');
-    li.innerHTML = '<span>' + name + '</span><span class="' +
-                   (state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : '') + '">' +
-                   detail + '</span>';
-    $('sent').prepend(li);
-    return li;
-  }
 
   async function begin() {
     $('err').textContent = '';
@@ -273,7 +259,7 @@
     const who = ($('who').value || 'guest').toLowerCase().replace(/[^a-z0-9]/g, '') || 'guest';
     const name = who + '--' + stamp + '-' + n + '-' +
                  Math.random().toString(36).slice(2, 6) + '.' + extFor(mime);
-    const li = row('#' + n + ' · ' + secs.toFixed(1) + 's · ' + Math.round(blob.size / 1024) + ' KB', '', 'sending…');
+    const li = { lastChild: {} };   // nothing to display; kept so send() reads plainly
 
     try {
       const res = await fetch('/messages/voice/' + name, {
