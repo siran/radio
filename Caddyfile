@@ -168,6 +168,34 @@ import admins.caddy
 			respond 404
 		}
 	}
+	# One number per speaker: how loud their own notes play, read by liquidsoap
+	# from `gain` in their folder. The filename is fixed, so this can never
+	# become a way to drop an arbitrary file next to someone's voice notes.
+	# GET is allowed here where the uploads refuse it - a volume is not private
+	# the way a recording is, and the page has to show what it is currently set
+	# to. Under /talk/ for the same reason as the uploads: the browser already
+	# holds that credential and will not ask a second time.
+	handle /talk/setting/* {
+		import speakers
+		@gain {
+			method GET PUT
+			path /talk/setting/gain
+		}
+		handle @gain {
+			request_body {
+				max_size 16B
+			}
+			# The folder is whoever authenticated - never what the client says.
+			webdav {
+				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+				prefix /talk/setting
+			}
+		}
+		# any other name, and any other method, is refused
+		handle {
+			respond 403
+		}
+	}
 	# Sign out. A 401 from a path that asks for no credential of its own is
 	# what makes a browser forget the one it cached for /talk/ and prompt again.
 	handle /talk/logout {

@@ -25,6 +25,8 @@
           border:1px solid var(--line); border-radius:8px; color:var(--fg);
           font:inherit; font-size:16px; }
   input:focus, select:focus { outline:none; border-color:#4a4a55; }
+  /* the text-input padding above makes a slider look sunken and cramped */
+  input[type=range] { padding:0; margin-bottom:4px; accent-color:var(--on); }
 
   /* One big button. This is a walkie-talkie, not a console. */
   #rec { width:100%; padding:26px; border:0; border-radius:14px; font:inherit;
@@ -70,6 +72,12 @@
   <div class="panel" id="setup">
     <label for="dev">Microphone</label>
     <select id="dev"><option value="">default</option></select>
+  </div>
+
+  <div class="panel" id="gainpanel">
+    <label for="gain">Your voice volume &mdash; <span id="gainval">1</span>&times;</label>
+    <input id="gain" type="range" min="0.5" max="12" step="0.5" value="1">
+    <div class="hint">Applies to your next note.</div>
   </div>
 
   <div class="panel">
@@ -302,6 +310,52 @@
       d.head.appendChild(css);
     } catch {}
   }
+
+  // Your own volume. One number in a file called `gain` in your own folder,
+  // which liquidsoap reads when it queues your note. Caddy files it under
+  // whoever authenticated, so the page never says who you are - and no file
+  // yet simply means it was never set, which is 1.
+  const GAIN_URL = '/talk/setting/gain';
+  const showGain = () => { $('gainval').textContent = $('gain').value; };
+
+  async function loadGain() {
+    try {
+      const res = await fetch(GAIN_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (res.status === 404) { $('gain').value = 1; showGain(); return; }  // never set
+      if (!res.ok) return fail('Could not read your volume: HTTP ' + res.status);
+      const v = parseFloat((await res.text()).trim());
+      if (isFinite(v)) $('gain').value = v;
+      showGain();
+    } catch (e) { fail('Could not read your volume: ' + e.message); }
+  }
+
+  async function saveGain() {
+    const v = $('gain').value;
+    try {
+      const res = await fetch(GAIN_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain' },
+        credentials: 'same-origin',
+        body: v
+      });
+      if (res.ok || res.status === 201 || res.status === 204) {
+        $('err').textContent = '';
+        setStatus(recording ? 'on air' : 'volume saved: ' + v + '×');
+      } else {
+        setStatus('volume not saved');
+        fail(res.status === 401
+          ? 'Your sign-in expired. Reload the page and sign in again.'
+          : 'Could not save your volume: HTTP ' + res.status);
+      }
+    } catch (e) {
+      setStatus('volume not saved');
+      fail('Could not save your volume: ' + e.message);
+    }
+  }
+
+  $('gain').addEventListener('input', showGain);   // while dragging, show only
+  $('gain').addEventListener('change', saveGain);  // on release, write it
+  loadGain();
 
   // One click opens the mic, another closes it. Holding a phone button for a
   // whole thought is miserable, and this makes a back-and-forth possible.
