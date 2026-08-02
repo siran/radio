@@ -70,12 +70,6 @@
   <div class="panel" id="setup">
     <label for="dev">Microphone</label>
     <select id="dev"><option value="">default</option></select>
-    <label for="user">Who you are</label>
-    <input id="user" autocapitalize="off" autocorrect="off" spellcheck="false"
-           placeholder="the name you were given">
-    <label for="pass">Password</label>
-    <input id="pass" type="password" autocomplete="current-password"
-           placeholder="the password you were given">
   </div>
 
   <div class="panel">
@@ -104,7 +98,6 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const KEY = 'wnl-talk';
 
   let stream = null, rec = null, ac = null, analyser = null, raf = 0;
   let parts = [], recording = false, startedAt = 0;
@@ -115,26 +108,14 @@
   // the cost of twice as many seams - which the ducking tail covers anyway.
   const SEG = 1.5;
 
-  try {
-    const s = JSON.parse(localStorage.getItem(KEY) || '{}');
-    if (s.pass) $('pass').value = s.pass;
-    if (s.user) $('user').value = s.user;
-  } catch {}
 
   const setStatus = t => { $('status').textContent = t; };
 
   // The page is behind basic auth, so the browser already holds the credential
   // and normally sends it. Only if an upload comes back 401 do we ask.
-  // Send the credential explicitly rather than hoping the browser attaches its
-  // cached one to a fetch. It does not do that reliably on mobile, and relying
-  // on it is what made uploads fail with no way to correct them.
-  function authHeaders(blob) {
-    return {
-      'Content-Type': blob.type || 'application/octet-stream',
-      'Authorization': 'Basic ' + btoa(who() + ':' + $('pass').value)
-    };
-  }
-  const who = () => ($('user').value || '').trim().toLowerCase();
+  // No credentials in this page at all. The browser was challenged for /talk/
+  // and uploads go to /talk/upload/, which is below it - so it sends the same
+  // credential without being asked again, and the server decides who you are.
   const fail = m => { $('err').textContent = m; };
 
   async function listDevices() {
@@ -177,9 +158,6 @@
     if (!navigator.mediaDevices || !window.MediaRecorder) return fail('This browser cannot record audio.');
     const mime = pickMime();
     if (!mime) return fail('This browser cannot encode audio.');
-    if (!who() || !$('pass').value) return fail('Enter your name and password first.');
-    try { localStorage.setItem(KEY, JSON.stringify({ pass: $('pass').value, user: $('user').value })); } catch {}
-
     const devId = $('dev').value;
     // This page is voice only, so let the phone do what it is good at:
     // noise suppression before anything is uploaded. (The DJ page kept these
@@ -263,9 +241,9 @@
     const li = { lastChild: {} };   // nothing to display; kept so send() reads plainly
 
     try {
-      const res = await fetch('/messages/voice/' + name, {
+      const res = await fetch('/talk/upload/' + name, {
         method: 'PUT',
-        headers: authHeaders(blob),
+        headers: { 'Content-Type': blob.type || 'application/octet-stream' },
         credentials: 'same-origin',      // let the browser send what it already holds
         body: blob                       // a Blob: the browser sets Content-Length
       });
@@ -277,7 +255,7 @@
         li.lastChild.className = 'bad';
         li.lastChild.textContent = 'HTTP ' + res.status;
         setStatus('rejected');
-        if (res.status === 401) fail('Name or password not accepted. Check both, exactly as they were given to you.');
+        if (res.status === 401) fail('Your sign-in expired. Reload the page and sign in again.');
         else if (res.status === 403) fail('That file type is not accepted.');
         else if (res.status === 429) fail('Too many notes too quickly - wait a moment.');
       }

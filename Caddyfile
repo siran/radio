@@ -132,20 +132,17 @@ import admins.caddy
 	# into it and sent explicitly with each upload. Guarding the page as well
 	# meant two prompts, and mobile chrome would not carry the first one over
 	# to the upload, which failed with no way for the speaker to correct it.
-	handle /talk* {
-		file_server
-	}
-
-	handle /messages/voice/* {
+	# Uploads live UNDER the page's own path on purpose. Basic auth credentials
+	# are scoped to a URL and everything below it, so a browser that has been
+	# challenged for /talk/ will send them to /talk/upload/ without being asked
+	# again - which it will not reliably do across two sibling paths.
+	handle /talk/upload/* {
 		import speakers
 		@putaudio {
 			method PUT
 			path *.webm *.ogg *.oga *.opus *.mp3 *.m4a *.wav
 		}
 		handle @putaudio {
-			# 1.5-second slices mean up to 40 uploads a minute from one person
-			# talking flat out. 150 leaves room for a few people behind one
-			# household address, while still bounding anything silly.
 			rate_limit {
 				zone voice_writes {
 					key {remote_host}
@@ -156,11 +153,10 @@ import admins.caddy
 			request_body {
 				max_size 4MB
 			}
-			# The folder comes from WHO authenticated, not from anything the
-			# client says. Adding a speaker is one line in basic_auth above.
+			# The folder is whoever authenticated - never what the client says.
 			webdav {
 				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
-				prefix /messages/voice
+				prefix /talk/upload
 			}
 		}
 		@putother method PUT
@@ -172,6 +168,11 @@ import admins.caddy
 			respond 404
 		}
 	}
+	handle /talk* {
+		import speakers
+		file_server
+	}
+
 
 	handle /messages/private/* {
 		@put {
