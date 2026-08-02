@@ -221,11 +221,71 @@ voice_dir = "C:/Users/an/src/radio/messages/voice"
 lane_count = 8
 queues = list.init(lane_count, fun (i) -> request.queue(id = "voice#{i}"))
 
-# Each speaker plays at their own volume. A lane only ever plays one note at a
-# time, so wrapping the lane - rather than the mix - makes the gain per note:
-# `override` reads liq_amplify off whatever that lane is playing right now.
-# A note with no settings carries no annotation, and falls back to voice_gain.
-lanes = list.map(fun (q) -> amplify(override = "liq_amplify", voice_gain, q), queues)
+# Each speaker plays at their own volume, through their own three-band EQ. A
+# lane only ever plays one note at a time, so wrapping the lane - rather than
+# the mix - makes both of them per note: `override` reads liq_amplify off
+# whatever that lane is playing right now, and the getters below read the eq
+# bands off the same note the same way.
+# A note with no settings carries no annotation, and falls back to voice_gain
+# and to a flat EQ.
+
+# One band of one lane, in dB, read fresh off whatever that lane is playing.
+# The filter has no `override` the way amplify does, so the gain is given as a
+# GETTER - {...}, re-evaluated as it runs - which reaches into the queue's own
+# last_metadata exactly as the ducking further down does for liq_duck.
+# Measured on this build: a peak filter given a getter for `gain` really does
+# follow it live, and gain 0.0 is unity to the last digit, so a speaker with no
+# eq is passed through untouched rather than merely almost untouched.
+# float_of_string with a default is what makes a missing or malformed band mean
+# flat instead of throwing inside the streaming loop, where a throw would be
+# very expensive and very quiet.
+def eq_db(q, band) =
+  m = q.last_metadata() ?? []
+  float_of_string(default = 0.0, m["liq_eq_#{band}"])
+end
+
+# Three bells, not a shelf/peak/shelf. filter.iir.eq.lowshelf and .highshelf
+# exist in this build but neither takes a gain, only a `slope`, and measured
+# here they are not usable as tone controls: a 100Hz tone through
+# lowshelf(frequency=500) comes out 56dB DOWN, slope 1 vs 40 barely moves it,
+# and a negative slope returns inf. filter.iir.eq.peak is the one that behaves
+# - unity away from its centre, exactly +6.0dB at centre for gain=6.0 - so all
+# three bands are peaks. That also buys the property the sliders need most:
+# 0 dB everywhere is EXACTLY flat.
+#
+# Wide bells (q 0.7) on purpose. These are bass/mid/treble on a radio, not
+# three surgical notches; they overlap, so a small move sounds like a tone
+# control rather than like a hole. Centres chosen for a phone mic outdoors:
+#   160 Hz  body and boom. Wide enough to reach down into the handling
+#           rumble and wind that a phone held in the hand picks up, and up
+#           into the chest of the voice. There is no high-pass on the notes -
+#           hp_freq only guards the live mic - so this is the only thing that
+#           can take that weight out.
+#   1000 Hz the boxy, honky middle a small capsule adds. Cutting here opens
+#           the voice up; boosting pushes it forward through the music.
+#   4000 Hz consonants and clarity. Not 8k: bluetooth and a 96kbps opus note
+#           have very little left up there, so a high shelf that far up would
+#           be boosting codec hiss rather than the voice. 4k is also where
+#           "carrasposa" lives, so this is the slider that fixes it - in
+#           whichever direction it turns out to need.
+#
+# The three getters are bound BEFORE the amplify, and that order matters:
+# amplify's argument is a plain source, so passing the queue to it first pins
+# this function's parameter to a plain source and the later q.last_metadata()
+# stops typechecking with "this value has no method last_metadata". Reading
+# the metadata first is what keeps the queue's own methods in view.
+def voice_lane(q) =
+  low  = {eq_db(q, "low")}
+  mid  = {eq_db(q, "mid")}
+  high = {eq_db(q, "high")}
+  l = amplify(override = "liq_amplify", voice_gain, q)
+  l = filter.iir.eq.peak(frequency =  160.0, q = 0.7, gain = low,  l)
+  l = filter.iir.eq.peak(frequency = 1000.0, q = 0.7, gain = mid,  l)
+  l = filter.iir.eq.peak(frequency = 4000.0, q = 0.7, gain = high, l)
+  l
+end
+
+lanes = list.map(voice_lane, queues)
 
 voice = add(id = "voices", normalize = false, lanes)
 
@@ -264,22 +324,37 @@ end
 # Each speaker's settings are one json file in their own folder, written by
 # the talk page over webdav:
 #
-#   { "gain": 2.5, "duck": true }
+#   { "gain": 2.5, "duck": true, "eq": { "low": 0, "mid": 0, "high": 0 } }
 #
-# Both values ride with the note as annotations, so they apply to that note
-# alone: the lane reads liq_amplify, the ducking further down reads liq_duck.
+# All of it rides with the note as annotations, so it applies to that note
+# alone: the lane reads liq_amplify and the three liq_eq_* bands, the ducking
+# further down reads liq_duck.
 #
-# json.parse throws on anything that is not exactly that shape - no file, an
-# empty file, one caught half-written by a poll running four times a second,
-# one saved with a BOM - and every one of those means "no settings", so catch
-# the lot and queue the bare path, which falls back to voice_gain and no
-# ducking. It has to be a function of its own: `x = try ... end` does not
-# parse, a try is only allowed where a statement is.
+# `eq` is optional - the trailing `?` on its type - because every speaker's
+# file predates it and says only gain and duck. Measured on this build: with
+# the `?` an old two-key file parses fine and cfg.eq comes back null, while
+# without it the whole parse would throw and that speaker would silently lose
+# their volume and their ducking too. Missing means flat, and flat means all
+# three bands at 0 dB, which the filters pass through untouched.
+#
+# json.parse throws on anything that is not that shape - no file, an empty
+# file, one caught half-written by a poll running four times a second, one
+# saved with a BOM, one truncated by too small a request_body cap in caddy -
+# and every one of those means "no settings", so catch the lot and queue the
+# bare path, which falls back to voice_gain, no ducking and a flat EQ. It has
+# to be a function of its own: `x = try ... end` does not parse, a try is only
+# allowed where a statement is.
 def note_uri(who, f) =
   try
-    let json.parse ( cfg : { gain : float, duck : bool } ) =
-      file.contents("#{voice_dir}/#{who}/settings.json")
-    "annotate:liq_amplify=\"#{cfg.gain}\",liq_duck=\"#{cfg.duck}\":#{f}"
+    let json.parse ( cfg : {
+      gain : float,
+      duck : bool,
+      eq   : { low : float, mid : float, high : float }?
+    } ) = file.contents("#{voice_dir}/#{who}/settings.json")
+    eq = cfg.eq ?? { low = 0.0, mid = 0.0, high = 0.0 }
+    "annotate:liq_amplify=\"#{cfg.gain}\",liq_duck=\"#{cfg.duck}\""
+    ^ ",liq_eq_low=\"#{eq.low}\",liq_eq_mid=\"#{eq.mid}\""
+    ^ ",liq_eq_high=\"#{eq.high}\":#{f}"
   catch _ do
     f
   end

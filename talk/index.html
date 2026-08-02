@@ -93,6 +93,14 @@
   <div class="panel" id="gainpanel">
     <label for="gain">Your voice volume &mdash; <span id="gainval">1</span>&times;</label>
     <input id="gain" type="range" min="0.5" max="12" step="0.5" value="1">
+    <div class="hint">Your voice EQ &mdash; 0 is flat. Low is body and rumble,
+      mid is boxiness, high is clarity.</div>
+    <label for="eqlow">Low &mdash; <span id="eqlowval">0</span> dB</label>
+    <input id="eqlow" type="range" min="-9" max="9" step="0.5" value="0">
+    <label for="eqmid">Mid &mdash; <span id="eqmidval">0</span> dB</label>
+    <input id="eqmid" type="range" min="-9" max="9" step="0.5" value="0">
+    <label for="eqhigh">High &mdash; <span id="eqhighval">0</span> dB</label>
+    <input id="eqhigh" type="range" min="-9" max="9" step="0.5" value="0">
     <div class="duckrow">
       <div class="hint">Applies to your next note.</div>
       <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
@@ -428,13 +436,18 @@
   setInterval(nowPlaying, 3000);   // the track changes on its own; so must the name
 
   // Your own settings. One small json file in your own folder, which
-  // liquidsoap reads when it queues your note: how loud you play, and whether
-  // the music dips under you. Caddy files it under whoever authenticated, so
-  // the page never says who you are - and no file yet means never set, which
-  // is whatever liquidsoap falls back to.
+  // liquidsoap reads when it queues your note: how loud you play, whether
+  // the music dips under you, and your own three-band EQ. Caddy files it
+  // under whoever authenticated, so the page never says who you are - and no
+  // file yet means never set, which is whatever liquidsoap falls back to.
   const SETTINGS_URL = '/talk/setting/settings.json';
-  const settings = { gain: 12, duck: true };
+  const settings = { gain: 12, duck: true, eq: { low: 0, mid: 0, high: 0 } };
   const showGain = () => { $('gainval').textContent = $('gain').value; };
+
+  // The EQ is three numbers in dB, 0 meaning flat, on the same object and the
+  // same PUT as the volume - liquidsoap reads all of it out of the one file.
+  const BANDS = ['low', 'mid', 'high'];
+  const showBand = b => { $('eq' + b + 'val').textContent = $('eq' + b).value; };
 
   // Read-modify-write: the volume and the duck live in the same file, so
   // always PUT the whole object - a partial one would erase the other field.
@@ -450,6 +463,22 @@
       if (isFinite(settings.gain)) $('gain').value = settings.gain;
       showGain();
       showDuck();
+      // Every speaker's file predates the EQ and has no `eq` at all, so the
+      // default above has to survive Object.assign - it does, because a key
+      // that is not in the response is not copied over. A file that does have
+      // one could still be null or half a number if it was hand-edited, and
+      // this runs after showDuck() on purpose: a throw here would otherwise
+      // take the volume and the duck down with it. Anything not a number
+      // means flat.
+      if (!settings.eq || typeof settings.eq !== 'object') {
+        settings.eq = { low: 0, mid: 0, high: 0 };
+      }
+      for (const b of BANDS) {
+        const v = parseFloat(settings.eq[b]);
+        settings.eq[b] = isFinite(v) ? v : 0;
+        $('eq' + b).value = settings.eq[b];
+        showBand(b);
+      }
     } catch (e) { fail('Could not read your settings: ' + e.message); }
   }
 
@@ -481,6 +510,17 @@
     settings.gain = parseFloat($('gain').value);
     saveSettings('volume saved: ' + settings.gain + '\u00d7');
   });
+  // Same two-step as the volume: dragging only redraws the number, and the
+  // file is written on release. A slider fires `input` for every pixel, and
+  // one webdav PUT per pixel would hammer the folder liquidsoap is polling
+  // four times a second.
+  for (const b of BANDS) {
+    $('eq' + b).addEventListener('input', () => showBand(b));
+    $('eq' + b).addEventListener('change', () => {
+      settings.eq[b] = parseFloat($('eq' + b).value);
+      saveSettings(b + ' saved: ' + settings.eq[b] + ' dB');
+    });
+  }
   // Liquidsoap polls this folder, so the setting IS the button: it lands on air
   // within a quarter second and there is nothing else to tell.
   $('duck').addEventListener('click', () => {
