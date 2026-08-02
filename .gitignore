@@ -37,3 +37,4 @@ messages/voice/*
 
 # bcrypt hashes for each speaker - safe-ish, but it is a user list
 speakers.caddy
+admins.caddy

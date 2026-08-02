@@ -24,6 +24,7 @@
 }
 
 import speakers.caddy
+import admins.caddy
 
 (jellyfin) {
 	encode zstd gzip
@@ -78,6 +79,46 @@ import speakers.caddy
 	# The talk page sits behind the same credential as the upload it makes, so
 	# the browser holds it and the page never asks. Same realm means one prompt
 	# covers both.
+	# The admin page. It cannot change anything by itself - it writes a request
+	# file, and a watcher outside the request path does the work. Same shape as
+	# the voice notes, different payload.
+	handle /admin* {
+		import admins
+		file_server
+	}
+
+	# Request in, result out. Both tiny json files, both short lived.
+	# handle_path (not handle) so the /adminapi prefix is stripped before the
+	# file server looks on disk - otherwise it hunts for messages/admin/adminapi.
+	handle_path /adminapi/* {
+		import admins
+		@put {
+			method PUT
+			path *.json
+		}
+		handle @put {
+			rate_limit {
+				zone admin_writes {
+					key {remote_host}
+					events 60
+					window 5m
+				}
+			}
+			request_body {
+				max_size 4KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/messages/admin
+			}
+		}
+		handle {
+			header Content-Type "application/json; charset=utf-8"
+			header Cache-Control "no-store"
+			root * C:/Users/an/src/radio/messages/admin
+			file_server
+		}
+	}
+
 	handle /talk* {
 		import speakers
 		file_server

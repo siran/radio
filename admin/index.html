@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Speakers &middot; wild n loyal radio</title>
+<style>
+  :root { --bg:#0e0e10; --panel:#17171a; --line:#2a2a30;
+          --fg:#e8e8ea; --dim:#8a8a93; --on:#4ade80; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width:460px; margin:0 auto; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 2px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:18px; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:12px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:12px; color:var(--dim);
+          text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
+  input { width:100%; padding:11px 12px; margin-bottom:12px; background:#101013;
+          border:1px solid var(--line); border-radius:8px; color:var(--fg);
+          font:inherit; font-size:16px; }
+  input:focus { outline:none; border-color:#4a4a55; }
+  button { padding:12px 16px; border:0; border-radius:9px; font:inherit;
+           font-weight:600; cursor:pointer; background:var(--fg); color:#000; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.ghost { background:none; color:var(--dim); border:1px solid var(--line);
+                 padding:6px 10px; font-size:12px; font-weight:400; }
+  button.ghost:hover { color:var(--bad); border-color:var(--bad); }
+  ul { list-style:none; padding:0; margin:0; }
+  li { display:flex; justify-content:space-between; align-items:center; gap:10px;
+       padding:9px 0; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  .status { font-size:13px; color:var(--dim); margin-top:10px; }
+  .err { color:var(--bad); font-size:13px; margin-top:8px; }
+  .card { background:#101013; border:1px solid var(--on); border-radius:10px;
+          padding:14px; margin-top:12px; font-size:14px; }
+  .card b { color:var(--on); }
+  .card code { display:block; background:none; font-size:15px; margin:4px 0;
+               user-select:all; }
+  .foot { text-align:center; font-size:12px; color:var(--dim); margin-top:18px; }
+  a { color:var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>speakers</h1>
+  <div class="sub">Anyone here can talk on the radio. Each gets their own lane.</div>
+
+  <div class="panel">
+    <label for="name">Add a speaker</label>
+    <input id="name" placeholder="their name" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button id="add">Create</button>
+    <div class="status" id="status"></div>
+    <div class="err" id="err"></div>
+    <div id="card"></div>
+  </div>
+
+  <div class="panel">
+    <label>Current</label>
+    <ul id="list"><li><span>loading…</span></li></ul>
+  </div>
+
+  <div class="foot"><a href="/talk/">talk &rarr;</a></div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const setStatus = t => { $('status').textContent = t; };
+  const fail = m => { $('err').textContent = m; };
+
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+  // The page cannot change anything itself. It writes a request file and waits
+  // for the watcher to leave a result - which is why nothing has to run in
+  // front of a request for any of this to work.
+  async function ask(payload, timeoutMs = 25000) {
+    const id = newId();
+    $('err').textContent = '';
+    const put = await fetch('/adminapi/req/' + id + '.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+    if (!put.ok) throw new Error('could not send the request (HTTP ' + put.status + ')');
+
+    const until = Date.now() + timeoutMs;
+    while (Date.now() < until) {
+      await new Promise(r => setTimeout(r, 1200));
+      const g = await fetch('/adminapi/res/' + id + '.json',
+                            { credentials: 'same-origin', cache: 'no-store' });
+      if (g.ok) return g.json();
+    }
+    throw new Error('no answer in 25s - is the admin watcher running?');
+  }
+
+  function render(speakers) {
+    const ul = $('list');
+    ul.innerHTML = '';
+    if (!speakers || !speakers.length) {
+      ul.innerHTML = '<li><span>nobody yet</span></li>';
+      return;
+    }
+    speakers.forEach(s => {
+      const li = document.createElement('li');
+      const n = document.createElement('span');
+      n.textContent = s;
+      const b = document.createElement('button');
+      b.className = 'ghost';
+      b.textContent = 'remove';
+      b.addEventListener('click', async () => {
+        if (!confirm('Remove ' + s + '? They will not be able to talk any more.')) return;
+        b.disabled = true;
+        setStatus('removing ' + s + '…');
+        try {
+          const r = await ask({ action: 'remove', name: s });
+          setStatus(r.ok ? s + ' removed' : '');
+          if (!r.ok) fail(r.error || 'could not remove');
+          render(r.speakers);
+        } catch (e) { fail(e.message); b.disabled = false; }
+      });
+      li.append(n, b);
+      ul.appendChild(li);
+    });
+  }
+
+  async function refresh() {
+    try { render((await ask({ action: 'list' })).speakers); }
+    catch (e) { $('list').innerHTML = '<li><span>' + e.message + '</span></li>'; }
+  }
+
+  $('add').addEventListener('click', async () => {
+    const name = $('name').value.trim();
+    if (!name) return fail('Give them a name.');
+    $('add').disabled = true;
+    $('card').innerHTML = '';
+    setStatus('creating ' + name + '…');
+    try {
+      const r = await ask({ action: 'add', name });
+      if (r.ok) {
+        setStatus('');
+        $('name').value = '';
+        $('card').innerHTML =
+          '<b>' + r.name + ' can now talk on the radio.</b>' +
+          '<code>https://radio.wildnloyal.org/talk/</code>' +
+          '<code>user: ' + r.name + '</code>' +
+          '<code>password: ' + r.password + '</code>' +
+          '<div class="status">Send them that. It is shown once — ' +
+          'create them again if it is lost.</div>';
+      } else fail(r.error || 'could not create');
+      render(r.speakers);
+    } catch (e) { fail(e.message); }
+    $('add').disabled = false;
+  });
+
+  $('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('add').click(); });
+  refresh();
+})();
+</script>
+</body>
+</html>
