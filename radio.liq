@@ -61,6 +61,11 @@ glide      = interactive.float("glide",
   description = "How fast the music fader moves. Smaller is slower and smoother.",
   unit = "", min = 0.01, max = 0.5, step = 0.01, 0.01)
 
+# the announcer
+announce_every = interactive.float("announce_every",
+  description = "Say what just played after every Nth track that has a title. 1 = every one, 0 = never.",
+  unit = "tracks", min = 0.0, max = 20.0, step = 1.0, 1.0)
+
 
 # The mixing desk: liquidsoap's own page for the knobs above, at
 # /interactive on the harbor port. Must NOT use the default port - that is
@@ -573,12 +578,160 @@ music = amplify(duck_gain, music)
 # normalize=false so levels do not jump when the live source connects.
 radio = add(id = "mix", normalize = false, [music, talk])
 
+# --- the announcer ---------------------------------------------------------
+# The station says out loud what just played, and posts the same words into
+# the chat on the site.
+#
+# There is no new machinery here and there must not be. forward_meta below
+# already fires at every track boundary, and the metadata it carries belongs
+# to the track that is STARTING - so what is worth saying at that instant is
+# about the track before it, which is why one sentence is kept in hand between
+# firings. That sentence is written into the announcer's own folder under
+# messages/voice as a plain .txt and this file is then done with it:
+# narrator-watcher.ps1 is already walking that whole tree, it renders any text
+# it finds with piper, and it leaves a wav that the pickup above plays like
+# any other voice note - in a lane, over ducked music, at the announcer's own
+# gain and EQ from its settings.json.
+#
+# How often it speaks up is announce_every, up with the rest of the knobs at
+# the top of this file and on /interactive alongside them.
+
+announcer_dir = "#{voice_dir}/announcer"
+chat_dir      = "C:/Users/an/src/radio/chat"
+
+# The sentence for the track playing right now, held until the next boundary
+# turns it into the track that just played. Empty means there is nothing worth
+# saying about it - and empty is also what it holds at startup, which is what
+# stops a fresh start announcing a track nobody heard.
+now_words = ref("")
+
+# The request we last acted on. on_metadata is not promised to fire exactly
+# once per track, and a second firing would announce the same boundary twice.
+# The rid is the identity of the REQUEST, so it is the same for as long as one
+# track is playing and different for the next - including a track played twice
+# in a row by the repeat button, which makes a fresh request and so is
+# announced both times, which is what it should do. filename rides along in
+# case a metadata chunk ever arrives without a rid; both keys were confirmed
+# present on this build by dumping a real playlist chunk rather than assumed.
+last_track = ref("")
+
+# Boundaries with something to say since the last thing we said, counted
+# against announce_every.
+since_said = ref(0)
+
+# What to say about a track. A lot of this library is untagged - album art,
+# bare m4a files - and on the air "that was, by" is worse than silence, so a
+# track with no title gets no sentence at all and its boundary passes quietly.
+# A title with no artist is still worth saying on its own.
+def track_words(m) =
+  title  = string.trim(m["title"])
+  artist = string.trim(m["artist"])
+  if title == "" then
+    ""
+  elsif artist == "" then
+    "That was #{title}."
+  else
+    "That was #{title}, by #{artist}."
+  end
+end
+
+# UTC, in the two shapes the chat page wants: the frontmatter goes through
+# new Date() in the browser so it has to be a real ISO stamp, and the filename
+# is that same stamp with the colons and the dot taken out, because the page
+# sorts the chat by filename and keeps the last sixty. Measured on this build
+# rather than assumed: time.utc really is UTC, and its month is 1-based -
+# localtime and a 0-based month are both what the C library underneath would
+# have handed back.
+def utc_stamp() =
+  def pad(n) = if n < 10 then "0#{n}" else "#{n}" end end
+  t   = time.utc()
+  day = "#{t.year}-#{pad(t.month)}-#{pad(t.day)}"
+  { iso  = "#{day}T#{pad(t.hour)}:#{pad(t.min)}:#{pad(t.sec)}.000Z",
+    name = "#{day}T#{pad(t.hour)}#{pad(t.min)}#{pad(t.sec)}000Z" }
+end
+
+# The loudspeaker U+1F4E2 that opens the chat line, spelled out rather than
+# typed: this file is pure ASCII, LF, no BOM and it stays that way. These are
+# its four UTF-8 bytes. string.char is Char.chr - one BYTE, not a code point -
+# so string.char(0x1F4E2) does not give you the emoji, it throws
+# Invalid_argument("Char.chr") while the script loads and takes the whole
+# station with it.
+megaphone = string.char(0xF0) ^ string.char(0x9F) ^ string.char(0x93) ^ string.char(0xA2)
+
+# The two outputs are deliberately NOT the same string. Piper reads the .txt
+# literally, so the spoken one is words and nothing else - a loudspeaker or a
+# "Narrator:" in there would be read out loud. The chat line carries the
+# framing instead, and the page draws the name in front of the body itself, so
+# name: Narrator with a body that starts with the loudspeaker renders as
+# "Narrator: <loudspeaker> That was ...". The frontmatter and the LF newlines
+# are not free choices: the page parses a post with /^---\n...\n---\n/, which
+# a CRLF would not match at all.
+#
+# Both writes can fail - a disk that filled up, a folder that went away - and
+# a throw inside a metadata callback kills the callback silently: the station
+# would play on while titles stopped reaching icecast. Hence the catch, and it
+# has to be a function of its own, because `x = try ... end` does not parse -
+# a try is only allowed where a statement is.
+#
+# The .txt is one plain file.write, NOT atomic = true. An atomic write lands
+# the file by moving it in from a temp directory, and a file moved into one of
+# these folders carries its own ACL instead of inheriting the folder's, which
+# is the trap narrator-watcher.ps1 documents at length. A plain write is safe
+# here twice over: .txt is not in the audio whitelist pickup filters on, so
+# the four-times-a-second poll never looks at it, and the narrator watcher
+# only speaks a text file whose size and mtime were already identical at the
+# previous poll three seconds before.
+#
+# The spoken file and the chat post for one announcement share a name, so the
+# pair is obvious on disk and neither can land on top of another
+# announcement's. The stamp is only second-resolution and two taps on skip put
+# two boundaries in the same second - measured in the standalone test, where
+# three announcements in one second left exactly one .txt behind.
+def say(words) =
+  try
+    st   = utc_stamp()
+    tail = "#{st.name}-#{string.hex_of_int(pad = 4, random.int(min = 0, max = 65536))}"
+    file.write(data = "#{words}\n", "#{announcer_dir}/track-#{tail}.txt")
+    file.write(
+      data = "---\nat: #{st.iso}\nname: Narrator\n---\n\n#{megaphone} #{words}\n",
+      "#{chat_dir}/#{tail}.md")
+    log.important(label = "announcer", words)
+  catch _ do
+    log.important(label = "announcer", "could not write the announcement")
+  end
+end
+
+# One new request is one track boundary. The words to speak are the ones kept
+# from the boundary before, and announce_every then decides whether this is a
+# boundary to actually speak at. Only boundaries that HAD something to say are
+# counted, so turning the knob to 4 means every fourth announcement rather
+# than every fourth track with three of them thrown away unheard.
+def announce(m) =
+  req = string.concat(separator = "|", [m["rid"], m["filename"]])
+  if req != last_track() then
+    last_track := req
+    words      = now_words()
+    now_words := track_words(m)
+    every      = int_of_float(announce_every())
+    if words != "" and every > 0 then
+      since_said := since_said() + 1
+      if since_said() >= every then
+        since_said := 0
+        say(words)
+      end
+    end
+  end
+end
+
 # `add` drops track marks, and the title rides with them - without this the
 # stream plays fine and the song name never reaches icecast.
 def forward_meta(m) =
   t = m["title"]
   log.important(label = "meta", "forwarding #{t}")
   radio.insert_metadata(new_track = true, m)
+  # The new title reaches the stream first; the announcement is about
+  # the one before it and can wait the millisecond a file write takes.
+  announce(m)
 end
 music.on_metadata(synchronous = false, forward_meta)
 
