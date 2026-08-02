@@ -1,6 +1,5 @@
 {
 	email {env.ACME_EMAIL}
-
 	# One global ACME policy: DNS-01 via Route 53 for every site below.
 	acme_dns route53
 
