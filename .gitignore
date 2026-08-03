@@ -44,3 +44,6 @@ messages/*.md
 
 # the narrator's current line, rewritten every announcement
 live/
+
+# scratch, written to be read and thrown away
+disposable.md
