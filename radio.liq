@@ -620,6 +620,13 @@ narrator_file = "C:/Users/an/src/radio/live/narrator.json"
 # something broke rather than like a radio.
 mystery = "this mystery song is yet to be tagged... we hope you enjoyed..."
 
+# And what the STREAM says it is playing when the file has no title. Sending
+# nothing is not neutral: icecast keeps displaying whatever it was last told,
+# so an untagged track silently inherits the previous song's name and the site
+# confidently announces Billie Holiday over Bob Marley. Anything true is
+# better than something false.
+untagged_title = "live"
+
 # The request we last acted on. on_metadata is not promised to fire exactly
 # once per track. The rid is the identity of the REQUEST, so it is stable for
 # as long as one track plays and different for the next - including a track
@@ -752,9 +759,15 @@ library.on_position(position = 12.0, remaining = true, synchronous = false,
 # `add` drops track marks, and the title rides with them - without this the
 # stream plays fine and the song name never reaches icecast.
 def forward_meta(m) =
-  t = m["title"]
+  t = string.trim(m["title"])
   log.important(label = "meta", "forwarding #{t}")
-  radio.insert_metadata(new_track = true, m)
+  # An untagged file gets the station line rather than the real metadata, so
+  # the last good title cannot linger on the site as if it were this one.
+  if t == "" then
+    radio.insert_metadata(new_track = true, [("title", untagged_title), ("artist", "")])
+  else
+    radio.insert_metadata(new_track = true, m)
+  end
   # The new title reaches the stream first; the announcement is about
   # the one before it and can wait the millisecond a file write takes.
   announce(m)
