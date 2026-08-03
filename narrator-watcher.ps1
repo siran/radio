@@ -26,7 +26,12 @@ $voice = 'C:\Users\an\src\radio\messages\voice'
 # it startup. Announcements arrive one at a time and nothing is blocked waiting
 # on the result, so that is not worth a resident server.
 $python = 'D:\services\piper\venv\Scripts\python.exe'
-$model  = 'D:\services\piper\voices\en_US-lessac-medium.onnx'
+$model  = 'D:\services\piper\voices\en_GB-jenny_dioco-medium.onnx'
+
+# Above 1.0 piper reads slower. Piper has no pitch control at all, so this is
+# the only lever on delivery, and an unhurried read is most of what separates
+# a station voice from a newsreader.
+$speed  = '1.15'
 
 # What the text for piper gets written as. No BOM: piper opens its input as
 # plain UTF-8, and a byte order mark would survive that as a U+FEFF glued to
@@ -93,7 +98,7 @@ while ($true) {
         $intext = "$wav.piper-in"
         try {
             [IO.File]::WriteAllText($intext, $text, $utf8)
-            & $python -m piper --model $model --input-file $intext --output-file $pending
+            & $python -m piper --model $model --length-scale $speed --input-file $intext --output-file $pending
 
             # Piper is a separate process, so a failure is an exit code and a
             # missing or truncated wav, not an exception. Nothing is thrown and
