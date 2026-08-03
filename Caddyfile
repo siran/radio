@@ -220,6 +220,58 @@ import admins.caddy
 		file_server
 	}
 
+	# The narrator's settings - the voice between the tracks, and how it says a
+	# name. Folded into /talk/, which is where the broadcasting is driven from.
+	# ONE shared file, not one per speaker as /talk/setting is: this is the
+	# station's voice, not anybody's own, and radio control here is
+	# collaborative rather than something people compete over.
+	handle /narrator/config/* {
+		import speakers
+		@cfg {
+			method GET PUT
+			path /narrator/config/narrator.json
+		}
+		handle @cfg {
+			# Same trap as settings.json above, with a worse ending: max_size
+			# TRUNCATES the body rather than rejecting it, and webdav writes
+			# the truncated bytes. A half-written narrator.json is not a
+			# smaller config, it is NO config - liquidsoap's json.parse and the
+			# watcher's ConvertFrom-Json both throw on it and fall back to
+			# their defaults, so the voice, the speed and every pronunciation
+			# are silently lost at once. say_as is a table of names that only
+			# ever grows, so this is sized four times over the largest body the
+			# page will produce: the page counts the bytes and refuses to PUT
+			# past 16KB, which is roughly 300 pronunciations.
+			request_body {
+				max_size 64KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/config
+				prefix /narrator/config
+			}
+		}
+		# any other name, and any other method, is refused
+		handle {
+			respond 403
+		}
+	}
+	# The installed piper voices, so the page offers what is actually on disk
+	# rather than a copy of the list that goes stale the day one is added.
+	# browse answers in json when the request asks for json, which is what the
+	# page does; a human opening it gets the ordinary listing. This is the one
+	# place that has to name the piper folder: narrator.json's piper_root can
+	# point the RENDERER elsewhere, and then the voice is typed rather than
+	# picked, which the page says.
+	handle_path /narrator/voices/* {
+		import speakers
+		root * D:/services/piper/voices
+		file_server browse
+	}
+	handle /narrator* {
+		import speakers
+		file_server
+	}
+
 
 	handle /messages/private/* {
 		@put {

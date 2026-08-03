@@ -78,6 +78,13 @@
   #desk { width:100%; height:560px; border:1px solid var(--line);
           border-radius:8px; background:#fff; margin-top:6px; }
 
+  /* the narrator's own page, framed rather than copied for the same reason
+     the station is below: one of it to keep working. It scrolls inside its
+     own frame - a form this tall in a page this tall is worse. */
+  #narrator { display:block; width:100%; height:82vh; min-height:560px;
+              border:1px solid var(--line); border-radius:8px;
+              background:var(--bg); margin-top:6px; }
+
   /* seven bands is a lot of page for something that is set once and then
      forgotten, so it folds away and stays folded. */
   #eqwrap { margin:0 0 12px; }
@@ -163,6 +170,15 @@
       Changes apply immediately, on air.
     </div>
     <iframe id="desk" title="mixing desk"></iframe>
+  </details>
+
+  <details class="panel" id="narwrap">
+    <summary>The narrator &mdash; the voice between the tracks</summary>
+    <div class="hint">Which voice speaks, how fast, how often, and how it says a
+      name it keeps getting wrong. One setting for the whole station rather
+      than one per host, and set once rather than while you talk &mdash; so it
+      folds away like the EQ.</div>
+    <iframe id="narrator" title="narrator"></iframe>
   </details>
 
   <div class="panel">
@@ -419,6 +435,15 @@
       d.head.appendChild(css);
     } catch {}
   }
+
+  // Same lazy load as the desk, and for the same reason - it is behind the
+  // password too. It sits on a path of its own rather than under /talk/, so
+  // the browser may ask for the credential once more when the fold is first
+  // opened; the realm is the same, so it is asked once and not again.
+  $('narwrap').addEventListener('toggle', () => {
+    const f = $('narrator');
+    if ($('narwrap').open && !f.src) f.src = '/narrator/';
+  });
 
   // The music. Every one of these answers with the same state object, so one
   // draw() serves the poll and every button alike, and no button has to guess

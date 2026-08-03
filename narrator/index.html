@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Narrator &middot; wild n loyal radio</title>
+<style>
+  :root {
+    --bg:#0e0e10; --panel:#17171a; --line:#2a2a30;
+    --fg:#e8e8ea; --dim:#8a8a93; --on:#4ade80; --rec:#f87171;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         -webkit-text-size-adjust:100%; }
+  .wrap { max-width:460px; margin:0 auto; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 2px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:18px; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:12px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:12px; color:var(--dim);
+          text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
+  input, textarea { width:100%; padding:11px 12px; margin-bottom:12px; background:#101013;
+          border:1px solid var(--line); border-radius:8px; color:var(--fg);
+          font:inherit; font-size:16px; }
+  input:focus, textarea:focus { outline:none; border-color:#4a4a55; }
+  textarea { resize:vertical; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+             font-size:13px; line-height:1.6; }
+  /* the text-input padding above makes a slider look sunken and cramped */
+  input[type=range] { padding:0; margin-bottom:4px; accent-color:var(--on); }
+
+  .status { font-size:13px; color:var(--dim); margin-top:10px; text-align:center; }
+  .err { color:var(--rec); font-size:13px; margin-top:10px; white-space:pre-wrap; }
+  .foot { text-align:center; font-size:12px; color:var(--dim); margin-top:18px; }
+  a { color:var(--dim); }
+
+  summary { cursor:pointer; font-size:12px; color:var(--dim);
+            text-transform:uppercase; letter-spacing:.06em; }
+  summary::marker { color:var(--line); }
+  .hint { font-size:12px; color:var(--dim); margin:0 0 12px; }
+  code { background:#101013; border:1px solid var(--line); border-radius:4px;
+         padding:1px 5px; font-size:11px; color:var(--fg); }
+  /* which half of the split a field lands on: the file is what survives a
+     restart, the desk is what you hear now. Saying it in colour as well as in
+     words, because getting it wrong sounds like the page did nothing. */
+  .now { color:var(--on); font-weight:600; }
+  .later { color:#fbbf24; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>wild n loyal &middot; narrator</h1>
+  <div class="sub">The voice between the tracks. One shared setting for the
+    whole station, not a copy per host &mdash; anyone may tune it, and the last
+    save wins.</div>
+
+  <div class="panel">
+    <label for="voice">Voice</label>
+    <input id="voice" list="voicelist" spellcheck="false" autocapitalize="off" autocorrect="off">
+    <datalist id="voicelist"></datalist>
+    <div class="hint" id="voicenote">reading the installed voices...</div>
+    <label for="speed">Speed &mdash; <span id="speedval">1.15</span> &middot; above 1.0 is slower</label>
+    <input id="speed" type="range" min="0.6" max="2" step="0.05" value="1.15">
+    <div class="hint">Piper has no pitch control of any kind, so the pace is the
+      only thing about the voice itself that moves.
+      <b class="now">On air within a few seconds.</b></div>
+  </div>
+
+  <div class="panel">
+    <label for="every">Speak on every <span id="everyval">1</span> track</label>
+    <input id="every" type="range" min="0" max="20" step="1" value="1">
+    <div class="hint">Over the intro, and again as the track ends. 0 = never.</div>
+    <label for="hold">Hold &mdash; <span id="holdval">3</span> s of quiet before the music comes back up</label>
+    <input id="hold" type="range" min="0" max="30" step="0.5" value="3">
+    <div class="hint">Real seconds. These two are the only ones the running
+      station can be told about mid-broadcast, so saving does both: it sends the
+      value to the mixing desk AND writes the file.
+      <b class="now">The desk is what you hear now</b>; the file is what comes
+      back after a restart.</div>
+  </div>
+
+  <div class="panel">
+    <label for="ident">What it says about an untagged track</label>
+    <input id="ident" type="text" maxlength="500">
+    <div class="hint">Roughly one track in seven has no title, and saying nothing
+      sounds like something broke rather than like a radio.
+      <b class="later">Read at startup only &mdash; this one takes effect at the
+      next restart.</b></div>
+  </div>
+
+  <div class="panel">
+    <label for="sayas">How to say a name</label>
+    <div class="hint">One per line, <code>written = spoken</code>, replaced
+      literally before the line is rendered. Piper has no phoneme markup, so
+      respelling is the whole technique: <code>Hector Lavoe = Ektor Lavoay</code>.
+      Stretching letters lengthens a word &mdash; measured here,
+      <code>liiive</code> runs 54% longer than <code>live</code> and
+      <code>li-i-ive</code> 65% longer &mdash; while <code>[[ l aI v ]]</code> does
+      nothing at all. <b class="now">On air within a few seconds.</b></div>
+    <textarea id="sayas" rows="6" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+  </div>
+
+  <details class="panel" id="advwrap">
+    <summary>Where piper is installed</summary>
+    <div class="hint">The folder holding <code>venv/Scripts/python.exe</code> and
+      <code>voices/</code>. The voice list above is read from the one folder this
+      site serves, so after moving piper elsewhere the voice has to be typed in
+      rather than picked from the list.</div>
+    <input id="root" type="text" maxlength="200" spellcheck="false" autocapitalize="off" autocorrect="off">
+  </details>
+
+  <div class="status" id="status">loading</div>
+  <div class="err" id="err"></div>
+
+  <div class="foot"><a href="/talk/">&larr; back to talk</a></div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  const CONFIG_URL = '/narrator/config/narrator.json';
+  const VOICES_URL = '/narrator/voices/';
+
+  // Caddy's request_body max_size TRUNCATES the body, it does not refuse it,
+  // and webdav then writes the truncated bytes - a half a json file, which
+  // liquidsoap and the watcher both read as "no config, use the defaults", so
+  // every setting on this page vanishes silently. The cap on the route is
+  // 64KB; this refuses at a quarter of that, counted in BYTES rather than
+  // characters because an accented name costs two of them, so the page cannot
+  // be the thing that produces a body the route would cut in half.
+  const MAX_BODY = 16384;
+
+  // Everything the file can hold. Loading assigns over this rather than
+  // replacing it, so a key this page does not know about rides through a save
+  // untouched, and a key missing from the file keeps its default here.
+  const cfg = {
+    voice: 'en_GB-jenny_dioco-medium',
+    speed: 1.15,
+    announce_every: 1,
+    hold: 3,
+    ident: '',
+    say_as: {},
+    piper_root: ''
+  };
+
+  const setStatus = t => { $('status').textContent = t; };
+  const fail = m => { $('err').textContent = m; };
+  const clear = () => { $('err').textContent = ''; };
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  const showSpeed = () => { $('speedval').textContent = $('speed').value; };
+  const showEvery = () => { $('everyval').textContent = $('every').value; };
+  const showHold  = () => { $('holdval').textContent = $('hold').value; };
+
+  // The installed voices, listed rather than hardcoded: caddy serves the piper
+  // voices folder as a json directory listing behind the same password, so the
+  // list is whatever is on disk right now and cannot go stale here. A .onnx
+  // and its .onnx.json sit side by side; piper is given the stem.
+  async function loadVoices() {
+    try {
+      const res = await fetch(VOICES_URL, {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin', cache: 'no-store'
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const names = (await res.json())
+        .filter(f => !f.is_dir && f.name.endsWith('.onnx'))
+        .map(f => f.name.slice(0, -5))
+        .sort();
+      const dl = $('voicelist');
+      dl.innerHTML = '';
+      for (const n of names) {
+        const o = document.createElement('option');
+        o.value = n;
+        dl.appendChild(o);
+      }
+      $('voicenote').textContent = names.length
+        ? names.length + ' installed: ' + names.join(', ')
+        : 'no .onnx voices found in that folder.';
+    } catch (e) {
+      $('voicenote').textContent =
+        'Could not list the installed voices (' + e.message + ') - type the name of one.';
+    }
+  }
+
+  // written = spoken, one per line. The first = separates them, so a name may
+  // contain one on the right without needing to be escaped.
+  function sayAsText(obj) {
+    return Object.keys(obj).map(k => k + ' = ' + obj[k]).join('\n');
+  }
+
+  // Returns the table, or throws with the reason. Powershell 5.1's
+  // ConvertFrom-Json THROWS on two keys differing only in case, and the
+  // watcher reads that throw as "no config" - so "Hector Lavoe" beside
+  // "hector lavoe" does not mispronounce one name, it silently resets the
+  // voice, the speed and every other line in this table. Measured. It is
+  // refused here, before it can be written.
+  function parseSayAs(text) {
+    // Object.create(null), not {}. A plain object inherits from Object.prototype
+    // and that breaks this table in two separate ways if anyone types __proto__
+    // as a name: "__proto__" in {} is already true, so the FIRST such entry gets
+    // rejected as a duplicate of nothing; and out["__proto__"] = x sets the
+    // prototype instead of creating a key, so the entry silently disappears
+    // instead of being saved. A dictionary with no prototype has neither
+    // problem, and JSON.stringify treats it exactly the same.
+    const out = Object.create(null);
+    const seen = Object.create(null);
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const at = line.indexOf('=');
+      if (at < 0) throw new Error('line ' + (i + 1) + ' has no "=" in it: ' + line);
+      const from = line.slice(0, at).trim();
+      const to = line.slice(at + 1).trim();
+      if (!from) throw new Error('line ' + (i + 1) + ' has nothing before the "="');
+      const key = from.toLowerCase();
+      if (key in seen) {
+        throw new Error('"' + from + '" and "' + seen[key] +
+          '" differ only in case, and that makes the whole config unreadable. ' +
+          'Keep one of them.');
+      }
+      seen[key] = from;
+      out[from] = to;
+    }
+    return out;
+  }
+
+  // The mixing desk. Liquidsoap reads hold and announce_every out of the file
+  // ONCE, at startup, so the file alone changes nothing that is on the air -
+  // this is the other half of that pair, and it is the half you can hear.
+  // interactive.float takes a value past its own slider max without complaint,
+  // so both are clamped to the dial's range before they are sent.
+  async function live(name, value) {
+    const res = await fetch('/interactive', {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: name + '=' + encodeURIComponent(value)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  }
+
+  async function load() {
+    await loadVoices();
+    try {
+      const res = await fetch(CONFIG_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (res.status !== 404) {
+        if (!res.ok) return fail('Could not read the narrator config: HTTP ' + res.status);
+        Object.assign(cfg, await res.json());
+      }
+    } catch (e) {
+      return fail('Could not read the narrator config: ' + e.message);
+    }
+    $('voice').value = cfg.voice || '';
+    $('ident').value = cfg.ident || '';
+    $('root').value = cfg.piper_root || '';
+    const sp = parseFloat(cfg.speed);
+    $('speed').value = isFinite(sp) ? clamp(sp, 0.6, 2) : 1.15;
+    const ev = parseFloat(cfg.announce_every);
+    $('every').value = isFinite(ev) ? clamp(ev, 0, 20) : 1;
+    const hd = parseFloat(cfg.hold);
+    $('hold').value = isFinite(hd) ? clamp(hd, 0, 30) : 3;
+    showSpeed(); showEvery(); showHold();
+    $('sayas').value = (cfg.say_as && typeof cfg.say_as === 'object')
+      ? sayAsText(cfg.say_as) : '';
+    setStatus('ready');
+  }
+
+  // Read-modify-write of the whole object every time, as the talk page does
+  // with settings.json: a partial PUT would erase the fields this control did
+  // not touch.
+  async function save(msg) {
+    const body = JSON.stringify(cfg, null, 2);
+    const size = new TextEncoder().encode(body).length;
+    if (size > MAX_BODY) {
+      setStatus('not saved');
+      return fail('That config is ' + size + ' bytes and the limit is ' +
+        MAX_BODY + '. Shorten the pronunciation table.');
+    }
+    try {
+      const res = await fetch(CONFIG_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: body
+      });
+      if (res.ok || res.status === 201 || res.status === 204) {
+        clear();
+        setStatus(msg);
+      } else {
+        setStatus('not saved');
+        fail(res.status === 401
+          ? 'Your sign-in expired. Reload the page and sign in again.'
+          : 'Could not save: HTTP ' + res.status);
+      }
+    } catch (e) {
+      setStatus('not saved');
+      fail('Could not save: ' + e.message);
+    }
+  }
+
+  // Dragging only redraws the number; the file is written on release. A slider
+  // fires input for every pixel, and one webdav PUT per pixel would hammer the
+  // file the watcher is polling.
+  $('speed').addEventListener('input', showSpeed);
+  $('speed').addEventListener('change', () => {
+    cfg.speed = clamp(parseFloat($('speed').value), 0.6, 2);
+    save('speed saved: ' + cfg.speed + ' - on air in a few seconds');
+  });
+
+  $('every').addEventListener('input', showEvery);
+  $('every').addEventListener('change', async () => {
+    cfg.announce_every = clamp(parseInt($('every').value, 10), 0, 20);
+    await save('speaks on every ' + cfg.announce_every + ' - saved');
+    try {
+      await live('announce_every', cfg.announce_every);
+      setStatus('speaks on every ' + cfg.announce_every + ' - on air now, and saved');
+    } catch (e) {
+      fail('Saved to the file, but the desk did not take it (' + e.message +
+        ') - it will apply at the next restart.');
+    }
+  });
+
+  $('hold').addEventListener('input', showHold);
+  $('hold').addEventListener('change', async () => {
+    cfg.hold = clamp(parseFloat($('hold').value), 0, 30);
+    await save('hold saved: ' + cfg.hold + ' s');
+    try {
+      await live('hold', cfg.hold);
+      setStatus('hold ' + cfg.hold + ' s - on air now, and saved');
+    } catch (e) {
+      fail('Saved to the file, but the desk did not take it (' + e.message +
+        ') - it will apply at the next restart.');
+    }
+  });
+
+  // change rather than input on the text fields: it fires when the field is
+  // left, so a save is one per edit rather than one per keystroke.
+  $('voice').addEventListener('change', () => {
+    cfg.voice = $('voice').value.trim();
+    save('voice saved: ' + cfg.voice + ' - on air in a few seconds');
+  });
+  $('ident').addEventListener('change', () => {
+    cfg.ident = $('ident').value;
+    save('saved - the untagged line changes at the next restart');
+  });
+  $('root').addEventListener('change', () => {
+    cfg.piper_root = $('root').value.trim();
+    // The voice list is not reloaded: it comes from the one folder this site
+    // serves, so moving piper means typing the voice name, as the note says.
+    save('piper folder saved - the voice list above still shows the served folder');
+  });
+  $('sayas').addEventListener('change', () => {
+    let table;
+    try {
+      table = parseSayAs($('sayas').value);
+    } catch (e) {
+      setStatus('not saved');
+      return fail(e.message);
+    }
+    cfg.say_as = table;
+    save(Object.keys(table).length + ' pronunciations saved - on air in a few seconds');
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
