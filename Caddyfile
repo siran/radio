@@ -84,7 +84,7 @@ import admins.caddy
 	# Voice notes. Whatever lands here is played on the air within seconds, so
 	# unlike the guestbook it is not open to the world - audio cannot be
 	# unsaid. Same credentials as the mixing desk.
-	# The talk page sits behind the same credential as the upload it makes, so
+	# The host page sits behind the same credential as the upload it makes, so
 	# the browser holds it and the page never asks. Same realm means one prompt
 	# covers both.
 	# The admin page. It cannot change anything by itself - it writes a request
@@ -133,9 +133,9 @@ import admins.caddy
 	# to the upload, which failed with no way for the speaker to correct it.
 	# Uploads live UNDER the page's own path on purpose. Basic auth credentials
 	# are scoped to a URL and everything below it, so a browser that has been
-	# challenged for /talk/ will send them to /talk/upload/ without being asked
+	# challenged for /host/ will send them to /host/upload/ without being asked
 	# again - which it will not reliably do across two sibling paths.
-	handle /talk/upload/* {
+	handle /host/upload/* {
 		import speakers
 		@putaudio {
 			method PUT
@@ -155,7 +155,7 @@ import admins.caddy
 			# The folder is whoever authenticated - never what the client says.
 			webdav {
 				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
-				prefix /talk/upload
+				prefix /host/upload
 			}
 		}
 		@putother method PUT
@@ -174,13 +174,13 @@ import admins.caddy
 	# become a way to drop an arbitrary file next to someone's voice notes.
 	# GET is allowed here where the uploads refuse it - a volume is not private
 	# the way a recording is, and the page has to show what it is currently set
-	# to. Under /talk/ for the same reason as the uploads: the browser already
+	# to. Under /host/ for the same reason as the uploads: the browser already
 	# holds that credential and will not ask a second time.
-	handle /talk/setting/* {
+	handle /host/setting/* {
 		import speakers
 		@settings {
 			method GET PUT
-			path /talk/setting/settings.json
+			path /host/setting/settings.json
 		}
 		handle @settings {
 			# Measured: max_size TRUNCATES the body, it does not reject it -
@@ -202,7 +202,7 @@ import admins.caddy
 			# The folder is whoever authenticated - never what the client says.
 			webdav {
 				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
-				prefix /talk/setting
+				prefix /host/setting
 			}
 		}
 		# any other name, and any other method, is refused
@@ -211,18 +211,26 @@ import admins.caddy
 		}
 	}
 	# Sign out. A 401 from a path that asks for no credential of its own is
-	# what makes a browser forget the one it cached for /talk/ and prompt again.
-	handle /talk/logout {
+	# what makes a browser forget the one it cached for /host/ and prompt again.
+	handle /host/logout {
 		respond 401
 	}
-	handle /talk* {
+	handle /host* {
 		import speakers
 		file_server
 	}
+	# The old name. Hosts have /talk/ bookmarked on their phones, and a dead
+	# bookmark mid-show is worse than an untidy config, so it still resolves.
+	# 308 and not an ordinary redirect because a page still running the old
+	# markup PUTs its slices to /talk/upload/: only 307 and 308 make a browser
+	# repeat the method and the body, and a 302 would arrive here as a GET.
+	handle_path /talk* {
+		redir * /host{uri} 308
+	}
 
 	# The narrator's settings - the voice between the tracks, and how it says a
-	# name. Folded into /talk/, which is where the broadcasting is driven from.
-	# ONE shared file, not one per speaker as /talk/setting is: this is the
+	# name. Folded into /host/, which is where the broadcasting is driven from.
+	# ONE shared file, not one per speaker as /host/setting is: this is the
 	# station's voice, not anybody's own, and radio control here is
 	# collaborative rather than something people compete over.
 	handle /narrator/config/* {

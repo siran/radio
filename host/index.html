@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<title>Talk &middot; wild n loyal radio</title>
+<title>Wild n Loyal Radio - Host</title>
 <style>
   :root {
     --bg:#0e0e10; --panel:#17171a; --line:#2a2a30;
@@ -15,8 +15,7 @@
          font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
          -webkit-text-size-adjust:100%; }
   .wrap { max-width:460px; margin:0 auto; }
-  h1 { font-size:17px; font-weight:600; margin:0 0 2px; }
-  .sub { color:var(--dim); font-size:13px; margin-bottom:18px; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 18px; }
   .panel { background:var(--panel); border:1px solid var(--line);
            border-radius:12px; padding:14px; margin-bottom:12px; }
   label { display:block; font-size:12px; color:var(--dim);
@@ -28,8 +27,19 @@
   /* the picker is locked while the mic is open, and the colour set above
      would otherwise hide the browser's own disabled styling */
   select:disabled { opacity:.5; }
+  #setup > select { margin:10px 0 0; }
   /* the text-input padding above makes a slider look sunken and cramped */
   input[type=range] { padding:0; margin-bottom:4px; accent-color:var(--on); }
+  input[type=range]:disabled { opacity:.45; }
+  /* A slider here is on the air, and on a phone one moves if a thumb so much
+     as brushes the page. So each one sits beside its own lock and is dead
+     until that lock is tapped. */
+  .ctl { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+  .ctl input[type=range] { flex:1; margin-bottom:0; }
+  .lock { flex:0 0 auto; width:44px; height:36px; padding:0; line-height:1;
+          border:1px solid var(--line); border-radius:8px; background:#101013;
+          color:var(--fg); font-size:16px; cursor:pointer; }
+  .lock[aria-pressed="false"] { border-color:var(--on); }
 
   /* One big button. This is a walkie-talkie, not a console. */
   #rec { width:100%; padding:26px; border:0; border-radius:14px; font:inherit;
@@ -74,14 +84,16 @@
   .hint { font-size:12px; color:var(--dim); margin:10px 0; }
   code { background:#101013; border:1px solid var(--line); border-radius:4px;
          padding:1px 5px; font-size:11px; color:var(--fg); }
-  /* liquidsoap's own page is light; keep it readable rather than restyling it */
-  #desk { width:100%; height:560px; border:1px solid var(--line);
+  /* liquidsoap's own page is light; keep it readable rather than restyling it.
+     The height on all three frames below is only where they start: fitFrame()
+     grows each one to whatever is inside it, so nothing scrolls in a frame of
+     its own. */
+  #desk { width:100%; height:420px; border:1px solid var(--line);
           border-radius:8px; background:#fff; margin-top:6px; }
 
   /* the narrator's own page, framed rather than copied for the same reason
-     the station is below: one of it to keep working. It scrolls inside its
-     own frame - a form this tall in a page this tall is worse. */
-  #narrator { display:block; width:100%; height:82vh; min-height:560px;
+     the station is below: one of it to keep working. */
+  #narrator { display:block; width:100%; height:420px;
               border:1px solid var(--line); border-radius:8px;
               background:var(--bg); margin-top:6px; }
 
@@ -92,10 +104,11 @@
   #eqwrap .band { color:var(--fg); }
 
   /* the station itself, so a host never has to leave this page to see what
-     is going on on it. Tall on purpose - a letterbox of the chat is no use
-     to anyone. It plays nothing on its own: the station page only ever
-     starts audio from its own play button. */
-  #station { display:block; width:100%; height:78vh; min-height:520px;
+     is going on on it. Its fold sits outside .wrap so it spans the whole
+     width - a letterbox of the chat is no use to anyone. It plays nothing on
+     its own: the station page only ever starts audio from its own play
+     button. */
+  #station { display:block; width:100%; height:420px;
              border:1px solid var(--line); border-radius:8px;
              background:var(--bg); margin-top:6px; }
 </style>
@@ -103,8 +116,7 @@
 <body>
 <div class="wrap">
 
-  <h1>wild n loyal &middot; talk</h1>
-  <div class="sub">Click once to open the mic, once more to close it. Your voice goes out in three-second slices, over the music, which ducks underneath.</div>
+  <h1>wild n loyal &middot; host</h1>
 
   <div class="panel">
     <button id="rec">Start talking</button>
@@ -113,42 +125,65 @@
     <div class="err" id="err"></div>
   </div>
 
-  <div class="panel" id="setup" hidden>
-    <label for="dev" id="devlabel">Microphone</label>
-    <select id="dev"><option value="">default</option></select>
-  </div>
-
   <div class="panel" id="gainpanel">
     <label for="gain">Your voice volume &mdash; <span id="gainval">1</span>&times;</label>
-    <input id="gain" type="range" min="0.5" max="12" step="0.5" value="1">
+    <div class="ctl">
+      <button class="lock" type="button" id="lockgain" aria-pressed="true">&#128274;</button>
+      <input id="gain" type="range" min="0.5" max="12" step="0.5" value="1" disabled>
+    </div>
     <details id="eqwrap">
       <summary>Your voice EQ &mdash; set it once</summary>
       <div class="hint">Seven bands, in dB. 0 is flat, and all seven at 0 is
         exactly the voice as it arrived. The low ones are weight and rumble,
         the middle is boxiness, the top is clarity and air.</div>
       <label for="eqf100"><span class="band">100 Hz</span> &mdash; rumble &mdash; <span id="eqf100val">0</span> dB</label>
-      <input id="eqf100" type="range" min="-9" max="9" step="0.5" value="0">
+      <div class="ctl">
+        <button class="lock" type="button" id="lockeqf100" aria-pressed="true">&#128274;</button>
+        <input id="eqf100" type="range" min="-9" max="9" step="0.5" value="0" disabled>
+      </div>
       <label for="eqf200"><span class="band">200 Hz</span> &mdash; body &mdash; <span id="eqf200val">0</span> dB</label>
-      <input id="eqf200" type="range" min="-9" max="9" step="0.5" value="0">
+      <div class="ctl">
+        <button class="lock" type="button" id="lockeqf200" aria-pressed="true">&#128274;</button>
+        <input id="eqf200" type="range" min="-9" max="9" step="0.5" value="0" disabled>
+      </div>
       <label for="eqf400"><span class="band">400 Hz</span> &mdash; boxiness &mdash; <span id="eqf400val">0</span> dB</label>
-      <input id="eqf400" type="range" min="-9" max="9" step="0.5" value="0">
+      <div class="ctl">
+        <button class="lock" type="button" id="lockeqf400" aria-pressed="true">&#128274;</button>
+        <input id="eqf400" type="range" min="-9" max="9" step="0.5" value="0" disabled>
+      </div>
       <label for="eqf800"><span class="band">800 Hz</span> &mdash; honk &mdash; <span id="eqf800val">0</span> dB</label>
-      <input id="eqf800" type="range" min="-9" max="9" step="0.5" value="0">
+      <div class="ctl">
+        <button class="lock" type="button" id="lockeqf800" aria-pressed="true">&#128274;</button>
+        <input id="eqf800" type="range" min="-9" max="9" step="0.5" value="0" disabled>
+      </div>
       <label for="eqf1600"><span class="band">1.6 kHz</span> &mdash; presence &mdash; <span id="eqf1600val">0</span> dB</label>
-      <input id="eqf1600" type="range" min="-9" max="9" step="0.5" value="0">
+      <div class="ctl">
+        <button class="lock" type="button" id="lockeqf1600" aria-pressed="true">&#128274;</button>
+        <input id="eqf1600" type="range" min="-9" max="9" step="0.5" value="0" disabled>
+      </div>
       <label for="eqf3150"><span class="band">3.15 kHz</span> &mdash; consonants &mdash; <span id="eqf3150val">0</span> dB</label>
-      <input id="eqf3150" type="range" min="-9" max="9" step="0.5" value="0">
+      <div class="ctl">
+        <button class="lock" type="button" id="lockeqf3150" aria-pressed="true">&#128274;</button>
+        <input id="eqf3150" type="range" min="-9" max="9" step="0.5" value="0" disabled>
+      </div>
       <label for="eqf6300"><span class="band">6.3 kHz</span> &mdash; air &mdash; <span id="eqf6300val">0</span> dB</label>
-      <input id="eqf6300" type="range" min="-9" max="9" step="0.5" value="0">
+      <div class="ctl">
+        <button class="lock" type="button" id="lockeqf6300" aria-pressed="true">&#128274;</button>
+        <input id="eqf6300" type="range" min="-9" max="9" step="0.5" value="0" disabled>
+      </div>
     </details>
     <div class="duckrow">
-      <div class="hint">Applies to your next note.</div>
       <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
     </div>
   </div>
 
-  <div class="panel" id="musicpanel">
-    <label>Now playing</label>
+  <details class="panel" id="setup" hidden>
+    <summary id="devlabel">Microphone</summary>
+    <select id="dev" aria-label="Microphone"><option value="">default</option></select>
+  </details>
+
+  <details class="panel" id="musicpanel" open>
+    <summary>Now playing</summary>
     <div class="np" id="npTitle">&mdash;</div>
     <div class="path" id="npPath"></div>
     <div class="btns">
@@ -159,7 +194,7 @@
       <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
     </div>
     <div class="err" id="cerr"></div>
-  </div>
+  </details>
 
   <details class="panel" id="deskwrap">
     <summary>Mixing desk &mdash; tune while you talk</summary>
@@ -181,18 +216,19 @@
     <iframe id="narrator" title="narrator"></iframe>
   </details>
 
-  <div class="panel">
-    <label>The station</label>
-    <div class="hint">The page itself, not a copy of it &mdash; the same chat,
-      the same comments, the same likes, live. Framed rather than duplicated so
-      there is only ever one of it to keep working.</div>
-    <iframe id="station" src="/" title="wild n loyal radio"></iframe>
-  </div>
+</div>
 
-  <div class="foot">
-    <a href="/">&larr; back to the station</a>
-    &middot; <a href="/talk/logout">sign out</a>
-  </div>
+<details class="panel" id="stationwrap">
+  <summary>The station</summary>
+  <div class="hint">The page itself, not a copy of it &mdash; the same chat,
+    the same comments, the same likes, live. Framed rather than duplicated so
+    there is only ever one of it to keep working.</div>
+  <iframe id="station" title="wild n loyal radio"></iframe>
+</details>
+
+<div class="foot">
+  <a href="/">&larr; back to the station</a>
+  &middot; <a href="/host/logout">sign out</a>
 </div>
 
 <script>
@@ -213,8 +249,8 @@
 
   // The page is behind basic auth, so the browser already holds the credential
   // and normally sends it. Only if an upload comes back 401 do we ask.
-  // No credentials in this page at all. The browser was challenged for /talk/
-  // and uploads go to /talk/upload/, which is below it - so it sends the same
+  // No credentials in this page at all. The browser was challenged for /host/
+  // and uploads go to /host/upload/, which is below it - so it sends the same
   // credential without being asked again, and the server decides who you are.
   const fail = m => { $('err').textContent = m; };
 
@@ -375,7 +411,7 @@
     const li = { lastChild: {} };   // nothing to display; kept so send() reads plainly
 
     try {
-      const res = await fetch('/talk/upload/' + name, {
+      const res = await fetch('/host/upload/' + name, {
         method: 'PUT',
         headers: { 'Content-Type': blob.type || 'application/octet-stream' },
         credentials: 'same-origin',      // let the browser send what it already holds
@@ -437,13 +473,45 @@
   }
 
   // Same lazy load as the desk, and for the same reason - it is behind the
-  // password too. It sits on a path of its own rather than under /talk/, so
+  // password too. It sits on a path of its own rather than under /host/, so
   // the browser may ask for the credential once more when the fold is first
   // opened; the realm is the same, so it is asked once and not again.
   $('narwrap').addEventListener('toggle', () => {
     const f = $('narrator');
     if ($('narwrap').open && !f.src) f.src = '/narrator/';
   });
+
+  // The station is the whole page framed, so it is the most expensive thing
+  // here; the same lazy load as the two folds above keeps it off the wire
+  // until someone actually wants to look at it.
+  $('stationwrap').addEventListener('toggle', () => {
+    const f = $('station');
+    if ($('stationwrap').open && !f.src) f.src = '/';
+  });
+
+  // A frame with a fixed height scrolls inside itself, which on a phone means
+  // two scrollbars and never the one you meant. All three of these are
+  // same-origin, so the height of the page inside can simply be read and the
+  // frame grown to it. offsetHeight - clientHeight is the frame's own border:
+  // without it every pass would come up that much short and the observer would
+  // chase itself down the page.
+  function fitFrame(f) {
+    const fit = () => {
+      try {
+        const d = f.contentDocument;
+        if (!d) return;
+        const want = d.documentElement.scrollHeight + f.offsetHeight - f.clientHeight;
+        if (Math.abs(want - f.offsetHeight) > 2) f.style.height = want + 'px';
+      } catch {}
+    };
+    f.addEventListener('load', () => {
+      fit();
+      try { new ResizeObserver(fit).observe(f.contentDocument.documentElement); } catch {}
+    });
+  }
+  fitFrame($('desk'));
+  fitFrame($('narrator'));
+  fitFrame($('station'));
 
   // The music. Every one of these answers with the same state object, so one
   // draw() serves the poll and every button alike, and no button has to guess
@@ -499,7 +567,7 @@
   // the music dips under you, and your own seven-band EQ. Caddy files it
   // under whoever authenticated, so the page never says who you are - and no
   // file yet means never set, which is whatever liquidsoap falls back to.
-  const SETTINGS_URL = '/talk/setting/settings.json';
+  const SETTINGS_URL = '/host/setting/settings.json';
 
   // The EQ is seven numbers in dB, 0 meaning flat, on the same object and the
   // same PUT as the volume - liquidsoap reads all of it out of the one file.
@@ -588,6 +656,29 @@
       saveSettings(HZ[b] + ' saved: ' + settings.eq[b] + ' dB');
     });
   }
+  // Every slider above is on the air, and a thumb brushing the page used to be
+  // enough to move one. So each is disabled until its own lock is tapped, and
+  // locks itself again the moment the value is let go: at any moment when
+  // nobody is deliberately adjusting something, nothing can be moved by
+  // accident. Re-locking on a timer instead would leave open exactly the
+  // window this exists to close, and re-locking on release costs one tap for
+  // one change - which is what a lock is for.
+  function lockable(id) {
+    const input = $(id), btn = $('lock' + id);
+    const set = open => {
+      input.disabled = !open;
+      btn.textContent = open ? '\u{1F513}' : '\u{1F512}';
+      btn.setAttribute('aria-pressed', String(!open));
+      btn.title = open ? 'lock it again' : 'unlock to change';
+      btn.setAttribute('aria-label', btn.title);
+    };
+    btn.addEventListener('click', () => set(input.disabled));
+    input.addEventListener('change', () => set(false));
+    set(false);
+  }
+  lockable('gain');
+  for (const b of BANDS) lockable('eq' + b);
+
   // Liquidsoap polls this folder, so the setting IS the button: it lands on air
   // within a quarter second and there is nothing else to tell.
   $('duck').addEventListener('click', () => {
