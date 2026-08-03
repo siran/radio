@@ -104,9 +104,14 @@ duck_to    = interactive.float("duck_to",
 
 # Starting value from narrator.json; the dial is live, the file is what comes
 # back after a restart.
+# These are REAL seconds. They used to be about half that: the release counted
+# frames at an assumed 0.04s each against a frame that is actually 0.02s, so a
+# dial reading 28 released after roughly 14. It measures wall-clock now, so the
+# number on the dial is the number of seconds - which means every value tuned
+# by ear before 2026-08-03 meant half what it said.
 hold       = interactive.float("hold",
   description = "Seconds of quiet before the music comes back up. Covers pauses and gaps between clips.",
-  unit = "s", min = 0.0, max = 30.0, step = 0.5, (ncfg.hold ?? 28.0))
+  unit = "s", min = 0.0, max = 30.0, step = 0.5, (ncfg.hold ?? 3.0))
 
 glide      = interactive.float("glide",
   description = "How fast the music fader moves. Smaller is slower and smoother.",
@@ -698,9 +703,14 @@ talk = limit(threshold = -2.0, talk)
 # different answers, so it is enough that ANY lane playing right now carries
 # liq_duck: the one who wanted the dip gets it, and the other simply talks
 # over music that happens to be down.
-music_gain = ref(1.0)
-talking    = ref(false)
-quiet_for  = ref(0.0)
+music_gain  = ref(1.0)
+talking     = ref(false)
+# When the air last went quiet, or 0.0 while someone is still on it. Wall clock
+# rather than a count of calls: this runs once per frame, so counting calls
+# means hardcoding the frame duration, and that duration is a hint liquidsoap
+# is free to round. That is exactly how hold came to be worth half its face
+# value for weeks without anyone noticing.
+quiet_since = ref(0.0)
 
 def duck_gain() =
   # A lane keeps its last metadata after the note has finished, so is_ready is
@@ -723,12 +733,12 @@ def duck_gain() =
       talking := true
       log.important(label = "duck", "music down")
     end
-    quiet_for := 0.0
+    quiet_since := 0.0
   elsif talking() then
     # Slices arrive about 1.5s apart, so hold is what keeps the music from
     # pumping back up in the gap between one clip and the next.
-    quiet_for := quiet_for() + 0.04
-    if quiet_for() >= hold() then
+    if quiet_since() == 0.0 then quiet_since := time() end
+    if time() - quiet_since() >= hold() then
       talking := false
       log.important(label = "duck", "music back up")
     end

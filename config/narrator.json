@@ -2,7 +2,7 @@
   "voice": "en_GB-jenny_dioco-medium",
   "speed": 1.15,
   "announce_every": 1,
-  "hold": 28,
+  "hold": 3,
   "ident": "this mystery song is yet to be tagged... we hope you enjoyed...",
   "say_as": { "Hector Lavoe": "Ektor Lavoay" },
   "piper_root": "D:/services/piper"
