@@ -25,13 +25,81 @@ $voice = 'C:\Users\an\src\radio\messages\voice'
 # on this machine at about 1.7 seconds for a one-sentence file, nearly all of
 # it startup. Announcements arrive one at a time and nothing is blocked waiting
 # on the result, so that is not worth a resident server.
-$python = 'D:\services\piper\venv\Scripts\python.exe'
-$model  = 'D:\services\piper\voices\en_GB-jenny_dioco-medium.onnx'
+
+# --- the narrator's settings ------------------------------------------------
+# Everything about the voice now lives in one json file, shared with radio.liq,
+# so the /narrator page can later write both halves in a single PUT. radio.liq
+# reads announce_every, hold and ident out of it and ignores the rest; this
+# loop reads voice, speed, piper_root and say_as and ignores the rest.
+#
+# It is re-read on EVERY poll, so a change is on the air at the next
+# announcement without stopping the scheduled task.
+$cfgFile = 'C:\Users\an\src\radio\config\narrator.json'
+
+# What each field falls back to. These are exactly the values that were
+# hardcoded at this spot before the file existed, so a missing or malformed
+# config leaves this loop behaving as it always did.
+#
+# piper_root is configurable because the install does not have to be on D: -
+# somebody else running this station will put it somewhere else. Both the
+# model and the interpreter hang off it.
+$defRoot  = 'D:/services/piper'
+$defVoice = 'en_GB-jenny_dioco-medium'
 
 # Above 1.0 piper reads slower. Piper has no pitch control at all, so this is
 # the only lever on delivery, and an unhurried read is most of what separates
 # a station voice from a newsreader.
-$speed  = '1.15'
+$defSpeed = '1.15'
+
+# JSON numbers are written with a dot whatever the machine's locale is, so
+# both the parse and the formatting back to a command line argument are
+# pinned to the invariant culture. Without this a comma-decimal locale hands
+# piper "1,15" and it dies on every announcement.
+$inv = [Globalization.CultureInfo]::InvariantCulture
+
+# Reads the file and hands back what to speak with. This NEVER throws: no
+# file, a BOM, a truncated write caught mid-flight, a key of the wrong type -
+# every one of those falls back field by field, so one bad value does not cost
+# the others and the loop never stops speaking.
+#
+# say_as is a pronunciation table, and respelling is the only lever there is.
+# Piper takes no phoneme markup - measured on this machine, [[ l aI v ]] did
+# nothing whatsoever - and it has no pitch control either. Spelling does work:
+# "liiive" measured 54% longer than "live", and "li-i-ive" 65% longer. So the
+# fix for a name piper says wrong is to write it the way it should sound.
+# Longest key first, so overlapping names cannot half-match.
+function Get-NarratorConfig {
+    $cfg = @{
+        Python = "$defRoot/venv/Scripts/python.exe"
+        Model  = "$defRoot/voices/$defVoice.onnx"
+        Speed  = $defSpeed
+        SayAs  = @()
+    }
+    try {
+        $j = ConvertFrom-Json ([IO.File]::ReadAllText($cfgFile))
+
+        $root  = if ("$($j.piper_root)".Trim()) { "$($j.piper_root)".Trim() } else { $defRoot }
+        $voice = if ("$($j.voice)".Trim())      { "$($j.voice)".Trim() }      else { $defVoice }
+        $cfg.Python = "$root/venv/Scripts/python.exe"
+        $cfg.Model  = "$root/voices/$voice.onnx"
+
+        if ($null -ne $j.speed) {
+            $d = 0.0
+            try { $d = [Convert]::ToDouble($j.speed, $inv) } catch { $d = 0.0 }
+            if ($d -gt 0.0) { $cfg.Speed = $d.ToString($inv) }
+        }
+
+        if ($j.say_as) {
+            $pairs = New-Object System.Collections.ArrayList
+            foreach ($p in $j.say_as.PSObject.Properties) {
+                [void]$pairs.Add([pscustomobject]@{ From = $p.Name; To = "$($p.Value)" })
+            }
+            $cfg.SayAs = @($pairs | Sort-Object { $_.From.Length } -Descending)
+        }
+    }
+    catch { }
+    $cfg
+}
 
 # What the text for piper gets written as. No BOM: piper opens its input as
 # plain UTF-8, and a byte order mark would survive that as a U+FEFF glued to
@@ -46,6 +114,15 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 $prev = @{}
 
 while ($true) {
+    # Once per poll, not once per file: a config saved while this loop is
+    # sleeping is in force by the time the next text file is spoken.
+    # Bound to plain names because the piper call below is parsed in argument
+    # mode, where a bare $cfg.Model is asking for trouble.
+    $cfg    = Get-NarratorConfig
+    $python = $cfg.Python
+    $model  = $cfg.Model
+    $speed  = $cfg.Speed
+
     $now = @{}
     foreach ($f in Get-ChildItem $voice -Recurse -File -Include '*.txt', '*.md' -ErrorAction SilentlyContinue) {
         $stamp = "$($f.Length):$($f.LastWriteTimeUtc.Ticks)"
@@ -63,6 +140,13 @@ while ($true) {
             Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
             continue
         }
+
+        # Respell whatever piper gets wrong. Plain literal replacement, case
+        # sensitive - String.Replace is ordinal - and longest key first, so
+        # "Hector Lavoe" wins over a "Lavoe" that might also be in the table.
+        # This changes only what is SPOKEN: the same words already went to the
+        # site as written, so the page still shows the real name.
+        foreach ($r in $cfg.SayAs) { $text = $text.Replace($r.From, $r.To) }
 
         # Two traps, and they have to be solved together.
         #

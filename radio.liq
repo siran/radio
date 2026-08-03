@@ -19,6 +19,55 @@ settings.server.telnet           := true
 settings.server.telnet.bind_addr := "127.0.0.1"
 settings.server.telnet.port      := 1234
 
+# --- the narrator's settings -----------------------------------------------
+# One json file, shared with narrator-watcher.ps1, so the /narrator page can
+# later write both halves in a single PUT. This file takes three of its
+# fields; voice, speed, piper_root and say_as belong to the watcher and mean
+# nothing here - json.parse ignores keys the type does not name, so they ride
+# along untouched.
+#
+# Read ONCE, at startup, and that is deliberate. file.watch exists on this
+# build and is NOT used here, because all three of these are ALSO tunable
+# while the station is on the air - two of them are interactive.float knobs
+# on the mixing desk page. A watcher pushing the file back into those knobs
+# would throw away whatever the operator had just dialled in by ear, the
+# moment anything else saved the file. So the division is:
+#   the file     = the value at startup, and the value that survives a restart
+#   /interactive = the value right now
+# Change the file while the station is up and nothing moves until the next
+# restart; at that restart the file wins and any live tuning is gone.
+#
+# `hold` here is in DIAL units - the same ones /interactive shows - and those
+# are NOT seconds. The accumulator further down adds 0.04 per frame against a
+# 0.02s frame, so the number is worth half its face value: 28 is about 14
+# seconds on the air. Left exactly as it was, because every value the
+# operator tuned by ear assumes it.
+#
+# Same posture as note_uri further down: json.parse throws on no file, an
+# empty file, one caught half-written, or one saved with a BOM, and every one
+# of those means "use the defaults" - never a crash. Each field carries the
+# trailing `?`, so a file missing one still delivers the others. Measured on
+# this build rather than assumed: a json int lands in a float field as a
+# float, so a page that writes 1 rather than 1.0 still parses. It has to be a
+# function of its own: `x = try ... end` does not parse, a try is only
+# allowed where a statement is.
+narrator_config = "C:/Users/an/src/radio/config/narrator.json"
+
+def narrator_cfg() =
+  try
+    let json.parse ( c : {
+      announce_every : float?,
+      hold           : float?,
+      ident          : string?
+    } ) = file.contents(narrator_config)
+    c
+  catch _ do
+    { announce_every = null, hold = null, ident = null }
+  end
+end
+
+ncfg = narrator_cfg()
+
 # --- knobs -----------------------------------------------------------------
 # Every one of these can be changed WHILE THE STATION IS RUNNING, from the
 # mixing desk page. No restart, no gap in the audio.
@@ -53,18 +102,22 @@ duck_to    = interactive.float("duck_to",
   description = "How loud the music stays while someone talks. 1.0 = untouched, 0.0 = silent.",
   unit = "x", min = 0.0, max = 1.0, step = 0.05, 0.45)
 
+# Starting value from narrator.json; the dial is live, the file is what comes
+# back after a restart.
 hold       = interactive.float("hold",
   description = "Seconds of quiet before the music comes back up. Covers pauses and gaps between clips.",
-  unit = "s", min = 0.0, max = 30.0, step = 0.5, 28.0)
+  unit = "s", min = 0.0, max = 30.0, step = 0.5, (ncfg.hold ?? 28.0))
 
 glide      = interactive.float("glide",
   description = "How fast the music fader moves. Smaller is slower and smoother.",
   unit = "", min = 0.01, max = 0.5, step = 0.01, 0.01)
 
 # the announcer
+# Starting value from narrator.json; the dial is live, the file is what comes
+# back after a restart.
 announce_every = interactive.float("announce_every",
   description = "Speak on every Nth track: over its intro, and again as it ends. 1 = every one, 0 = never.",
-  unit = "tracks", min = 0.0, max = 20.0, step = 1.0, 1.0)
+  unit = "tracks", min = 0.0, max = 20.0, step = 1.0, (ncfg.announce_every ?? 1.0))
 
 
 # The mixing desk: liquidsoap's own page for the knobs above, at
@@ -732,7 +785,9 @@ narrator_file = "C:/Users/an/src/radio/live/narrator.json"
 # What to say when the station has no idea what it is playing. About one track
 # in seven of this library is untagged, and saying nothing sounds like
 # something broke rather than like a radio.
-mystery = "this mystery song is yet to be tagged... we hope you enjoyed..."
+# `ident` in narrator.json. Read at startup like the two knobs above, but
+# unlike them there is no dial for it: this one only changes on a restart.
+mystery = ncfg.ident ?? "this mystery song is yet to be tagged... we hope you enjoyed..."
 
 # And what the STREAM says it is playing when the file has no title. Sending
 # nothing is not neutral: icecast keeps displaying whatever it was last told,
