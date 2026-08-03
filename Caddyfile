@@ -321,6 +321,33 @@ import admins.caddy
 		import speakers
 		reverse_proxy 127.0.0.1:8005
 	}
+	# The likes ledger. Liquidsoap can only write into live/, which sits under
+	# the web root and is therefore served like any other file - and the ledger
+	# is a list of paths in D:/Music, which is exactly what /likes/ below takes
+	# care not to hand out. Same treatment as the source notes: not on the
+	# internet. Not a security boundary, an intentional non-publication.
+	handle /live/likes.jsonl {
+		respond 404
+	}
+	# Likes. The /control block again with a different path and, on purpose, NO
+	# `import speakers`: anyone listening can like, there is no account to have
+	# and nothing here can change what is on the air. Same harbor as above.
+	handle /likes/* {
+		# A POST appends a line to a file, so it gets the same metering as
+		# every other public write. It has to be inside an explicit `route`:
+		# the global `order` puts rate_limit after reverse_proxy, and
+		# reverse_proxy is terminal, so only written order actually runs it.
+		route {
+			rate_limit {
+				zone like_writes {
+					key {remote_host}
+					events 60
+					window 1m
+				}
+			}
+			reverse_proxy 127.0.0.1:8005
+		}
+	}
 	handle /stream* {
 		reverse_proxy 127.0.0.1:8000 {
 			flush_interval -1

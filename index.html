@@ -103,6 +103,9 @@
   .findrow a:hover, .findrow button:hover { color: var(--accent); background: rgba(127,127,127,.12); }
   .findrow .done { color: var(--accent); }
   .findrow[hidden] { display: none; }
+  /* the like pill reuses button.vote below; this only centres it */
+  .likerow { display: flex; justify-content: center; margin: -6px 0 18px; }
+  .likerow[hidden] { display: none; }
   .recent { margin-top: 20px; }
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
@@ -158,6 +161,9 @@
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
         </button>
+      </div>
+      <div class="likerow" id="likerow" hidden>
+        <button type="button" class="vote" id="likeBtn" title="like this song" aria-label="like this song"><span id="likeHeart">&#9825;</span> <span id="likeCount">0</span></button>
       </div>
       <div class="controls">
         <button class="play" id="btn" disabled aria-label="Play or pause">▶</button>
@@ -684,11 +690,52 @@
     } catch (e) { el.hidden = true; }
   }
 
-  poll(); loadMessages(); pollChat(); pollNarrator();
+  // --- likes -------------------------------------------------------------
+  // Anyone listening can like. No login, no account, no identity: the count
+  // is one number against one song. Liquidsoap keeps it against the FILE
+  // PATH, because an untagged track has no title to key on, and hands back an
+  // opaque id for that path instead of the path itself - which is all this
+  // page needs to remember what it has already liked, and keeps the layout of
+  // the library off the public internet.
+  //
+  // One like per browser per track, remembered in localStorage. It is
+  // defeatable by anyone who cares to clear it, and that is fine - it is a
+  // song, not a ballot.
+  const LIKED_KEY = 'radio.liked';
+  let liked = [];
+  try { liked = JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { liked = []; }
+  let likeId = '';
+
+  function showLikes(j) {
+    likeId = (j && j.id) || '';
+    if (!likeId) { $('likerow').hidden = true; return; }
+    const mine = liked.includes(likeId);
+    $('likeCount').textContent = j.likes;
+    $('likeHeart').textContent = mine ? '\u2665' : '\u2661';
+    $('likeBtn').disabled = mine;
+    $('likerow').hidden = false;
+  }
+
+  async function pollLikes() {
+    try { showLikes(await (await fetch('/likes/now', { cache: 'no-store' })).json()); }
+    catch { $('likerow').hidden = true; }
+  }
+
+  $('likeBtn').addEventListener('click', async () => {
+    if (!likeId || liked.includes(likeId)) return;
+    liked.push(likeId);
+    liked = liked.slice(-50);
+    try { localStorage.setItem(LIKED_KEY, JSON.stringify(liked)); } catch {}
+    try { showLikes(await (await fetch('/likes/add', { method: 'POST' })).json()); }
+    catch { pollLikes(); }
+  });
+
+  poll(); loadMessages(); pollChat(); pollNarrator(); pollLikes();
   setInterval(poll, 8000);
   setInterval(loadMessages, 30000);
   setInterval(pollChat, 4000);
   setInterval(pollNarrator, 4000);
+  setInterval(pollLikes, 5000);
 })();
 </script>
 </body>

@@ -189,6 +189,120 @@ harbor.http.register(port = 8005, method = "POST", "/control/music",
 harbor.http.register(port = 8005, method = "POST", "/control/pause",
   endpoint(fun (r) -> paused := on_flag(r)))
 
+# --- likes -----------------------------------------------------------------
+# Public, and deliberately with no notion of who is listening: a like is one
+# number against one song, not a row belonging to an account. A host is a
+# listener who additionally holds the speaker credential, and this needs no
+# credential at all - hence its own caddy block, without `import speakers`.
+#
+# Keyed by the FILE PATH, never the title. About one track in seven of this
+# library is untagged and comes back with an empty title and an empty artist,
+# so the title is not an identifier: every untagged track would share one pile
+# of likes. The path is the one thing a playing request always has.
+#
+# On disk it is an append-only ledger, one json line per like, in live/ - the
+# single folder svc-radio may write. The source tree is read-only to it on
+# purpose, and a file.write anywhere else fails as nothing but a caught
+# exception and a page that never updates.
+#
+# Two properties come out of the append-only shape and both are why it is that
+# shape. A click costs ONE append of about eighty bytes however many songs have
+# ever been liked - the obvious alternative, rewriting a json map of every
+# path, gets slower the more the station is loved. And the counts ARE the tally
+# of the lines, so they come back after a restart by reading the file once
+# below. Nothing ever rewrites it, so the worst a crash mid-write can cost is
+# the last line.
+likes_file = "C:/Users/an/src/radio/live/likes.jsonl"
+
+# path -> count. One entry per distinct path, rebuilt from the ledger at
+# startup and kept in step on every like, so serving a count is a lookup
+# rather than a re-read of the file.
+likes = ref([])
+
+def like_count(p) =
+  list.assoc(default = 0, p, likes())
+end
+
+def bump(p) =
+  n = like_count(p) + 1
+  likes := list.add((p, n), list.filter(fun (kv) -> fst(kv) != p, likes()))
+end
+
+# One ledger line -> the path it names, or "" for a line that is not one: the
+# empty tail after the final newline, or half a line left by a crash. json.parse
+# throws on those, and one throw would cost the whole ledger, so every line is
+# parsed on its own. It has to be a function of its own: `x = try ... end` does
+# not parse, a try is only allowed where a statement is.
+def like_path(line) =
+  try
+    let json.parse ( e : { path : string } ) = line
+    e.path
+  catch _ do
+    ""
+  end
+end
+
+# Measured on this build rather than assumed: file.contents THROWS on a file
+# that is not there. On the first ever run it is not there, which is the
+# ordinary case and not an error - so no ledger simply means no likes yet.
+def ledger() =
+  try
+    file.contents(likes_file)
+  catch _ do
+    ""
+  end
+end
+
+list.iter(
+  fun (line) -> begin
+    p = like_path(line)
+    if p != "" then bump(p) end
+  end,
+  string.split(separator = "\n", ledger()))
+
+log.important(label = "likes", "#{list.length(likes())} liked tracks loaded")
+
+# A like is not worth taking the station off the air for. A full disk or a
+# folder that went away throws, and a throw inside a harbor handler answers
+# 500 - so catch it and keep going. The in-memory tally is already updated by
+# then, so the click still reads back right; only a restart loses that one.
+def record_like(p) =
+  try
+    file.write(append = true,
+      data = json.stringify(compact = true, { path = p }) ^ "\n", likes_file)
+  catch _ do
+    log.important(label = "likes", "could not write the ledger")
+  end
+end
+
+# What both endpoints answer with, so a page can act and redraw from one
+# response - the same idea as endpoint() above. The path itself does NOT go
+# out: `id` is a digest of it, which is all a browser needs to remember what it
+# has already liked, and it keeps the layout of D:/Music off the public
+# internet. Nothing playing is an empty id and a count of zero.
+def likes_state() =
+  p = current_file()
+  { id = if p == "" then "" else string.digest(p) end, likes = like_count(p) }
+end
+
+def like_endpoint(act) =
+  fun (_, response) -> begin
+    act()
+    response.json(likes_state())
+  end
+end
+
+harbor.http.register(port = 8005, method = "GET", "/likes/now",
+  like_endpoint(fun () -> ()))
+harbor.http.register(port = 8005, method = "POST", "/likes/add",
+  like_endpoint(fun () -> begin
+    p = current_file()
+    if p != "" then
+      bump(p)
+      record_like(p)
+    end
+  end))
+
 # Whether a live source is connected. Asking the source itself is not
 # reliable - a dropped one goes on looking alive for a while - so track the
 # connect and disconnect callbacks, and duck the music off that.
