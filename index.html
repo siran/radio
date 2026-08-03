@@ -669,7 +669,7 @@
   // evening would be worse than showing nothing.
   const NARRATOR_TTL = 45000;
   async function pollNarrator() {
-    const el = \narrator;
+    const el = $('narrator');
     try {
       const res = await fetch('/live/narrator.json', { cache: 'no-store' });
       if (!res.ok) return;
