@@ -41,3 +41,6 @@ admins.caddy
 
 # guestbook posts - untracked for now, autocommit later
 messages/*.md
+
+# the narrator's current line, rewritten every announcement
+live/

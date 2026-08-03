@@ -62,6 +62,7 @@
   button.play:disabled { opacity: .28; cursor: not-allowed; }
   .vol { flex: 1; display: flex; align-items: center; gap: 9px; color: var(--dim); }
   input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  .narrator { margin-top: 8px; font-size: .8rem; color: var(--dim); line-height: 1.45; }
 
   .meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px;
           padding-top: 16px; border-top: 1px solid var(--line); font-size: .76rem; color: var(--dim); }
@@ -165,6 +166,7 @@
           <input type="range" id="vol" min="0" max="100" value="85" aria-label="Volume">
         </div>
       </div>
+      <div class="narrator" id="narrator" hidden></div>
       <div class="meta">
         <div>listeners <b id="listeners">–</b></div>
         <div>on air <b id="uptime">–</b></div>
@@ -659,10 +661,34 @@
     } catch {}
   });
 
-  poll(); loadMessages(); pollChat();
+  // What the narrator is saying. Liquidsoap writes the line to a static file
+  // at the web root - this page is public and cannot use the /control
+  // endpoints, which sit behind the speaker credential. It carries its own
+  // timestamp so a line ages out here rather than needing anything to come
+  // back and clear it: a stale "that was" parked under the volume slider all
+  // evening would be worse than showing nothing.
+  const NARRATOR_TTL = 45000;
+  async function pollNarrator() {
+    const el = \narrator;
+    try {
+      const res = await fetch('/live/narrator.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const n = await res.json();
+      const age = Date.now() - Date.parse(n.at);
+      if (n.words && age >= 0 && age < NARRATOR_TTL) {
+        el.textContent = '\uD83D\uDCE2 ' + n.words;
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+      }
+    } catch (e) { el.hidden = true; }
+  }
+
+  poll(); loadMessages(); pollChat(); pollNarrator();
   setInterval(poll, 8000);
   setInterval(loadMessages, 30000);
   setInterval(pollChat, 4000);
+  setInterval(pollNarrator, 4000);
 })();
 </script>
 </body>
