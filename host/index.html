@@ -83,10 +83,10 @@
   summary::marker { color:var(--line); }
   code { background:#101013; border:1px solid var(--line); border-radius:4px;
          padding:1px 5px; font-size:11px; color:var(--fg); }
-  /* the narrator's own page, framed rather than copied for the same reason
-     the station is below: one of it to keep working. The height on both
-     frames below is only where they start: fitFrame() grows each one to
-     whatever is inside it, so nothing scrolls in a frame of its own. */
+  /* the narrator's own page, framed rather than copied so there is only one
+     of it to keep working. The height below is only where it starts:
+     fitFrame() grows the frame to whatever is inside it, so nothing scrolls
+     in a frame of its own. */
   #narrator { display:block; width:100%; height:420px;
               border:1px solid var(--line); border-radius:8px;
               background:var(--bg); margin-top:6px; }
@@ -98,15 +98,6 @@
   #eqwrap { margin:0 0 12px; }
   #eqwrap > label, #deskwrap > label { margin-top:12px; }
   #eqwrap .band, #deskwrap .band { color:var(--fg); }
-
-  /* the station itself, so a host never has to leave this page to see what
-     is going on on it. Its fold sits outside .wrap so it spans the whole
-     width - a letterbox of the chat is no use to anyone. It plays nothing on
-     its own: the station page only ever starts audio from its own play
-     button. */
-  #station { display:block; width:100%; height:420px;
-             border:1px solid var(--line); border-radius:8px;
-             background:var(--bg); margin-top:6px; }
 </style>
 </head>
 <body>
@@ -247,13 +238,8 @@
 
 </div>
 
-<details class="panel" id="stationwrap">
-  <summary title="The station page itself, live - the same chat, comments and likes.">The station</summary>
-  <iframe id="station" title="wild n loyal radio"></iframe>
-</details>
-
 <div class="foot">
-  <a href="/">&larr; back to the station</a>
+  <a href="/" target="_blank" title="opens in a new tab, so the station sits beside this page">the station &#8599;</a>
   &middot; <a href="/host/logout">sign out</a>
 </div>
 
@@ -555,16 +541,8 @@
     if ($('narwrap').open && !f.src) f.src = '/narrator/';
   });
 
-  // The station is the whole page framed, so it is the most expensive thing
-  // here; the same lazy load as the two folds above keeps it off the wire
-  // until someone actually wants to look at it.
-  $('stationwrap').addEventListener('toggle', () => {
-    const f = $('station');
-    if ($('stationwrap').open && !f.src) f.src = '/';
-  });
-
   // A frame with a fixed height scrolls inside itself, which on a phone means
-  // two scrollbars and never the one you meant. Both of these are
+  // two scrollbars and never the one you meant. The narrator page is
   // same-origin, so the height of the page inside can simply be read and the
   // frame grown to it. offsetHeight - clientHeight is the frame's own border:
   // without it every pass would come up that much short and the observer would
@@ -584,7 +562,6 @@
     });
   }
   fitFrame($('narrator'));
-  fitFrame($('station'));
 
   // The music. Every one of these answers with the same state object, so one
   // draw() serves the poll and every button alike, and no button has to guess

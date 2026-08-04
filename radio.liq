@@ -27,9 +27,9 @@ settings.server.telnet.port      := 1234
 # along untouched.
 #
 # Read ONCE, at startup, and that is deliberate. file.watch exists on this
-# build and is NOT used here, because all three of these are ALSO tunable
+# build and is NOT used here, because all of these are ALSO tunable
 # while the station is on the air - hold is a dial on the mixing desk page and
-# announce_every seeds two switches there. A watcher pushing the file back
+# the two announce switches are switches there. A watcher pushing the file back
 # would throw away whatever the operator had just dialled in by ear, the
 # moment anything else saved the file. So the division is:
 #   the file     = the value at startup, and the value that survives a restart
@@ -57,12 +57,15 @@ def narrator_cfg() =
   try
     let json.parse ( c : {
       announce_every : float?,
+      announce_intro : bool?,
+      announce_outro : bool?,
       hold           : float?,
       ident          : string?
     } ) = file.contents(narrator_config)
     c
   catch _ do
-    { announce_every = null, hold = null, ident = null }
+    { announce_every = null, announce_intro = null, announce_outro = null,
+      hold = null, ident = null }
   end
 end
 
@@ -123,20 +126,29 @@ glide      = interactive.float("glide",
 # of them are on, and a 0-20 dial was a number pretending to be a choice. Off
 # is both off; "both" is both on.
 #
-# Seeded from narrator.json, which still carries the old announce_every: any
-# value above zero means the operator wanted the announcer, so both switches
-# come up on, and zero means both off. The file is not rewritten and no key is
-# added to it that nothing reads. As with every knob here, the file is the
-# value at startup and /interactive is the value right now.
+# Seeded from narrator.json, one key per switch, because they are two
+# independent choices and one number could not carry both: with only
+# announce_every, picking "at the end" on the dashboard came back as "both"
+# after a restart.
+#
+# Precedence, per switch: its own key if the file names it, otherwise the old
+# announce_every - above zero means the operator wanted the announcer, zero
+# means off - and otherwise on. So a file still holding only announce_every
+# behaves exactly as it did: 20 brings both switches up, 0 leaves both down.
+# A field that is absent, null or not a bool goes null on its own rather than
+# throwing the parse away, so the old key is what catches it.
+#
+# As with every knob here, the file is the value at startup and /interactive is
+# the value right now.
 announce_on    = (ncfg.announce_every ?? 1.0) > 0.0
 
 announce_intro = interactive.bool("announce_intro",
   description = "Say what is starting, over the top of the track.",
-  announce_on)
+  ncfg.announce_intro ?? announce_on)
 
 announce_outro = interactive.bool("announce_outro",
   description = "Say what just played, as the track ends.",
-  announce_on)
+  ncfg.announce_outro ?? announce_on)
 
 
 # The mixing desk: liquidsoap's own page for the knobs above, at
@@ -197,7 +209,10 @@ def current_file() =
   if null.defined(r) then request.filename(null.get(r)) else "" end
 end
 
-# Title and artist as they should be shown and said. Tags first - but about
+# Title and artist as they should be SHOWN. On screen only, never spoken - the
+# narrator's own words are built from tags alone, further down.
+#
+# Tags first - but about
 # one track in seven of this library has none, and for those the FILENAME is
 # the only description there is. Measured on a file the operator complained
 # about: seven metadata keys, not one of them title or artist, while its name
@@ -220,8 +235,8 @@ end
 # slash, which matters because these paths arrive mixed - the live station
 # reports "D:/Music\shuffled\Miles Davis - Bitches Brew - Bitches Brew.m4a".
 # The one thing it gets wrong is the empty path, where basename("") is "." -
-# hence the guard, which is also what leaves untagged_title and mystery below
-# their job as the last resort.
+# hence the guard, which is also what leaves untagged_title below its job as
+# the last resort.
 def track_name(title, artist, fpath) =
   t = string.trim(title)
   if t != "" then
@@ -490,9 +505,19 @@ end
 # out: `id` is a digest of it, which is all a browser needs to remember what it
 # has already liked, and it keeps the layout of D:/Music off the public
 # internet. Nothing playing is an empty id and a count of zero.
+#
+# `total` is every like the station has ever been given, for the public page to
+# show beside the listener count. Summed from the same in-memory map the count
+# comes from - never a second read of the ledger, which is the whole reason
+# that map exists - so it costs one pass over the DISTINCT liked paths, not
+# over the likes. Derived rather than kept in a counter of its own on purpose:
+# a running total is one more thing that can drift out of step with the map,
+# and there is nothing to gain, since bump() already walks the same list.
 def likes_state() =
   p = current_file()
-  { id = if p == "" then "" else string.digest(p) end, likes = like_count(p) }
+  { id    = if p == "" then "" else string.digest(p) end,
+    likes = like_count(p),
+    total = list.fold(fun (n, kv) -> n + snd(kv), 0, likes()) }
 end
 
 def like_endpoint(act) =
@@ -981,25 +1006,46 @@ last_track  = ref("")
 # not need to be told it is over.
 pending_outro = ref("")
 
+# TAGS ONLY, deliberately - no track_name, and so no filename. A filename is
+# something to look at, not something to read out: this library holds
+# "Piano Sonata No. 14 In C Sharp Minor (_Moonlight_), Op. 272", underscores
+# and all, and names truncated mid-word. Spoken, a guess that is wrong out loud
+# is worse than the station admitting it does not know - so an untagged track
+# gets `mystery`, the line the operator writes on the narrator dashboard. That
+# is what that setting was for.
+#
+# The display path is untouched: now_playing() and forward_meta below still go
+# through track_name, because on screen the filename really is the best thing
+# there is.
+# What the narrator calls a track with no title: the `ident` from
+# narrator.json, standing in as the NAME rather than as the whole sentence.
+#
+# That distinction is the difference between "You're listening to Please Tag Me
+# Song" and "You're listening to. this mystery song is yet to be tagged... we
+# hope you enjoyed...". A whole sentence can only ever fit one of the two
+# moments; a name fits both, which is what makes one setting enough.
+def spoken_name(m) =
+  t = string.trim(m["title"])
+  if t == "" then mystery else t end
+end
+
 def intro_words(m) =
-  n = track_name(m["title"], m["artist"], m["filename"])
-  if n.title == "" then
-    ""
-  elsif n.artist == "" then
-    "You're listening to #{n.title}."
+  n = spoken_name(m)
+  a = string.trim(m["artist"])
+  if a == "" then
+    "You're listening to #{n}."
   else
-    "You're listening to #{n.title}, by #{n.artist}."
+    "You're listening to #{n}, by #{a}."
   end
 end
 
 def outro_words(m) =
-  n = track_name(m["title"], m["artist"], m["filename"])
-  if n.title == "" then
-    mystery
-  elsif n.artist == "" then
-    "That was #{n.title}."
+  n = spoken_name(m)
+  a = string.trim(m["artist"])
+  if a == "" then
+    "That was #{n}."
   else
-    "That was #{n.title}, by #{n.artist}."
+    "That was #{n}, by #{a}."
   end
 end
 
