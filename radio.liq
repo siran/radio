@@ -157,10 +157,24 @@ announce_outro = interactive.bool("announce_outro",
 interactive.harbor(port = 8005)
 
 # The library. randomize + watch so new files appear without a restart.
+#
+# That watch is also what tells the search index further down to rebuild -
+# the index is a list of our own and liquidsoap knows nothing about it, so
+# without this it would go stale the moment anything was added. Only the
+# DEADLINE is set here; the rebuild is defined with the rest of the index,
+# which is far below because it needs track_name.
+#
+# A deadline rather than a rescan on the spot, because copying an album in
+# fires this once per file: each one pushes the moment back, so a folder of
+# twenty tracks costs one rebuild ten seconds after the last of them lands
+# rather than twenty rebuilds while they arrive.
+rescan_at = ref(0.0)
+
 music = playlist(
   id          = "library",
   mode        = "randomize",
   reload_mode = "watch",
+  on_reload   = fun (_) -> rescan_at := time() + 10.0,
   "D:/Music"
 )
 
@@ -342,6 +356,288 @@ end
 library.on_position(position = 2.0, remaining = true, synchronous = false,
   fun (_, _) -> if repeating() then again() end)
 
+# --- searching the library -------------------------------------------------
+# What is actually in D:/Music, so the console can ask for a track by name.
+#
+# The playlist cannot answer that, and its methods were checked rather than
+# assumed: `remaining_files` is only what is LEFT of the current round -
+# measured on this build, 1 of 3 files at startup and 4 of 5 just after a
+# reload - so it shrinks as the station plays and is never the library.
+# `length()` is the only whole-library number it has, and a count is not a
+# search. Hence an index of our own.
+#
+# In memory, and deliberately no database and no cache file: 1175 files, whose
+# paths, titles and artists together are a fraction of a megabyte.
+#
+# Every track is keyed by a digest of its path, exactly as /likes/now further
+# down is. The path NEVER leaves this process. A client that could name a file
+# could ask for any file on the disk that liquidsoap can read, and the speaker
+# credential is not meant to be that. It is the same digest /likes/now uses,
+# so a page holding both can tell that what is now playing is the track it
+# just queued.
+search_max = 50
+
+music_exts = ["mp3", "m4a", "aac", "mp4", "flac", "ogg", "oga", "opus",
+              "wav", "wma", "aiff"]
+
+# file.ls with recursive = true ignores `pattern` entirely and hands back
+# directories alongside files - the same trap the voice pickup documents - so
+# the extension filter is what keeps both out. It also yields MIXED
+# separators, forward slashes for the directory it was given and backslashes
+# below it, which costs nothing here because a path is matched as one
+# lowercased string and never split. There is no path.extension;
+# remove_extension is what exists, so a file ends in .mp3 exactly when
+# stem ^ ".mp3" is the name again. Lowercasing first is what makes one entry
+# per extension also cover .MP3 and .Mp3.
+def scan_paths() =
+  def is_music(f) =
+    fl   = string.case(lower = true, f)
+    stem = path.remove_extension(fl)
+    list.exists(fun (e) -> stem ^ ".#{e}" == fl, music_exts)
+  end
+  list.filter(is_music,
+    file.ls("D:/Music", absolute = true, sorted = true, recursive = true))
+end
+
+# Tags, and "" for a file that has none or cannot be read. file.metadata goes
+# out to ffmpeg and a damaged file throws - this library has several that do -
+# and one throw would cost the whole index. It has to be a function of its
+# own: `x = try ... end` does not parse, a try is only allowed where a
+# statement is.
+def read_tags(p) =
+  try
+    m = file.metadata(p)
+    (string.trim(m["title"]), string.trim(m["artist"]))
+  catch _ do
+    ("", "")
+  end
+end
+
+# One track. Its title and artist come from the tags when there are any and
+# from the FILENAME when there are not, which is the decision track_name above
+# already makes - so it is called here rather than repeated.
+#
+# That fallback carries more than it looks. Measured over the whole library:
+# 216 of 1175 files have no title, 216 have no artist, and 216 have neither -
+# the same files all three times, so tags here are all or nothing. For those
+# 216, better than one track in six, the path is the only description there
+# is.
+#
+# The lowercased copies are what search matches on. Held rather than computed
+# per query because a search runs on a harbor thread, and that thread holds
+# the same runtime lock the streaming thread needs; lowercasing three fields
+# of 1175 entries on every keystroke would be work done inside that lock for
+# nothing.
+#
+# `hay` is those same three fields joined, so that deciding whether a track
+# matches at all is ONE search of one string instead of three. Measured, and
+# the reason it is worth a field of its own: a pass over the library costs
+# 0.075 s per string searched, so three fields is 0.22 s of held lock per
+# query and one field is 0.075 s. Which of the three actually matched is then
+# worked out only for the fifty rows that are returned, where three searches
+# apiece is a few milliseconds.
+#
+# The newline between them is what stops a match running from the end of one
+# field into the start of the next.
+def entry(p, tagged) =
+  let (t, a) = if tagged then read_tags(p) else ("", "") end
+  n  = track_name(t, a, p)
+  lt = string.case(lower = true, n.title)
+  la = string.case(lower = true, n.artist)
+  lp = string.case(lower = true, p)
+  { id     = string.digest(p),
+    path   = p,
+    title  = n.title,
+    artist = n.artist,
+    lt     = lt,
+    la     = la,
+    lp     = lp,
+    hay    = "#{lt}\n#{la}\n#{lp}" }
+end
+
+library_index = ref([])
+
+# Building the index costs a walk of D:/Music and a tag read per file, and
+# those two are not the same kind of expensive. Measured on this build against
+# a station streaming to an output, as the worst gap between two consecutive
+# frames on the streaming thread:
+#
+#   idle                        0.13 s
+#   reading tags for all 1175   0.13 s  - no effect whatever, nothing logged
+#   five walks back to back     0.74 s  - one "we must catchup" per walk
+#
+# So it is file.ls that stalls the stream and NOT the tags, which is the
+# opposite of what the clock times suggest: the walk is 1.1 s and the tag pass
+# is 15 s on a cold cache, 1.2 s warm. Reading tags goes out to ffmpeg, which
+# lets go of the runtime lock while it waits on the disk; the recursive walk
+# holds that lock the whole way down. `fast = false` does not help - measured
+# at 0.74 s either way - because it moves a task between scheduler queues and
+# the lock is not a queue.
+#
+# That measurement, and not the clock, is what puts each half where it is:
+#
+#   the walk  runs HERE, at the top level, which is before any output exists
+#             and so before there is a stream to disturb. It costs about a
+#             second between a restart and the station coming back on air.
+#   the tags  run on a background thread just below, because they provably
+#             cost the stream nothing - so the station does not wait fifteen
+#             seconds for them, and search works from the first moment on
+#             filename and path, which is all the untagged 216 ever had.
+def index_paths() =
+  library_index := list.map(fun (p) -> entry(p, false), scan_paths())
+end
+
+def index_tags() =
+  library_index := list.map(fun (e) -> entry(e.path, true), library_index())
+end
+
+index_paths()
+log.important(label = "search",
+  "#{list.length(library_index())} tracks indexed by path")
+
+# Everything after this is driven by the playlist's own watch. `reload_mode =
+# "watch"` up at the top already notices a file appearing and its on_reload
+# sets rescan_at, so nothing here polls the disk: an idle library costs one
+# float comparison every five seconds, and a walk happens only when the
+# library really changed - which is exactly when the operator wants the new
+# track findable.
+#
+# on_reload takes no `synchronous` argument, unlike on_metadata and
+# on_position, so there is no way to ask liquidsoap to move it off whatever
+# thread reloads the playlist. Hence it does nothing but store a float, and
+# the work happens here instead, on a thread of our own. `fast = false` puts
+# this below request resolution, and on_error keeps a throw from killing the
+# thread in silence - a dead thread here is an index that quietly stops
+# updating with nothing on air to say so.
+#
+# A rescan rebuilds the whole index rather than diffing for what is new. The
+# walk has to happen either way and it is the only part that costs the stream
+# anything; working out which of 1175 paths are new would be upwards of a
+# million string comparisons held inside the very lock the walk is already the
+# problem for, to save tag reads that were measured to cost the stream
+# nothing. The cheap-looking option is the expensive one here.
+thread.run(every = 5.0, fast = false,
+  on_error = fun (_) -> log.important(label = "search", "rescan failed"),
+  fun () ->
+    if rescan_at() > 0.0 and time() >= rescan_at() then
+      rescan_at := 0.0
+      index_paths()
+      index_tags()
+      log.important(label = "search",
+        "rescanned: #{list.length(library_index())} tracks")
+    end)
+
+# The first tag pass. Runs once, after startup, off the streaming thread.
+thread.run(fast = false,
+  on_error = fun (_) -> log.important(label = "search", "tag pass failed"),
+  fun () -> begin
+    t0 = time()
+    index_tags()
+    log.important(label = "search",
+      "tags read for #{list.length(library_index())} tracks in #{time() - t0}s")
+  end)
+
+# Case-insensitive substring, against the title, the artist AND the path - the
+# whole path and not just the filename, because the folders carry the artist
+# and the album for the untagged sixth of the library. "soda stereo" finds the
+# track whether that is a tag, a folder name or part of a filename.
+#
+# Which of the three matched rides back with every hit, because otherwise the
+# operator cannot tell why a row is there: a query can match a folder name and
+# nothing that is visible in the row itself. Title first, then artist, then
+# path, so the answer names the most specific field that matched.
+#
+# Capped at 50 - a console mid-broadcast cannot show hundreds - and `total`
+# says how many there really were, so a query that is too broad reads as "50
+# of 213" rather than as the whole library arriving. An empty query matches
+# nothing rather than everything, which is what makes an empty search box
+# harmless.
+#
+# string.index and NOT string.contains, which is the obvious call and was
+# what this was first written with. Measured on this build over the 1175
+# entries: string.contains costs 1.21 s a pass, string.index 0.075 s -
+# sixteen times less for the same answer. That is not a micro-optimisation. A
+# search runs on a harbor thread, and that thread holds the runtime lock the
+# streaming thread needs, so with string.contains over three fields ONE query
+# stalled the stream for 2.8 s. It is 0.13 s now, flat, whether the query
+# matches 0 tracks or all 1175 - the cost is walking the list, not the hits.
+#
+# 0.13 s is a budget, not a free lunch, and it is the one thing a page calling
+# this has to respect: SEARCH ON A PAUSE IN TYPING, NEVER ON EVERY KEYSTROKE.
+# Measured: one search does not put the clock behind at all, eight back to
+# back log a single 0.37 s catchup, and forty leave it 4.3 s behind.
+#
+# A plain substring and deliberately not a regexp, which was the other way to
+# make it fast: the query is whatever the operator typed, and every bracket
+# and apostrophe in this library would have to be escaped before it could be
+# a pattern. There is nothing to escape for string.index.
+def has(needle, s) =
+  string.index(substring = needle, s) >= 0
+end
+
+def search(q) =
+  needle = string.case(lower = true, string.trim(q))
+  found =
+    if needle == "" then
+      []
+    else
+      list.filter(fun (e) -> has(needle, e.hay), library_index())
+    end
+  # Only ever asked about a row that already matched, so falling through to
+  # "path" is the answer and not a guess.
+  def matched_field(e) =
+    if has(needle, e.lt) then
+      "title"
+    elsif has(needle, e.la) then
+      "artist"
+    else
+      "path"
+    end
+  end
+  { query   = string.trim(q),
+    total   = list.length(found),
+    limit   = search_max,
+    results =
+      list.map(
+        fun (e) -> { id = e.id, title = e.title, artist = e.artist,
+                     match = matched_field(e) },
+        list.prefix(search_max, found)) }
+end
+
+# An id back to the path it stands for, and "" for anything else. This is the
+# only place an id becomes a filename, and it can only ever produce a file
+# that is already in the index.
+def path_of_id(tid) =
+  list.fold(
+    fun (found, e) -> if found == "" and e.id == tid then e.path else found end,
+    "", library_index())
+end
+
+# Put a track at the FRONT of the playlist's queue, by id. This is exactly
+# what again() above does, for the reason recorded there: library.add is the
+# obvious call and the wrong one, because it appends BEHIND whatever the
+# playlist has already prefetched and the track would land one late.
+#
+# ONE endpoint with a flag rather than two. Queueing a track next and jumping
+# to it now are the same act - this request, in front of the queue - differing
+# only in whether the current track is also cut short, which is the single
+# line that already separates again() from previous(). Two endpoints would
+# mean resolving the id and repeating the not-found case twice over.
+#
+# An id that is not in the index is not an error. It is a console that
+# searched before a rescan dropped the file, and answering 500 to that would
+# take a page down over nothing: it does nothing at all and reports the state
+# as it stands.
+def enqueue(tid, jump) =
+  p = path_of_id(tid)
+  if p != "" then
+    library.set_queue(list.add(request.create(p), library.queue()))
+    if jump then library.skip() end
+    how = if jump then "playing now" else "queued next" end
+    log.important(label = "control", "#{how}: #{p}")
+  end
+end
+
 # The HTTP surface. It rides on the harbor that is already up on 8005, the one
 # the mixing desk uses; caddy puts it behind the speaker credential. NOT 8000:
 # that is icecast's, and the collision takes the station off the air while
@@ -413,6 +709,22 @@ harbor.http.register(port = 8005, method = "POST", "/control/music",
   endpoint(fun (r) -> music_on := on_flag(r)))
 harbor.http.register(port = 8005, method = "POST", "/control/pause",
   endpoint(fun (r) -> paused := on_flag(r)))
+
+# Find a track, then queue it. The only two endpoints here that do not answer
+# with the state object: a search is a question about the library rather than
+# about what is on the air, so it has an answer of its own. Enqueue does
+# answer with the state, like everything else, so the console can act and
+# redraw from the one response.
+#
+# `now` rather than on_flag's `on`, and that is the one place this file has
+# two ways to read a flag. on_flag exists for switches, where the name of the
+# thing and its state are the whole meaning - music?on=false. Nothing here is
+# being switched on: `now` says WHEN the track lands, and enqueue?on=true
+# would say nothing a reader could follow.
+harbor.http.register(port = 8005, method = "GET", "/control/search",
+  fun (req, response) -> response.json(search(req.query["q"])))
+harbor.http.register(port = 8005, method = "POST", "/control/enqueue",
+  endpoint(fun (r) -> enqueue(r.query["id"], r.query["now"] == "true")))
 
 # --- likes -----------------------------------------------------------------
 # Public, and deliberately with no notion of who is listening: a like is one
