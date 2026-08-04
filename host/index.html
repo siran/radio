@@ -112,14 +112,13 @@
     <div class="err" id="err"></div>
   </div>
 
-  <div class="panel" id="gainpanel">
-    <label for="gain">Your voice volume &mdash; <span id="gainval">1</span>&times;</label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockgain" aria-pressed="true">&#128274;</button>
-      <input id="gain" type="range" min="0" max="12" step="0.5" value="1" disabled>
-    </div>
-    <details id="eqwrap">
-      <summary title="Seven bands in dB. 0 is flat.">Your voice EQ</summary>
+  <details class="panel" id="eqwrap" open>
+    <summary title="How loud you are, and what shape.">Your voice</summary>
+      <label for="gain">Volume &mdash; <span id="gainval">1</span>&times;</label>
+      <div class="ctl">
+        <button class="lock" type="button" id="lockgain" aria-pressed="true">&#128274;</button>
+        <input id="gain" type="range" min="0" max="12" step="0.5" value="1" disabled>
+      </div>
       <label for="eqf100"><span class="band">100 Hz</span> &mdash; rumble &mdash; <span id="eqf100val">0</span> dB</label>
       <div class="ctl">
         <button class="lock" type="button" id="lockeqf100" aria-pressed="true">&#128274;</button>
@@ -155,11 +154,10 @@
         <button class="lock" type="button" id="lockeqf6300" aria-pressed="true">&#128274;</button>
         <input id="eqf6300" type="range" min="-9" max="9" step="0.5" value="0" disabled>
       </div>
-    </details>
-    <div class="duckrow">
-      <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
-    </div>
-  </div>
+      <div class="duckrow">
+        <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
+      </div>
+  </details>
 
   <details class="panel" id="setup" hidden>
     <summary id="devlabel">Microphone</summary>
@@ -340,7 +338,14 @@
     // off because music could pass through it and they mangle music - here
     // there is nothing but speech.) AGC stays off so it does not fight the
     // compressor on the server.
-    const constraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: false };
+  // All three off on purpose. These are telephone algorithms: noiseSuppression
+  // spectrally subtracts anything it decides is not speech, which hollows out
+  // the low end and the tail of every word - the "box" sound - and
+  // echoCancellation adds its own filtering for a problem that does not exist
+  // when the mic and the speakers are different devices. A radio voice wants
+  // the room it was recorded in. Turn echoCancellation back on if you ever
+  // monitor out loud on the same device you talk into.
+  const constraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
     if (devId) constraints.deviceId = { exact: devId };
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
@@ -411,7 +416,12 @@
 
   // The whole point: an ordinary upload with a length, not a live stream.
   async function send(blob, mime, secs) {
-    if (blob.size < 1500 || secs < 0.4) return;   // silence between slices
+    // A slice is dropped only if it is genuinely empty - a stopped encoder or a
+    // dead device. It used to drop anything under 1500 bytes or 0.4s, which
+    // silently deleted every pause: the lead-in before you start talking, and
+    // the beat between sentences. That is why speech arrived with no room
+    // around it. Silence is part of the performance.
+    if (blob.size < 200 || secs < 0.05) return;
 
     // Name carries the order: liquidsoap lists the folder sorted, so slices
     // play in the order they were spoken even if one arrives late.
