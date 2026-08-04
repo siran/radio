@@ -135,6 +135,8 @@
     border: 0; padding: 0; font: inherit; font-size: .72rem; cursor: pointer; }
   footer a:hover, footer .flink:hover { color: var(--fg); }
   footer .sep { color: var(--line); }
+  /* the bitrate: plumbing, so it sits down here with the rest of the plumbing */
+  footer .quality { color: var(--dim); }
 
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -176,7 +178,7 @@
       <div class="meta">
         <div>listeners <b id="listeners">–</b></div>
         <div>on air <b id="uptime">–</b></div>
-        <div>quality <b id="bitrate">–</b></div>
+        <div id="likesWrap" hidden>total likes <b id="likesTotal">–</b></div>
       </div>
     </div>
 
@@ -222,6 +224,8 @@
 
   <footer>
     <a href="/stream" title="open the raw stream in VLC or any audio player">stream</a>
+    <span class="sep">&middot;</span>
+    <span class="quality" id="bitrate" title="stream quality">&ndash;</span>
     <span class="sep">·</span>
     <button class="flink" id="share">copy link</button>
     <span class="sep">·</span>
@@ -706,7 +710,18 @@
   try { liked = JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { liked = []; }
   let likeId = '';
 
+  // The station-wide total, served alongside the per-song count. Until a
+  // response actually carries the field the slot stays out of the row
+  // entirely - a zero, or a dash, would each read as an answer.
+  function showTotal(j) {
+    const t = j && j.total;
+    if (t === undefined || t === null) return;
+    $('likesTotal').textContent = t;
+    $('likesWrap').hidden = false;
+  }
+
   function showLikes(j) {
+    showTotal(j);
     likeId = (j && j.id) || '';
     if (!likeId) { $('likerow').hidden = true; return; }
     const mine = liked.includes(likeId);
