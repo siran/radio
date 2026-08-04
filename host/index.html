@@ -84,24 +84,21 @@
   .hint { font-size:12px; color:var(--dim); margin:10px 0; }
   code { background:#101013; border:1px solid var(--line); border-radius:4px;
          padding:1px 5px; font-size:11px; color:var(--fg); }
-  /* liquidsoap's own page is light; keep it readable rather than restyling it.
-     The height on all three frames below is only where they start: fitFrame()
-     grows each one to whatever is inside it, so nothing scrolls in a frame of
-     its own. */
-  #desk { width:100%; height:420px; border:1px solid var(--line);
-          border-radius:8px; background:#fff; margin-top:6px; }
-
   /* the narrator's own page, framed rather than copied for the same reason
-     the station is below: one of it to keep working. */
+     the station is below: one of it to keep working. The height on both
+     frames below is only where they start: fitFrame() grows each one to
+     whatever is inside it, so nothing scrolls in a frame of its own. */
   #narrator { display:block; width:100%; height:420px;
               border:1px solid var(--line); border-radius:8px;
               background:var(--bg); margin-top:6px; }
 
   /* seven bands is a lot of page for something that is set once and then
-     forgotten, so it folds away and stays folded. */
+     forgotten, so it folds away and stays folded. The mixing desk is a stack
+     of the same thing - a named slider with a lock - so it shares these two
+     rules rather than restating them. */
   #eqwrap { margin:0 0 12px; }
-  #eqwrap > label { margin-top:12px; }
-  #eqwrap .band { color:var(--fg); }
+  #eqwrap > label, #deskwrap > label { margin-top:12px; }
+  #eqwrap .band, #deskwrap .band { color:var(--fg); }
 
   /* the station itself, so a host never has to leave this page to see what
      is going on on it. Its fold sits outside .wrap so it spans the whole
@@ -199,13 +196,62 @@
 
   <details class="panel" id="deskwrap">
     <summary>Mixing desk &mdash; tune while you talk</summary>
-    <div class="hint">
-      <code>voice_gain</code> if you are too quiet &middot;
-      <code>duck_to</code> for how far the music dips &middot;
-      <code>hold</code> for how long it stays down.
-      Changes apply immediately, on air.
+    <div class="hint">Liquidsoap's own knobs, drawn here so each one can say
+      what it does and carry the same lock as every other slider on this page.
+      Each lands on the air the moment you let go of it and stays there, for
+      everyone, until it is moved again. The values are read when this fold is
+      opened.</div>
+    <label for="mic_gain"><span class="band">Live mic</span> &mdash; the microphone in the room; raise it if it sounds far away &mdash; <span id="mic_gainval">3.5&times;</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
+      <input id="mic_gain" type="range" min="0" max="4" step="0.1" value="3.5" disabled>
     </div>
-    <iframe id="desk" title="mixing desk"></iframe>
+    <label for="voice_gain"><span class="band">Voice notes</span> &mdash; how loud uploaded notes play, unless a speaker set their own volume above &mdash; <span id="voice_gainval">12&times;</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockvoice_gain" aria-pressed="true">&#128274;</button>
+      <input id="voice_gain" type="range" min="0" max="12" step="0.25" value="12" disabled>
+    </div>
+    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; cuts rumble below this; above 250 Hz it starts taking the body out of a voice &mdash; <span id="hp_freqval">295 Hz</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockhp_freq" aria-pressed="true">&#128274;</button>
+      <input id="hp_freq" type="range" min="40" max="300" step="5" value="295" disabled>
+    </div>
+    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level above which a voice starts being held back; lower evens out more &mdash; <span id="comp_thrval">-29 dB</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcomp_thr" aria-pressed="true">&#128274;</button>
+      <input id="comp_thr" type="range" min="-40" max="0" step="1" value="-29" disabled>
+    </div>
+    <label for="comp_ratio"><span class="band">Compressor amount</span> &mdash; 1 is off, 4 is normal speech, 10 and up is squashed &mdash; <span id="comp_ratioval">3.5:1</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcomp_ratio" aria-pressed="true">&#128274;</button>
+      <input id="comp_ratio" type="range" min="1" max="20" step="0.5" value="3.5" disabled>
+    </div>
+    <label for="comp_gain"><span class="band">Volume after the compressor</span> &mdash; the one to raise if a voice is still too quiet &mdash; <span id="comp_gainval">17.5 dB</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
+      <input id="comp_gain" type="range" min="0" max="24" step="0.5" value="17.5" disabled>
+    </div>
+    <label for="duck_to"><span class="band">Music under a voice</span> &mdash; 1.0 leaves it untouched, 0.0 is silent &mdash; <span id="duck_toval">0.45&times;</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockduck_to" aria-pressed="true">&#128274;</button>
+      <input id="duck_to" type="range" min="0" max="1" step="0.05" value="0.45" disabled>
+    </div>
+    <label for="hold"><span class="band">Music stays down for</span> &mdash; real seconds of quiet before the music comes back up &mdash; <span id="holdval">3 s</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockhold" aria-pressed="true">&#128274;</button>
+      <input id="hold" type="range" min="0" max="30" step="0.5" value="3" disabled>
+    </div>
+    <label for="glide"><span class="band">Fader speed</span> &mdash; how fast the music fader moves; smaller is slower and smoother &mdash; <span id="glideval">0.01</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
+      <input id="glide" type="range" min="0.01" max="0.5" step="0.01" value="0.01" disabled>
+    </div>
+    <label for="announce_every"><span class="band">Narrator speaks</span> &mdash; on every Nth track; 1 is every one, 0 is never &mdash; N = <span id="announce_everyval">1</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockannounce_every" aria-pressed="true">&#128274;</button>
+      <input id="announce_every" type="range" min="0" max="20" step="1" value="1" disabled>
+    </div>
+    <div class="err" id="derr"></div>
   </details>
 
   <details class="panel" id="narwrap">
@@ -438,43 +484,70 @@
     }
   }
 
-  // Load the desk only when the panel is opened. It sits behind the same
-  // password, so loading it eagerly would pop an auth prompt on arrival.
-  $('deskwrap').addEventListener('toggle', () => {
-    const f = $('desk');
-    if ($('deskwrap').open && !f.src) {
-      f.addEventListener('load', styleDesk);
-      f.src = '/interactive';
-    }
-  });
+  // The mixing desk. These are liquidsoap's own interactive values, drawn as
+  // our own sliders instead of framing liquidsoap's page: that is what lets
+  // each one have a plain-language label, a range that suits it, and the same
+  // lock as every other slider here. Reading is GET /control/knobs, which
+  // answers [[name, value], ...]; writing is liquidsoap's own POST /interactive
+  // with a body of name=value - the very request its page makes - so there is
+  // one way to set these and it is liquidsoap's, not a second one of ours.
+  //
+  // The element id IS the variable's name, exactly as the EQ's ids are its
+  // centre frequencies, so this list is the only place the names appear and
+  // nothing can drift out of step with liquidsoap. What a knob is counted in
+  // is here; how far it may go is on the input itself.
+  const KNOBS = { mic_gain: '\u00d7', voice_gain: '\u00d7', hp_freq: ' Hz',
+                  comp_thr: ' dB', comp_ratio: ':1', comp_gain: ' dB',
+                  duck_to: '\u00d7', hold: ' s', glide: '',
+                  announce_every: '' };
+  const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k]; };
 
-  // Liquidsoap's page crams a long description onto one line beside a slider.
-  // It is same-origin, so we can make it readable without forking it: labels
-  // go above their control and wrap, and the descriptions get room.
-  function styleDesk() {
+  async function loadKnobs() {
     try {
-      const d = $('desk').contentDocument;
-      if (!d) return;
-      const css = d.createElement('style');
-      css.textContent = `
-        body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI",
-               system-ui, sans-serif; margin: 12px; color: #16161a; }
-        h1 { font-size: 15px; margin: 0 0 12px; text-align: left; }
-        form { display: block !important; width: auto !important;
-               background: #f4f4f6; border-radius: 12px; padding: 14px; }
-        label { display: block !important; text-align: left !important;
-                white-space: normal !important; overflow-wrap: anywhere;
-                margin: 16px 0 4px; font-weight: 600; font-size: 13px; }
-        label:first-of-type { margin-top: 0; }
-        input { width: 100% !important; box-sizing: border-box; }
-        input[type=range] { margin: 2px 0 0; }
-      `;
-      d.head.appendChild(css);
-    } catch {}
+      const res = await fetch('/control/knobs',
+        { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      for (const [k, v] of await res.json()) {
+        if (!(k in KNOBS)) continue;   // liquidsoap may know knobs we do not draw
+        $(k).value = v;
+        showKnob(k);
+      }
+      $('derr').textContent = '';
+    } catch (e) { $('derr').textContent = 'Mixing desk: ' + e.message; }
   }
 
-  // Same lazy load as the desk, and for the same reason - it is behind the
-  // password too. It sits on a path of its own rather than under /host/, so
+  // Same two-step as the volume and the EQ: dragging only redraws the number,
+  // and the value is sent on release. These reach the air the instant they
+  // arrive, so one POST per pixel would be one audible change per pixel.
+  async function setKnob(k) {
+    const v = $(k).value;
+    try {
+      const res = await fetch('/interactive', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: k + '=' + encodeURIComponent(v)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      $('derr').textContent = '';
+      setStatus(recording ? 'on air' : k + ' set to ' + v);
+    } catch (e) { $('derr').textContent = 'Mixing desk: ' + e.message; }
+  }
+
+  for (const k in KNOBS) {
+    $(k).addEventListener('input', () => showKnob(k));
+    $(k).addEventListener('change', () => setKnob(k));
+  }
+
+  // Read them when the fold is opened rather than on arrival: that is when
+  // someone is about to look, and it is also when they are most likely stale -
+  // another host, or liquidsoap's own page, may have moved one since.
+  $('deskwrap').addEventListener('toggle', () => {
+    if ($('deskwrap').open) loadKnobs();
+  });
+
+  // Lazy like the desk above, though for a reason of its own: it is a whole
+  // page behind the password, so loading it eagerly would pop an auth prompt
+  // on arrival. It sits on a path of its own rather than under /host/, so
   // the browser may ask for the credential once more when the fold is first
   // opened; the realm is the same, so it is asked once and not again.
   $('narwrap').addEventListener('toggle', () => {
@@ -491,7 +564,7 @@
   });
 
   // A frame with a fixed height scrolls inside itself, which on a phone means
-  // two scrollbars and never the one you meant. All three of these are
+  // two scrollbars and never the one you meant. Both of these are
   // same-origin, so the height of the page inside can simply be read and the
   // frame grown to it. offsetHeight - clientHeight is the frame's own border:
   // without it every pass would come up that much short and the observer would
@@ -510,7 +583,6 @@
       try { new ResizeObserver(fit).observe(f.contentDocument.documentElement); } catch {}
     });
   }
-  fitFrame($('desk'));
   fitFrame($('narrator'));
   fitFrame($('station'));
 
@@ -685,6 +757,7 @@
   }
   lockable('gain');
   for (const b of BANDS) lockable('eq' + b);
+  for (const k in KNOBS) lockable(k);
 
   // Liquidsoap polls this folder, so the setting IS the button: it lands on air
   // within a quarter second and there is nothing else to tell.
