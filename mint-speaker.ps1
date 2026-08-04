@@ -78,7 +78,7 @@ if (-not $Remove) {
     Write-Output ''
     Write-Output '--- send them this ---------------------------------------'
     Write-Output ''
-    Write-Output '  https://radio.wildnloyal.org/talk/'
+    Write-Output '  https://radio.wildnloyal.org/host/'
     Write-Output ''
     Write-Output ("  user      $clean")
     Write-Output ("  password  $Password")
