@@ -81,7 +81,6 @@
   summary { cursor:pointer; font-size:12px; color:var(--dim);
             text-transform:uppercase; letter-spacing:.06em; }
   summary::marker { color:var(--line); }
-  .hint { font-size:12px; color:var(--dim); margin:10px 0; }
   code { background:#101013; border:1px solid var(--line); border-radius:4px;
          padding:1px 5px; font-size:11px; color:var(--fg); }
   /* the narrator's own page, framed rather than copied for the same reason
@@ -126,13 +125,10 @@
     <label for="gain">Your voice volume &mdash; <span id="gainval">1</span>&times;</label>
     <div class="ctl">
       <button class="lock" type="button" id="lockgain" aria-pressed="true">&#128274;</button>
-      <input id="gain" type="range" min="0.5" max="12" step="0.5" value="1" disabled>
+      <input id="gain" type="range" min="0" max="12" step="0.5" value="1" disabled>
     </div>
     <details id="eqwrap">
-      <summary>Your voice EQ &mdash; set it once</summary>
-      <div class="hint">Seven bands, in dB. 0 is flat, and all seven at 0 is
-        exactly the voice as it arrived. The low ones are weight and rumble,
-        the middle is boxiness, the top is clarity and air.</div>
+      <summary title="Seven bands in dB. 0 is flat.">Your voice EQ</summary>
       <label for="eqf100"><span class="band">100 Hz</span> &mdash; rumble &mdash; <span id="eqf100val">0</span> dB</label>
       <div class="ctl">
         <button class="lock" type="button" id="lockeqf100" aria-pressed="true">&#128274;</button>
@@ -195,81 +191,64 @@
   </details>
 
   <details class="panel" id="deskwrap">
-    <summary>Mixing desk &mdash; tune while you talk</summary>
-    <div class="hint">Liquidsoap's own knobs, drawn here so each one can say
-      what it does and carry the same lock as every other slider on this page.
-      Each lands on the air the moment you let go of it and stays there, for
-      everyone, until it is moved again. The values are read when this fold is
-      opened.</div>
-    <label for="mic_gain"><span class="band">Live mic</span> &mdash; the microphone in the room; raise it if it sounds far away &mdash; <span id="mic_gainval">3.5&times;</span></label>
+    <summary title="Liquidsoap's live knobs. Read when this fold is opened.">Mixing desk</summary>
+    <label for="mic_gain"><span class="band">Live mic</span> &mdash; <span id="mic_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
-      <input id="mic_gain" type="range" min="0" max="4" step="0.1" value="3.5" disabled>
+      <input id="mic_gain" type="range" disabled>
     </div>
-    <label for="voice_gain"><span class="band">Voice notes</span> &mdash; how loud uploaded notes play, unless a speaker set their own volume above &mdash; <span id="voice_gainval">12&times;</span></label>
+    <label for="voice_gain" title="Only reaches the air for a speaker with no settings of their own. Your voice volume, above, overrides it for your own notes."><span class="band">Voice notes</span> &mdash; default for speakers with no volume of their own &mdash; <span id="voice_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockvoice_gain" aria-pressed="true">&#128274;</button>
-      <input id="voice_gain" type="range" min="0" max="12" step="0.25" value="12" disabled>
+      <input id="voice_gain" type="range" disabled>
     </div>
-    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; cuts rumble below this; above 250 Hz it starts taking the body out of a voice &mdash; <span id="hp_freqval">295 Hz</span></label>
+    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; <span id="hp_freqval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockhp_freq" aria-pressed="true">&#128274;</button>
-      <input id="hp_freq" type="range" min="40" max="300" step="5" value="295" disabled>
+      <input id="hp_freq" type="range" disabled>
     </div>
-    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level above which a voice starts being held back; lower evens out more &mdash; <span id="comp_thrval">-29 dB</span></label>
+    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; <span id="comp_thrval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_thr" aria-pressed="true">&#128274;</button>
-      <input id="comp_thr" type="range" min="-40" max="0" step="1" value="-29" disabled>
+      <input id="comp_thr" type="range" disabled>
     </div>
-    <label for="comp_ratio"><span class="band">Compressor amount</span> &mdash; 1 is off, 4 is normal speech, 10 and up is squashed &mdash; <span id="comp_ratioval">3.5:1</span></label>
+    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; <span id="comp_ratioval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_ratio" aria-pressed="true">&#128274;</button>
-      <input id="comp_ratio" type="range" min="1" max="20" step="0.5" value="3.5" disabled>
+      <input id="comp_ratio" type="range" disabled>
     </div>
-    <label for="comp_gain"><span class="band">Volume after the compressor</span> &mdash; the one to raise if a voice is still too quiet &mdash; <span id="comp_gainval">17.5 dB</span></label>
+    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; <span id="comp_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
-      <input id="comp_gain" type="range" min="0" max="24" step="0.5" value="17.5" disabled>
+      <input id="comp_gain" type="range" disabled>
     </div>
-    <label for="duck_to"><span class="band">Music under a voice</span> &mdash; 1.0 leaves it untouched, 0.0 is silent &mdash; <span id="duck_toval">0.45&times;</span></label>
+    <label for="duck_to"><span class="band">Music under a voice</span> &mdash; <span id="duck_toval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockduck_to" aria-pressed="true">&#128274;</button>
-      <input id="duck_to" type="range" min="0" max="1" step="0.05" value="0.45" disabled>
+      <input id="duck_to" type="range" disabled>
     </div>
-    <label for="hold"><span class="band">Music stays down for</span> &mdash; real seconds of quiet before the music comes back up &mdash; <span id="holdval">3 s</span></label>
+    <label for="hold"><span class="band">Music hold</span> &mdash; <span id="holdval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockhold" aria-pressed="true">&#128274;</button>
-      <input id="hold" type="range" min="0" max="30" step="0.5" value="3" disabled>
+      <input id="hold" type="range" disabled>
     </div>
-    <label for="glide"><span class="band">Fader speed</span> &mdash; how fast the music fader moves; smaller is slower and smoother &mdash; <span id="glideval">0.01</span></label>
+    <label for="glide"><span class="band">Fader speed</span> &mdash; <span id="glideval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
-      <input id="glide" type="range" min="0.01" max="0.5" step="0.01" value="0.01" disabled>
-    </div>
-    <label for="announce_every"><span class="band">Narrator speaks</span> &mdash; on every Nth track; 1 is every one, 0 is never &mdash; N = <span id="announce_everyval">1</span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockannounce_every" aria-pressed="true">&#128274;</button>
-      <input id="announce_every" type="range" min="0" max="20" step="1" value="1" disabled>
+      <input id="glide" type="range" disabled>
     </div>
     <div class="err" id="derr"></div>
   </details>
 
   <details class="panel" id="narwrap">
-    <summary>The narrator &mdash; the voice between the tracks</summary>
-    <div class="hint">Which voice speaks, how fast, how often, and how it says a
-      name it keeps getting wrong. One setting for the whole station rather
-      than one per host, and set once rather than while you talk &mdash; so it
-      folds away like the EQ.</div>
+    <summary title="Which voice speaks, how fast, how often, and how it says a name it keeps getting wrong. One setting for the whole station.">The narrator</summary>
     <iframe id="narrator" title="narrator"></iframe>
   </details>
 
 </div>
 
 <details class="panel" id="stationwrap">
-  <summary>The station</summary>
-  <div class="hint">The page itself, not a copy of it &mdash; the same chat,
-    the same comments, the same likes, live. Framed rather than duplicated so
-    there is only ever one of it to keep working.</div>
+  <summary title="The station page itself, live - the same chat, comments and likes.">The station</summary>
   <iframe id="station" title="wild n loyal radio"></iframe>
 </details>
 
@@ -486,21 +465,36 @@
 
   // The mixing desk. These are liquidsoap's own interactive values, drawn as
   // our own sliders instead of framing liquidsoap's page: that is what lets
-  // each one have a plain-language label, a range that suits it, and the same
-  // lock as every other slider here. Reading is GET /control/knobs, which
+  // each one have a plain-language label and the same lock as every other
+  // slider here. The range is liquidsoap's own, unchanged - see the table
+  // below. Reading is GET /control/knobs, which
   // answers [[name, value], ...]; writing is liquidsoap's own POST /interactive
   // with a body of name=value - the very request its page makes - so there is
   // one way to set these and it is liquidsoap's, not a second one of ours.
   //
   // The element id IS the variable's name, exactly as the EQ's ids are its
   // centre frequencies, so this list is the only place the names appear and
-  // nothing can drift out of step with liquidsoap. What a knob is counted in
-  // is here; how far it may go is on the input itself.
-  const KNOBS = { mic_gain: '\u00d7', voice_gain: '\u00d7', hp_freq: ' Hz',
-                  comp_thr: ' dB', comp_ratio: ':1', comp_gain: ' dB',
-                  duck_to: '\u00d7', hold: ' s', glide: '',
-                  announce_every: '' };
-  const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k]; };
+  // nothing can drift out of step with liquidsoap.
+  //
+  // ONE table, and the sliders below are built from it - min, max and step are
+  // not repeated on the markup. Every number here is transcribed from the
+  // interactive.float declarations in radio.liq and is liquidsoap's own, not a
+  // range of ours: nothing is narrowed, and `val` is only what the slider shows
+  // before the first read. GET /control/knobs answers [[name, value], ...] and
+  // carries no bounds, so until it does, this is where they live. If it ever
+  // carries min/max/step, delete these four fields and read them instead.
+  const KNOBS = {
+    mic_gain:   { unit: '\u00d7', min: 0,    max: 4,   step: 0.1,  val: 3.5  },
+    voice_gain: { unit: '\u00d7', min: 0,    max: 12,  step: 0.25, val: 12   },
+    hp_freq:    { unit: ' Hz',    min: 40,   max: 300, step: 5,    val: 295  },
+    comp_thr:   { unit: ' dB',    min: -40,  max: 0,   step: 1,    val: -29  },
+    comp_ratio: { unit: ':1',     min: 1,    max: 20,  step: 0.5,  val: 3.5  },
+    comp_gain:  { unit: ' dB',    min: 0,    max: 24,  step: 0.5,  val: 17.5 },
+    duck_to:    { unit: '\u00d7', min: 0,    max: 1,   step: 0.05, val: 0.45 },
+    hold:       { unit: ' s',     min: 0,    max: 30,  step: 0.5,  val: 3    },
+    glide:      { unit: '',       min: 0.01, max: 0.5, step: 0.01, val: 0.01 }
+  };
+  const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k].unit; };
 
   async function loadKnobs() {
     try {
@@ -534,8 +528,14 @@
   }
 
   for (const k in KNOBS) {
-    $(k).addEventListener('input', () => showKnob(k));
-    $(k).addEventListener('change', () => setKnob(k));
+    const s = $(k), d = KNOBS[k];
+    // Order matters: a range input clamps and rounds its value against
+    // whatever min/max/step it holds at the time, so set those before the
+    // value or a default such as 3.5 arrives rounded to 4.
+    s.min = d.min; s.max = d.max; s.step = d.step; s.value = d.val;
+    showKnob(k);
+    s.addEventListener('input', () => showKnob(k));
+    s.addEventListener('change', () => setKnob(k));
   }
 
   // Read them when the fold is opened rather than on arrival: that is when
@@ -736,12 +736,10 @@
     });
   }
   // Every slider above is on the air, and a thumb brushing the page used to be
-  // enough to move one. So each is disabled until its own lock is tapped, and
-  // locks itself again the moment the value is let go: at any moment when
-  // nobody is deliberately adjusting something, nothing can be moved by
-  // accident. Re-locking on a timer instead would leave open exactly the
-  // window this exists to close, and re-locking on release costs one tap for
-  // one change - which is what a lock is for.
+  // enough to move one. So each is disabled until its own lock is tapped. The
+  // lock is the host's, not the page's: once open it stays open until the same
+  // button is tapped again, so a run of adjustments costs one tap and not one
+  // tap per move.
   function lockable(id) {
     const input = $(id), btn = $('lock' + id);
     const set = open => {
@@ -752,7 +750,6 @@
       btn.setAttribute('aria-label', btn.title);
     };
     btn.addEventListener('click', () => set(input.disabled));
-    input.addEventListener('change', () => set(false));
     set(false);
   }
   lockable('gain');

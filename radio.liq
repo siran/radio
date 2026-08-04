@@ -28,8 +28,8 @@ settings.server.telnet.port      := 1234
 #
 # Read ONCE, at startup, and that is deliberate. file.watch exists on this
 # build and is NOT used here, because all three of these are ALSO tunable
-# while the station is on the air - two of them are interactive.float knobs
-# on the mixing desk page. A watcher pushing the file back into those knobs
+# while the station is on the air - hold is a dial on the mixing desk page and
+# announce_every seeds two switches there. A watcher pushing the file back
 # would throw away whatever the operator had just dialled in by ear, the
 # moment anything else saved the file. So the division is:
 #   the file     = the value at startup, and the value that survives a restart
@@ -118,11 +118,25 @@ glide      = interactive.float("glide",
   unit = "", min = 0.01, max = 0.5, step = 0.01, 0.01)
 
 # the announcer
-# Starting value from narrator.json; the dial is live, the file is what comes
-# back after a restart.
-announce_every = interactive.float("announce_every",
-  description = "Speak on every Nth track: over its intro, and again as it ends. 1 = every one, 0 = never.",
-  unit = "tracks", min = 0.0, max = 20.0, step = 1.0, (ncfg.announce_every ?? 1.0))
+# Two switches, not a count. There are exactly two moments a host can speak at
+# - over the start of a track, and as one ends - so this is a choice of which
+# of them are on, and a 0-20 dial was a number pretending to be a choice. Off
+# is both off; "both" is both on.
+#
+# Seeded from narrator.json, which still carries the old announce_every: any
+# value above zero means the operator wanted the announcer, so both switches
+# come up on, and zero means both off. The file is not rewritten and no key is
+# added to it that nothing reads. As with every knob here, the file is the
+# value at startup and /interactive is the value right now.
+announce_on    = (ncfg.announce_every ?? 1.0) > 0.0
+
+announce_intro = interactive.bool("announce_intro",
+  description = "Say what is starting, over the top of the track.",
+  announce_on)
+
+announce_outro = interactive.bool("announce_outro",
+  description = "Say what just played, as the track ends.",
+  announce_on)
 
 
 # The mixing desk: liquidsoap's own page for the knobs above, at
@@ -183,12 +197,58 @@ def current_file() =
   if null.defined(r) then request.filename(null.get(r)) else "" end
 end
 
+# Title and artist as they should be shown and said. Tags first - but about
+# one track in seven of this library has none, and for those the FILENAME is
+# the only description there is. Measured on a file the operator complained
+# about: seven metadata keys, not one of them title or artist, while its name
+# read "Bob Marley Vs. Lee Scratch Perry - The Best Of The Upsetter Years -
+# Try Me". Saying "live" over that is throwing away what we already know.
+#
+# The rule: strip the directory and the extension, then split on " - " - space
+# hyphen space. Two or more fields means the FIRST is the artist and the LAST
+# is the title. That is this library's "Artist - Album - Title", and it reads
+# the four-field ones right too ("Foreign Beggars - The Harder They Fall - EP
+# - Still Getting It"). Anything else is one title and no artist, which is
+# what "07. I Want To Be The President" deserves.
+#
+# The separator is the spaced hyphen and not a bare one, because a bare hyphen
+# is part of a name at least as often as it is a separator: El-P, B-Sides,
+# Class X-. string.split takes a REGEX, and " - " happens to be its own regex -
+# no metacharacter in it.
+#
+# Measured rather than assumed: path.basename cuts at a BACKSLASH as well as a
+# slash, which matters because these paths arrive mixed - the live station
+# reports "D:/Music\shuffled\Miles Davis - Bitches Brew - Bitches Brew.m4a".
+# The one thing it gets wrong is the empty path, where basename("") is "." -
+# hence the guard, which is also what leaves untagged_title and mystery below
+# their job as the last resort.
+def track_name(title, artist, fpath) =
+  t = string.trim(title)
+  if t != "" then
+    { title = t, artist = string.trim(artist) }
+  elsif fpath == "" then
+    { title = "", artist = "" }
+  else
+    stem  = path.basename(path.remove_extension(fpath))
+    parts = string.split(separator = " - ", stem)
+    n     = list.length(parts)
+    if n >= 2 then
+      { title  = list.nth(default = stem, parts, n - 1),
+        artist = list.nth(default = "", parts, 0) }
+    else
+      { title = stem, artist = "" }
+    end
+  end
+end
+
 def now_playing() =
   m = library.last_metadata() ?? []
+  p = current_file()
+  n = track_name(m["title"], m["artist"], p)
   {
-    path   = current_file(),
-    title  = m["title"],
-    artist = m["artist"],
+    path   = p,
+    title  = n.title,
+    artist = n.artist,
     music  = music_on(),
     paused = paused(),
     repeat = repeating()
@@ -315,7 +375,13 @@ def knobs() =
     ("duck_to",        duck_to()),
     ("hold",           hold()),
     ("glide",          glide()),
-    ("announce_every", announce_every())
+    # The two switches ride in the same (string * float) shape as everything
+    # else - 1.0 for on, 0.0 for off - rather than giving this endpoint a
+    # second response type for two values. The console renders a checkbox for
+    # them because it knows their names, and POST /interactive is unaffected:
+    # that takes name=value as text and parses "true"/"false" for a bool.
+    ("announce_intro", if announce_intro() then 1.0 else 0.0 end),
+    ("announce_outro", if announce_outro() then 1.0 else 0.0 end)
   ]
 end
 
@@ -900,10 +966,9 @@ untagged_title = "live"
 # chunk ever arrives without a rid.
 last_track  = ref("")
 
-# Boundaries counted against announce_every, and the sentence waiting to be
-# said as the current track ends.
+# The sentence waiting to be said as the current track ends.
 #
-# The outro sentence is built at the BOUNDARY and held, not read from the
+# It is built at the BOUNDARY and held, not read from the
 # library when the timer fires. Reading it late looks obviously right and is
 # wrong: last_metadata is whatever is most recent, so once a boundary has
 # passed it already describes the NEXT track, and the station announces "that
@@ -914,30 +979,27 @@ last_track  = ref("")
 # its own timer, so its sentence is overwritten at the next boundary and never
 # spoken - which is what you want, because you cut it off on purpose and do
 # not need to be told it is over.
-since_said    = ref(0)
 pending_outro = ref("")
 
 def intro_words(m) =
-  title  = string.trim(m["title"])
-  artist = string.trim(m["artist"])
-  if title == "" then
+  n = track_name(m["title"], m["artist"], m["filename"])
+  if n.title == "" then
     ""
-  elsif artist == "" then
-    "You're listening to #{title}."
+  elsif n.artist == "" then
+    "You're listening to #{n.title}."
   else
-    "You're listening to #{title}, by #{artist}."
+    "You're listening to #{n.title}, by #{n.artist}."
   end
 end
 
 def outro_words(m) =
-  title  = string.trim(m["title"])
-  artist = string.trim(m["artist"])
-  if title == "" then
+  n = track_name(m["title"], m["artist"], m["filename"])
+  if n.title == "" then
     mystery
-  elsif artist == "" then
-    "That was #{title}."
+  elsif n.artist == "" then
+    "That was #{n.title}."
   else
-    "That was #{title}, by #{artist}."
+    "That was #{n.title}, by #{n.artist}."
   end
 end
 
@@ -988,25 +1050,18 @@ def say(words) =
   end
 end
 
-# One new request is one track boundary: speak over the intro, and remember
-# whether this track is a spoken one so its outro matches.
+# One new request is one track boundary: speak over the start if that switch
+# is on, and leave the outro ready if that one is. Each switch is read at the
+# boundary, so turning one off mid-track still cancels the line it was going
+# to say about that track.
 def announce(m) =
   req = string.concat(separator = "|", [m["rid"], m["filename"]])
   if req != last_track() then
-    last_track := req
-    every      = int_of_float(announce_every())
-    if every <= 0 then
-      pending_outro := ""
-    else
-      since_said := since_said() + 1
-      if since_said() >= every then
-        since_said    := 0
-        pending_outro := outro_words(m)
-        w = intro_words(m)
-        if w != "" then say(w) end
-      else
-        pending_outro := ""
-      end
+    last_track    := req
+    pending_outro := if announce_outro() then outro_words(m) else "" end
+    if announce_intro() then
+      w = intro_words(m)
+      if w != "" then say(w) end
     end
   end
 end
@@ -1024,12 +1079,15 @@ library.on_position(position = 12.0, remaining = true, synchronous = false,
 # `add` drops track marks, and the title rides with them - without this the
 # stream plays fine and the song name never reaches icecast.
 def forward_meta(m) =
-  t = string.trim(m["title"])
-  log.important(label = "meta", "forwarding #{t}")
-  # An untagged file gets the station line rather than the real metadata, so
-  # the last good title cannot linger on the site as if it were this one.
-  if t == "" then
-    radio.insert_metadata(new_track = true, [("title", untagged_title), ("artist", "")])
+  n = track_name(m["title"], m["artist"], m["filename"])
+  log.important(label = "meta", "forwarding #{n.title}")
+  # An untagged file gets its own filename rather than the real metadata, so
+  # the last good title cannot linger on the site as if it were this one - and
+  # the station line only when even the filename came back empty.
+  if string.trim(m["title"]) == "" then
+    radio.insert_metadata(new_track = true, [
+      ("title",  if n.title == "" then untagged_title else n.title end),
+      ("artist", n.artist)])
   else
     radio.insert_metadata(new_track = true, m)
   end
