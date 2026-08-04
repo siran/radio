@@ -291,6 +291,37 @@ harbor.http.register(port = 8005, method = "GET", "/control/now",
   endpoint(fun (_) -> ()))
 harbor.http.register(port = 8005, method = "POST", "/control/skip",
   endpoint(fun (_) -> library.skip()))
+# Every knob worth a host's attention, and its current value, so the console can
+# draw its own sliders instead of embedding liquidsoap's page in an iframe.
+#
+# Named explicitly rather than enumerated. liquidsoap's own page lists EVERY
+# interactive variable, which is the wrong set for a person mid-broadcast: it
+# mixes the two or three you actually reach for with several that will make you
+# sound worse. Naming them here is also what lets the console give each one a
+# sane range and a plain-language label.
+#
+# Setting is not here on purpose. The mixing desk's own POST /interactive with
+# a body of name=value already does it, it is already proxied behind the
+# speaker credential, and a second way to write the same variable is a second
+# thing that can disagree.
+def knobs() =
+  [
+    ("mic_gain",       mic_gain()),
+    ("voice_gain",     voice_gain()),
+    ("hp_freq",        hp_freq()),
+    ("comp_thr",       comp_thr()),
+    ("comp_ratio",     comp_ratio()),
+    ("comp_gain",      comp_gain()),
+    ("duck_to",        duck_to()),
+    ("hold",           hold()),
+    ("glide",          glide()),
+    ("announce_every", announce_every())
+  ]
+end
+
+harbor.http.register(port = 8005, method = "GET", "/control/knobs",
+  fun (_, response) -> response.json(knobs()))
+
 harbor.http.register(port = 8005, method = "POST", "/control/previous",
   endpoint(fun (_) -> previous()))
 harbor.http.register(port = 8005, method = "POST", "/control/again",
