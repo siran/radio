@@ -90,26 +90,6 @@
       next restart.</b></div>
   </div>
 
-  <div class="panel">
-    <label for="sayas">How to say a name</label>
-    <div class="hint">One per line, <code>written = spoken</code>, replaced
-      literally before the line is rendered. Piper has no phoneme markup, so
-      respelling is the whole technique: <code>Hector Lavoe = Ektor Lavoay</code>.
-      Stretching letters lengthens a word &mdash; measured here,
-      <code>liiive</code> runs 54% longer than <code>live</code> and
-      <code>li-i-ive</code> 65% longer &mdash; while <code>[[ l aI v ]]</code> does
-      nothing at all. <b class="now">On air within a few seconds.</b></div>
-    <textarea id="sayas" rows="6" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
-  </div>
-
-  <details class="panel" id="advwrap">
-    <summary>Where piper is installed</summary>
-    <div class="hint">The folder holding <code>venv/Scripts/python.exe</code> and
-      <code>voices/</code>. The voice list above is read from the one folder this
-      site serves, so after moving piper elsewhere the voice has to be typed in
-      rather than picked from the list.</div>
-    <input id="root" type="text" maxlength="200" spellcheck="false" autocapitalize="off" autocorrect="off">
-  </details>
 
   <div class="status" id="status">loading</div>
   <div class="err" id="err"></div>
@@ -186,49 +166,6 @@
     }
   }
 
-  // written = spoken, one per line. The first = separates them, so a name may
-  // contain one on the right without needing to be escaped.
-  function sayAsText(obj) {
-    return Object.keys(obj).map(k => k + ' = ' + obj[k]).join('\n');
-  }
-
-  // Returns the table, or throws with the reason. Powershell 5.1's
-  // ConvertFrom-Json THROWS on two keys differing only in case, and the
-  // watcher reads that throw as "no config" - so "Hector Lavoe" beside
-  // "hector lavoe" does not mispronounce one name, it silently resets the
-  // voice, the speed and every other line in this table. Measured. It is
-  // refused here, before it can be written.
-  function parseSayAs(text) {
-    // Object.create(null), not {}. A plain object inherits from Object.prototype
-    // and that breaks this table in two separate ways if anyone types __proto__
-    // as a name: "__proto__" in {} is already true, so the FIRST such entry gets
-    // rejected as a duplicate of nothing; and out["__proto__"] = x sets the
-    // prototype instead of creating a key, so the entry silently disappears
-    // instead of being saved. A dictionary with no prototype has neither
-    // problem, and JSON.stringify treats it exactly the same.
-    const out = Object.create(null);
-    const seen = Object.create(null);
-    const lines = text.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const at = line.indexOf('=');
-      if (at < 0) throw new Error('line ' + (i + 1) + ' has no "=" in it: ' + line);
-      const from = line.slice(0, at).trim();
-      const to = line.slice(at + 1).trim();
-      if (!from) throw new Error('line ' + (i + 1) + ' has nothing before the "="');
-      const key = from.toLowerCase();
-      if (key in seen) {
-        throw new Error('"' + from + '" and "' + seen[key] +
-          '" differ only in case, and that makes the whole config unreadable. ' +
-          'Keep one of them.');
-      }
-      seen[key] = from;
-      out[from] = to;
-    }
-    return out;
-  }
-
   // The mixing desk. Liquidsoap reads hold and announce_every out of the file
   // ONCE, at startup, so the file alone changes nothing that is on the air -
   // this is the other half of that pair, and it is the half you can hear.
@@ -256,7 +193,6 @@
     }
     $('voice').value = cfg.voice || '';
     $('ident').value = cfg.ident || '';
-    $('root').value = cfg.piper_root || '';
     const sp = parseFloat(cfg.speed);
     $('speed').value = isFinite(sp) ? clamp(sp, 0.6, 2) : 1.15;
     const ev = parseFloat(cfg.announce_every);
@@ -264,8 +200,6 @@
     const hd = parseFloat(cfg.hold);
     $('hold').value = isFinite(hd) ? clamp(hd, 0, 30) : 3;
     showSpeed(); showEvery(); showHold();
-    $('sayas').value = (cfg.say_as && typeof cfg.say_as === 'object')
-      ? sayAsText(cfg.say_as) : '';
     setStatus('ready');
   }
 
@@ -346,26 +280,7 @@
   $('ident').addEventListener('change', () => {
     cfg.ident = $('ident').value;
     save('saved - the untagged line changes at the next restart');
-  });
-  $('root').addEventListener('change', () => {
-    cfg.piper_root = $('root').value.trim();
-    // The voice list is not reloaded: it comes from the one folder this site
-    // serves, so moving piper means typing the voice name, as the note says.
-    save('piper folder saved - the voice list above still shows the served folder');
-  });
-  $('sayas').addEventListener('change', () => {
-    let table;
-    try {
-      table = parseSayAs($('sayas').value);
-    } catch (e) {
-      setStatus('not saved');
-      return fail(e.message);
-    }
-    cfg.say_as = table;
-    save(Object.keys(table).length + ' pronunciations saved - on air in a few seconds');
-  });
-
-  load();
+  });  load();
 })();
 </script>
 </body>
