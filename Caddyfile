@@ -212,8 +212,21 @@ import admins.caddy
 	}
 	# Sign out. A 401 from a path that asks for no credential of its own is
 	# what makes a browser forget the one it cached for /host/ and prompt again.
+	# Who you are, straight from the credential you sent. Basic auth gives the
+	# browser no way to tell a page its own username, so the server says it.
+	handle /whoami {
+		import speakers
+		respond "{http.auth.user.id}" 200
+	}
+
+	# Signing out of basic auth means answering 401 - there is no other lever,
+	# the browser holds the credential and only a refusal makes it let go. But
+	# a bare 401 lands on the browser's own error page, which looks like the
+	# station broke rather than like a door closing behind you. So the refusal
+	# carries a page of its own.
 	handle /host/logout {
-		respond 401
+		header Content-Type "text/html; charset=utf-8"
+		respond "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Signed out - Wild n Loyal Radio</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0e0e10;color:#e8e8ea;font:15px/1.6 -apple-system,BlinkMacSystemFont,Segoe UI,system-ui,sans-serif;text-align:center}h1{font-size:20px;font-weight:600;margin:0 0 6px}a{color:#4ade80}p{color:#8a8a93;font-size:13px;margin:6px 0}</style></head><body><div><h1>Signed out</h1><p>The microphone is closed.</p><p><a href=\"/host/\">sign in again</a> &middot; <a href=\"/\">the station</a></p></div></body></html>" 401
 	}
 	handle /host* {
 		import speakers

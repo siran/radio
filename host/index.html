@@ -240,6 +240,7 @@
 
 <div class="foot">
   <a href="/" target="_blank" title="opens in a new tab, so the station sits beside this page">the station &#8599;</a>
+    <span class="sep" id="whoamiwrap" hidden>&middot; <span id="whoami"></span> &middot; <a href="/host/logout">log out</a></span>
   &middot; <a href="/host/logout">sign out</a>
 </div>
 
@@ -749,6 +750,21 @@
     if (recording) { e.preventDefault(); e.returnValue = ''; }
   });
 })();
+  // Basic auth never tells a page who is using it, so the server does: /whoami
+  // answers with the same credential Caddy already uses to pick a host's own
+  // upload folder. Silent on failure - a footer is not worth an error.
+  (async () => {
+    try {
+      const r = await fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) return;
+      const who = (await r.text()).trim();
+      if (!who) return;
+      const el = document.getElementById('whoami');
+      if (el) el.textContent = who;
+      const w = document.getElementById('whoamiwrap');
+      if (w) w.hidden = false;
+    } catch (e) { /* leave it hidden */ }
+  })();
 </script>
 </body>
 </html>
