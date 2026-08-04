@@ -31,6 +31,17 @@ function Get-Speakers {
 }
 
 function Reload-Caddy {
+    # The Caddyfile reads the ACME contact from an environment variable, and a
+    # process only ever sees the machine environment as it stood when IT
+    # started. This loop is launched at boot and can outlive any number of
+    # changes, so read the value fresh instead of trusting what we inherited.
+    # Without it `caddy validate` fails on an unresolved placeholder and every
+    # speaker created here is written to the file and then never loaded - which
+    # is exactly what happened: "caddy rejected the new config", and a new host
+    # with no password shown.
+    if (-not $env:ACME_EMAIL) {
+        $env:ACME_EMAIL = [Environment]::GetEnvironmentVariable('ACME_EMAIL', 'Machine')
+    }
     & $caddy validate --config $cf *> $null
     if ($LASTEXITCODE -ne 0) { return $false }
     & $caddy reload --config $cf *> $null
