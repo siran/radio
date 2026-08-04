@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<title>Narrator &middot; wild n loyal radio</title>
+<title>Wild n Loyal Radio - Narrator</title>
 <style>
   :root {
     --bg:#0e0e10; --panel:#17171a; --line:#2a2a30;
@@ -21,14 +21,20 @@
            border-radius:12px; padding:14px; margin-bottom:12px; }
   label { display:block; font-size:12px; color:var(--dim);
           text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
-  input, textarea { width:100%; padding:11px 12px; margin-bottom:12px; background:#101013;
+  input, textarea, select { width:100%; padding:11px 12px; margin-bottom:12px; background:#101013;
           border:1px solid var(--line); border-radius:8px; color:var(--fg);
           font:inherit; font-size:16px; }
-  input:focus, textarea:focus { outline:none; border-color:#4a4a55; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:#4a4a55; }
   textarea { resize:vertical; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
              font-size:13px; line-height:1.6; }
   /* the text-input padding above makes a slider look sunken and cramped */
   input[type=range] { padding:0; margin-bottom:4px; accent-color:var(--on); }
+  input:disabled { opacity:.45; }
+  button { width:100%; padding:12px; margin-bottom:12px; background:#1e1e24;
+           border:1px solid var(--line); border-radius:8px; color:var(--fg);
+           font:inherit; font-size:15px; cursor:pointer; }
+  button:active { background:#26262e; }
+  button:disabled { color:var(--dim); cursor:default; }
 
   .status { font-size:13px; color:var(--dim); margin-top:10px; text-align:center; }
   .err { color:var(--rec); font-size:13px; margin-top:10px; white-space:pre-wrap; }
@@ -51,43 +57,51 @@
 <body>
 <div class="wrap">
 
-  <h1>wild n loyal &middot; narrator</h1>
-  <div class="sub">The voice between the tracks. One shared setting for the
-    whole station, not a copy per host &mdash; anyone may tune it, and the last
-    save wins.</div>
+  <h1>Wild n Loyal &middot; Narrator</h1>
+  <div class="sub">The voice between the tracks. One setting for the whole
+    station, not a copy per host &mdash; last save wins.</div>
 
   <div class="panel">
     <label for="voice">Voice</label>
     <input id="voice" list="voicelist" spellcheck="false" autocapitalize="off" autocorrect="off">
     <datalist id="voicelist"></datalist>
-    <div class="hint" id="voicenote">reading the installed voices...</div>
+    <div class="hint" id="voicenote">Installed voices, loading.</div>
     <label for="speed">Speed &mdash; <span id="speedval">1.15</span> &middot; above 1.0 is slower</label>
     <input id="speed" type="range" min="0.6" max="2" step="0.05" value="1.15">
-    <div class="hint">Piper has no pitch control of any kind, so the pace is the
-      only thing about the voice itself that moves.
-      <b class="now">On air within a few seconds.</b></div>
+    <div class="hint" title="Piper has no pitch control of any kind, so the pace is the only thing about the voice itself that moves."><b class="now">On air within a few seconds.</b></div>
   </div>
 
   <div class="panel">
-    <label for="every">Speak on every <span id="everyval">1</span> track</label>
-    <input id="every" type="range" min="0" max="20" step="1" value="1">
-    <div class="hint">Over the intro, and again as the track ends. 0 = never.</div>
+    <label for="cadence">When it speaks</label>
+    <select id="cadence" title="The intro talks over the start of a track, the way an announcer does; the outro says what just played, as the track ends.">
+      <option value="off">Off</option>
+      <option value="intro">At the beginning</option>
+      <option value="outro">At the end</option>
+      <option value="both">Both</option>
+    </select>
+    <div class="hint" title="The mixing desk holds the two ends as separate switches; narrator.json holds one number that radio.liq reads as on or off and seeds both ends from. So a restart brings back on or off faithfully, and a one-ended choice comes back as both. Nothing is written to the file that nothing reads."><b class="now">On air now</b>, and saved. Across a restart, on or off only &mdash; not which end.</div>
     <label for="hold">Hold &mdash; <span id="holdval">3</span> s of quiet before the music comes back up</label>
     <input id="hold" type="range" min="0" max="30" step="0.5" value="3">
-    <div class="hint">Real seconds. These two are the only ones the running
-      station can be told about mid-broadcast, so saving does both: it sends the
-      value to the mixing desk AND writes the file.
-      <b class="now">The desk is what you hear now</b>; the file is what comes
-      back after a restart.</div>
+    <div class="hint" title="Real seconds. The mixing desk is what you hear now; the file is what comes back after a restart, and saving does both."><b class="now">On air now</b>, and saved.</div>
+  </div>
+
+  <div class="panel">
+    <label for="gain">Volume &mdash; <span id="gainval">12</span>&times;</label>
+    <input id="gain" type="range" min="0" max="12" step="0.5" value="12" disabled>
+    <div class="hint" id="gainnote" title="The announcer is a speaker like any other: the same volume, in the same settings.json, that every host has in their own folder. Liquidsoap reads it as it queues each line, so nothing restarts."><b class="now">On air within a quarter second.</b></div>
+  </div>
+
+  <div class="panel">
+    <label for="say">Words for it to say</label>
+    <textarea id="say" rows="3" maxlength="500" spellcheck="true"></textarea>
+    <button id="saybtn" type="button">Say it</button>
+    <div class="hint" title="The words are dropped into the announcer's folder as a plain text file; the watcher renders them with piper and the pickup already in liquidsoap plays them over ducked music, at the volume above. Piper reads the line literally, so it is spoken exactly as typed. 500 characters at most.">On air in about eight seconds.</div>
   </div>
 
   <div class="panel">
     <label for="ident">What it says about an untagged track</label>
     <input id="ident" type="text" maxlength="500">
-    <div class="hint">Roughly one track in seven has no title, and saying nothing
-      sounds like something broke rather than like a radio.
-      <b class="later">Read at startup only &mdash; this one takes effect at the
-      next restart.</b></div>
+    <div class="hint" title="Roughly one track in seven has no title, and saying nothing sounds like something broke rather than like a radio."><b class="later">Next restart.</b></div>
   </div>
 
 
@@ -103,6 +117,13 @@
 
   const CONFIG_URL = '/narrator/config/narrator.json';
   const VOICES_URL = '/narrator/voices/';
+  // The announcer's own folder. It is a speaker like any other, so its volume
+  // sits in a settings.json exactly like a host's, and a plain .txt dropped
+  // beside it is the whole of "make it say something" - the watcher renders it
+  // and the pickup plays it. Both go through one caddy route with a fixed
+  // root, because the announcer has no login to be filed under.
+  const SETTINGS_URL = '/narrator/announcer/settings.json';
+  const SAY_URL      = '/narrator/announcer/';
 
   // Caddy's request_body max_size TRUNCATES the body, it does not refuse it,
   // and webdav then writes the truncated bytes - a half a json file, which
@@ -132,8 +153,8 @@
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
   const showSpeed = () => { $('speedval').textContent = $('speed').value; };
-  const showEvery = () => { $('everyval').textContent = $('every').value; };
   const showHold  = () => { $('holdval').textContent = $('hold').value; };
+  const showGain  = () => { $('gainval').textContent = $('gain').value; };
 
   // The installed voices, listed rather than hardcoded: caddy serves the piper
   // voices folder as a json directory listing behind the same password, so the
@@ -170,7 +191,9 @@
   // ONCE, at startup, so the file alone changes nothing that is on the air -
   // this is the other half of that pair, and it is the half you can hear.
   // interactive.float takes a value past its own slider max without complaint,
-  // so both are clamped to the dial's range before they are sent.
+  // so both are clamped to the dial's range before they are sent. A switch
+  // goes down the same wire: the desk parses "true" and "false" out of a body
+  // of name=value, which is the request its own page makes.
   async function live(name, value) {
     const res = await fetch('/interactive', {
       method: 'POST',
@@ -180,8 +203,64 @@
     if (!res.ok) throw new Error('HTTP ' + res.status);
   }
 
+  // There are exactly two moments the station can speak at - over the start of
+  // a track, and as one ends - so this is a choice of which, not a count. The
+  // desk holds them as two independent switches, announce_intro and
+  // announce_outro, and these four options are every combination of the two.
+  const CADENCE = {
+    off:   { intro: false, outro: false },
+    intro: { intro: true,  outro: false },
+    outro: { intro: false, outro: true  },
+    both:  { intro: true,  outro: true  }
+  };
+  const cadenceOf = (i, o) => i && o ? 'both' : i ? 'intro' : o ? 'outro' : 'off';
+
+  // Read from the desk rather than from the file, because only the desk can
+  // tell the two ends apart. GET /control/knobs answers [[name, value], ...]
+  // and carries the two switches in that same shape - 1.0 for on, 0.0 for off
+  // - rather than giving that endpoint a second response type for them.
+  async function loadCadence() {
+    try {
+      const res = await fetch('/control/knobs',
+        { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const k = Object.fromEntries(await res.json());
+      $('cadence').value = cadenceOf(k.announce_intro > 0, k.announce_outro > 0);
+    } catch (e) {
+      // The file's own answer, which is on or off and nothing finer.
+      const ev = parseFloat(cfg.announce_every);
+      $('cadence').value = isFinite(ev) && ev > 0 ? 'both' : 'off';
+      fail('The desk did not say which ends are on (' + e.message +
+        ') - showing what was saved.');
+    }
+  }
+
+  // The announcer's settings.json, whole, exactly as it is on disk. gain is
+  // the only field with a control here, and duck and the eq have to survive a
+  // save untouched. Null until it has been read, and the slider stays disabled
+  // until then: a PUT built on a failed read is the one way this page could
+  // erase them.
+  let settings = null;
+
+  async function loadSettings() {
+    try {
+      const res = await fetch(SETTINGS_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (res.status === 404) settings = {};
+      else if (!res.ok) throw new Error('HTTP ' + res.status);
+      else settings = await res.json();
+      const g = parseFloat(settings.gain);
+      $('gain').value = isFinite(g) ? clamp(g, 0, 12) : 12;
+      showGain();
+      $('gain').disabled = false;
+    } catch (e) {
+      $('gainnote').textContent = 'Volume unavailable (' + e.message +
+        ') - locked, so a save cannot erase the ducking and the EQ.';
+    }
+  }
+
   async function load() {
     await loadVoices();
+    await loadSettings();      // its own file - a broken narrator.json must not lock it
     try {
       const res = await fetch(CONFIG_URL, { credentials: 'same-origin', cache: 'no-store' });
       if (res.status !== 404) {
@@ -195,11 +274,10 @@
     $('ident').value = cfg.ident || '';
     const sp = parseFloat(cfg.speed);
     $('speed').value = isFinite(sp) ? clamp(sp, 0.6, 2) : 1.15;
-    const ev = parseFloat(cfg.announce_every);
-    $('every').value = isFinite(ev) ? clamp(ev, 0, 20) : 1;
     const hd = parseFloat(cfg.hold);
     $('hold').value = isFinite(hd) ? clamp(hd, 0, 30) : 3;
-    showSpeed(); showEvery(); showHold();
+    showSpeed(); showHold();
+    await loadCadence();
     setStatus('ready');
   }
 
@@ -236,6 +314,29 @@
     }
   }
 
+  async function saveSettings(msg) {
+    try {
+      const res = await fetch(SETTINGS_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(settings)
+      });
+      if (res.ok || res.status === 201 || res.status === 204) {
+        clear();
+        setStatus(msg);
+      } else {
+        setStatus('not saved');
+        fail(res.status === 401
+          ? 'Your sign-in expired. Reload the page and sign in again.'
+          : 'Could not save the volume: HTTP ' + res.status);
+      }
+    } catch (e) {
+      setStatus('not saved');
+      fail('Could not save the volume: ' + e.message);
+    }
+  }
+
   // Dragging only redraws the number; the file is written on release. A slider
   // fires input for every pixel, and one webdav PUT per pixel would hammer the
   // file the watcher is polling.
@@ -245,13 +346,22 @@
     save('speed saved: ' + cfg.speed + ' - on air in a few seconds');
   });
 
-  $('every').addEventListener('input', showEvery);
-  $('every').addEventListener('change', async () => {
-    cfg.announce_every = clamp(parseInt($('every').value, 10), 0, 20);
-    await save('speaks on every ' + cfg.announce_every + ' - saved');
+  $('cadence').addEventListener('change', async () => {
+    const c = CADENCE[$('cadence').value];
+    const said = $('cadence').selectedOptions[0].text.toLowerCase();
+    // What the file can carry is on or off, and that is the whole of it.
+    // radio.liq reads announce_every and seeds BOTH switches from it - any
+    // value above zero means the announcer is wanted - so 1 or 0 is the only
+    // thing that has a meaning there, and 1 rather than the old count because
+    // the magnitude stopped meaning anything when the count became two
+    // switches. Writing announce_intro and announce_outro into the file would
+    // be adding keys nothing reads.
+    cfg.announce_every = c.intro || c.outro ? 1 : 0;
+    await save('saved: ' + said);
     try {
-      await live('announce_every', cfg.announce_every);
-      setStatus('speaks on every ' + cfg.announce_every + ' - on air now, and saved');
+      await live('announce_intro', c.intro);
+      await live('announce_outro', c.outro);
+      setStatus('speaks ' + said + ' - on air now, and saved');
     } catch (e) {
       fail('Saved to the file, but the desk did not take it (' + e.message +
         ') - it will apply at the next restart.');
@@ -271,6 +381,61 @@
     }
   });
 
+  // Same two-step as the sliders above, into the announcer's own file:
+  // liquidsoap reads it as it queues each line, so there is nothing to tell
+  // the desk and nothing to restart.
+  $('gain').addEventListener('input', showGain);
+  $('gain').addEventListener('change', () => {
+    settings.gain = parseFloat($('gain').value);
+    saveSettings('volume saved: ' + settings.gain);
+  });
+
+  // Make it say something. No new machinery: a .txt in the announcer's folder
+  // IS the interface. narrator-watcher.ps1 polls every 3 s and will not touch
+  // a file until its size and mtime were already identical at the previous
+  // poll, so one complete PUT is safe - there is nothing here that has to be
+  // written in two steps. It renders it with piper in about 1.7 s and deletes
+  // it, and the pickup plays the wav like any other voice note.
+  //
+  // The name has to be unique, and a stamp to the second is not enough: two
+  // lines sent in the same second would be one file, and the later would
+  // overwrite the earlier before the watcher had spoken it. Milliseconds and
+  // four random hex digits, the same shape radio.liq's own announcer uses for
+  // the files it drops in this folder. The colons and the dot of an ISO stamp
+  // are illegal in a windows filename, so they come out.
+  function sayName() {
+    const st = new Date().toISOString().replace(/[:.]/g, '');
+    const r = Math.floor(Math.random() * 65536).toString(16).padStart(4, '0');
+    return 'say-' + st + '-' + r + '.txt';
+  }
+
+  $('saybtn').addEventListener('click', async () => {
+    const words = $('say').value.trim();
+    if (!words) return setStatus('nothing to say');
+    $('saybtn').disabled = true;
+    setStatus('sending');
+    try {
+      const res = await fetch(SAY_URL + sayName(), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        credentials: 'same-origin',
+        body: words + '\n'
+      });
+      if (!(res.ok || res.status === 201 || res.status === 204)) {
+        throw new Error(res.status === 401
+          ? 'your sign-in expired, reload the page'
+          : 'HTTP ' + res.status);
+      }
+      clear();
+      $('say').value = '';
+      setStatus('on air in about eight seconds');
+    } catch (e) {
+      setStatus('not sent');
+      fail('Could not send that line: ' + e.message);
+    }
+    $('saybtn').disabled = false;
+  });
+
   // change rather than input on the text fields: it fires when the field is
   // left, so a save is one per edit rather than one per keystroke.
   $('voice').addEventListener('change', () => {
@@ -280,7 +445,9 @@
   $('ident').addEventListener('change', () => {
     cfg.ident = $('ident').value;
     save('saved - the untagged line changes at the next restart');
-  });  load();
+  });
+
+  load();
 })();
 </script>
 </body>

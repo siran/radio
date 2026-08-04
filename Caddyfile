@@ -275,6 +275,78 @@ import admins.caddy
 		root * D:/services/piper/voices
 		file_server browse
 	}
+	# The announcer's own folder, reached without a login. It is a speaker like
+	# any other - liquidsoap queues its wavs through the same pickup, at the
+	# gain and ducking in its own settings.json - but it is nobody's account,
+	# so there is no {http.auth.user.id} to file it under and the root is
+	# written out. That fixed root is the whole of the safety here: nothing a
+	# client sends chooses the folder.
+	handle /narrator/announcer/* {
+		import speakers
+		# How loud the narrator is, and whether the music dips under it. The
+		# same file, the same shape and the same read-modify-write as
+		# /host/setting above - this is why the narrator used to sit at 12x
+		# over a host who had dialled themselves down to 0.5.
+		@settings {
+			method GET PUT
+			path /narrator/announcer/settings.json
+		}
+		handle @settings {
+			# Measured: max_size TRUNCATES the body, it does not reject it,
+			# and webdav writes the truncated bytes - so too small a cap here
+			# is not a visible error, it is a settings.json that liquidsoap's
+			# json.parse throws on and silently replaces with its defaults,
+			# putting the narrator back to full volume mid-show.
+			# Worst case, counted over every value the page can produce and
+			# every key the file can hold (the seven-band eq, each band at its
+			# longest -8.5, gain at its longest 11.5, duck at its longer
+			# false):
+			#   {"gain":11.5,"duck":false,"eq":{"f100":-8.5,"f200":-8.5,
+			#    "f400":-8.5,"f800":-8.5,"f1600":-8.5,"f3150":-8.5,
+			#    "f6300":-8.5}}
+			# = 120 bytes. The page reads and writes back the WHOLE object, so
+			# a key it does not know about rides through a save and grows the
+			# body; 1KB is over eight times the worst case and still far too
+			# small to be a way to put anything else in that folder.
+			request_body {
+				max_size 1KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/messages/voice/announcer
+				prefix /narrator/announcer
+			}
+		}
+		# Make it say something. There is no new mechanism here: a .txt in this
+		# folder IS the interface. narrator-watcher.ps1 polls every 3 s, will
+		# not touch a file until its size and mtime were already identical at
+		# the previous poll - so one complete PUT is safe - renders it with
+		# piper in about 1.7 s and deletes it, and the pickup already in
+		# liquidsoap plays the wav over ducked music like any other note.
+		# PUT only: what lands here is on the air within seconds, and like the
+		# voice uploads it is never readable back.
+		@say {
+			method PUT
+			path *.txt
+		}
+		handle @say {
+			# The page caps the box at 500 characters. A character outside the
+			# BMP is 2 of those and 4 bytes; one inside it is 1 and at most 3 -
+			# so 3 bytes each is the worst rate, 1500 bytes, plus the newline.
+			# 4KB is well over twice that, so maxlength on the box is the only
+			# guard needed: it cannot produce a body this route would cut.
+			request_body {
+				max_size 4KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/messages/voice/announcer
+				prefix /narrator/announcer
+			}
+		}
+		# any other name, and any other method, is refused
+		handle {
+			respond 403
+		}
+	}
 	handle /narrator* {
 		import speakers
 		file_server
