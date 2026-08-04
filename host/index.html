@@ -96,14 +96,17 @@
      of the same thing - a named slider with a lock - so it shares these two
      rules rather than restating them. */
   #eqwrap { margin:0 0 12px; }
-  #eqwrap > label, #deskwrap > label { margin-top:12px; }
-  #eqwrap .band, #deskwrap .band { color:var(--fg); }
+  #eqwrap > label, #deskwrap > label, #capwrap > label { margin-top:12px; }
+  #eqwrap .band, #deskwrap .band, #capwrap .band { color:var(--fg); }
+  /* the tag on a capture label saying when a change actually lands - most of
+     them cannot reach a microphone that is already open. */
+  .when { text-transform:none; letter-spacing:0; color:#6a6a75; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <h1>wild n loyal &middot; host</h1>
+  <h1>Wild n Loyal Radio &middot; Host</h1>
 
   <div class="panel">
     <button id="rec">Start talking</button>
@@ -114,6 +117,9 @@
 
   <details class="panel" id="eqwrap" open>
     <summary title="How loud you are, and what shape.">Your voice</summary>
+      <div class="btns">
+        <button class="tbtn" id="lockallvoice" title="every slider in this panel at once">Unlock all</button>
+      </div>
       <label for="gain">Volume &mdash; <span id="gainval">1</span>&times;</label>
       <div class="ctl">
         <button class="lock" type="button" id="lockgain" aria-pressed="true">&#128274;</button>
@@ -164,6 +170,68 @@
     <select id="dev" aria-label="Microphone"><option value="">default</option></select>
   </details>
 
+  <!-- Every parameter that shapes the audio between the microphone and the
+       upload, one control each. The ranges and the choices are built in the
+       script from the CAP table, which is also what begin() and segment()
+       read - so what this panel says is what is applied, and there is no
+       second copy of a number anywhere. -->
+  <details class="panel" id="capwrap">
+    <summary title="Everything the browser does to your voice before it is sent.">Streaming</summary>
+    <div class="status" id="capnote">Kept on this device, like the microphone above.
+      <span class="when">next slice</span> lands within a slice;
+      <span class="when">mic reopen</span> needs Stop talking, then Start talking.</div>
+
+    <label for="cap_seg"><span class="band">Slice length</span> &mdash; recorded before anything is sent, and the largest part of the delay you hear &mdash; <span id="cap_segval">1.5</span> s <span class="when">next slice</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcap_seg" aria-pressed="true">&#128274;</button>
+      <input id="cap_seg" type="range" disabled>
+    </div>
+
+    <label for="cap_bitrate"><span class="band">Bitrate</span> &mdash; how much detail survives the encoder &mdash; <span id="cap_bitrateval">96000</span> bits/s <span class="when">next slice</span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcap_bitrate" aria-pressed="true">&#128274;</button>
+      <input id="cap_bitrate" type="range" disabled>
+    </div>
+
+    <label for="cap_bitmode"><span class="band">Bitrate mode</span> &mdash; constant spends the same bits on silence as on speech <span class="when">next slice</span></label>
+    <select id="cap_bitmode" aria-label="Bitrate mode"></select>
+
+    <label for="cap_mime"><span class="band">Format</span> &mdash; container and codec; only what this browser admits to is listed <span class="when">mic reopen</span></label>
+    <select id="cap_mime" aria-label="Format"></select>
+
+    <label for="cap_srate"><span class="band">Sample rate</span> &mdash; asked of the microphone; a phone left to itself may pick a phone-call rate <span class="when">mic reopen</span></label>
+    <select id="cap_srate" aria-label="Sample rate"></select>
+
+    <label for="cap_ch"><span class="band">Channels</span> &mdash; one is a voice; two is the same voice twice, at twice the bitrate <span class="when">mic reopen</span></label>
+    <select id="cap_ch" aria-label="Channels"></select>
+
+    <label for="cap_bits"><span class="band">Sample size</span> &mdash; bits per sample <span class="when">mic reopen</span></label>
+    <select id="cap_bits" aria-label="Sample size"></select>
+
+    <label for="cap_lat"><span class="band">Latency wanted</span> &mdash; a hint at the capture buffer; smaller is sooner and riskier <span class="when">mic reopen</span></label>
+    <select id="cap_lat" aria-label="Latency wanted"></select>
+
+    <label for="cap_aec"><span class="band">Echo cancellation</span> &mdash; filters for a problem you only have monitoring out loud on this same device <span class="when">mic reopen</span></label>
+    <select id="cap_aec" aria-label="Echo cancellation"></select>
+
+    <label for="cap_ns"><span class="band">Noise suppression</span> &mdash; subtracts whatever it decides is not speech; the usual reason a voice sounds boxed in <span class="when">mic reopen</span></label>
+    <select id="cap_ns" aria-label="Noise suppression"></select>
+
+    <label for="cap_agc"><span class="band">Auto gain</span> &mdash; the phone riding your level, against the compressor on the desk <span class="when">mic reopen</span></label>
+    <select id="cap_agc" aria-label="Auto gain"></select>
+
+    <label for="cap_vi"><span class="band">Voice isolation</span> &mdash; newer phones only, and heavier than noise suppression <span class="when">mic reopen</span></label>
+    <select id="cap_vi" aria-label="Voice isolation"></select>
+
+    <label>What was asked for &mdash; and what the device actually gave</label>
+    <ul id="capgot"><li><span>not open yet</span><span>this fills in when the microphone opens</span></li></ul>
+
+    <div class="btns">
+      <button class="tbtn" id="capreset" title="back to the values this page shipped with">Back to defaults</button>
+    </div>
+    <div class="status" id="capdrop"></div>
+  </details>
+
   <details class="panel" id="musicpanel" open>
     <summary>Now playing</summary>
     <div class="np" id="npTitle">&mdash;</div>
@@ -181,6 +249,9 @@
 
   <details class="panel" id="deskwrap">
     <summary title="Liquidsoap's live knobs. Read when this fold is opened.">Mixing desk</summary>
+    <div class="btns">
+      <button class="tbtn" id="lockalldesk" title="every slider in this panel at once">Unlock all</button>
+    </div>
     <label for="mic_gain"><span class="band">Live mic</span> &mdash; <span id="mic_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
@@ -250,10 +321,13 @@
   let parts = [], recording = false, startedAt = 0;
   let seq = 0, segTimer = 0;
 
-  // Seconds per slice. This is the largest single piece of the delay you hear:
-  // nothing can be sent until the slice finishes. 1.5s roughly halves it, at
-  // the cost of twice as many seams - which the ducking tail covers anyway.
-  const SEG = 1.5;
+  // Seconds per slice used to be a const here. It is the largest single piece
+  // of the delay you hear - nothing can be sent until the slice finishes - so
+  // it is the first thing anyone wants to try, and it now lives on the
+  // Streaming panel with everything else that shapes the sound. Shorter means
+  // sooner and more seams, which the ducking tail covers anyway. The floor of
+  // 0.5s in CAP below is not taste: caddy rate-limits this folder to 150 PUTs
+  // a minute, and 0.5s is 120.
 
 
   const setStatus = t => { $('status').textContent = t; };
@@ -308,6 +382,204 @@
   // Plugging the headset in, or pulling it out, changes what is on offer.
   if (navigator.mediaDevices) navigator.mediaDevices.ondevicechange = listDevices;
 
+  // ----- the capture path, whole, in one table --------------------------------
+  // Everything the browser does to a voice between the microphone and the PUT
+  // is one entry here and one control on the Streaming panel. `def` is exactly
+  // what this page used to hardcode, so a fresh phone behaves as before; `con`
+  // is the getUserMedia constraint the value becomes, which is also the key
+  // track.getSettings() answers with - so asked-for and granted are the same
+  // word and can be printed side by side without a translation table.
+  //
+  // Empty string means "say nothing about it and let the browser decide". That
+  // is a real setting and not a missing one: leaving sampleRate out is how a
+  // phone ends up recording at a phone-call rate, and the only way to see that
+  // is to be able to switch between asking and not asking.
+  //
+  // These belong to this device the way the microphone above does - a phone and
+  // a laptop want different answers and neither is "the show" - so they are
+  // remembered in localStorage and not in settings.json, which liquidsoap reads.
+  const CAP_KEY = 'talk.cap';
+  const OFFON = [['', 'browser default'], ['off', 'off'], ['on', 'on']];
+  // The automatic order, unchanged: the first of these the browser admits to.
+  const MIME_ORDER = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'];
+  // Also offered if supported. Nothing here can produce a name caddy refuses:
+  // it accepts webm ogg oga opus mp3 m4a wav, and extFor() only makes those.
+  const MIME_MORE = ['audio/mp4;codecs=opus', 'audio/mp4;codecs=mp4a.40.2',
+                     'audio/ogg;codecs=vorbis', 'audio/mpeg', 'audio/wav'];
+  const RATES = [['', 'browser default'], ['8000', '8000 - telephone'], ['16000', '16000 - wideband'],
+                 ['22050', '22050'], ['24000', '24000'], ['32000', '32000'],
+                 ['44100', '44100 - CD'], ['48000', '48000 - studio']];
+  const CAP = {
+    cap_seg:     { kind: 'range', min: 0.5, max: 6, step: 0.1, def: 1.5 },
+    cap_bitrate: { kind: 'range', min: 8000, max: 256000, step: 8000, def: 96000 },
+    cap_bitmode: { kind: 'select', def: '', opts: [['', 'browser default'], ['variable', 'variable'], ['constant', 'constant']] },
+    cap_mime:    { kind: 'select', def: '', opts: [] },
+    cap_srate:   { kind: 'select', def: '48000', con: 'sampleRate', opts: RATES },
+    cap_ch:      { kind: 'select', def: '1', con: 'channelCount', opts: [['', 'browser default'], ['1', '1 - mono'], ['2', '2 - stereo']] },
+    cap_bits:    { kind: 'select', def: '', con: 'sampleSize', opts: [['', 'browser default'], ['8', '8'], ['16', '16'], ['24', '24'], ['32', '32']] },
+    cap_lat:     { kind: 'select', def: '', con: 'latency', opts: [['', 'browser default'], ['0', 'as small as it can'], ['0.01', '0.01 s'], ['0.02', '0.02 s'], ['0.04', '0.04 s'], ['0.08', '0.08 s'], ['0.2', '0.2 s']] },
+    cap_aec:     { kind: 'select', def: 'off', con: 'echoCancellation', opts: OFFON },
+    cap_ns:      { kind: 'select', def: 'off', con: 'noiseSuppression', opts: OFFON },
+    cap_agc:     { kind: 'select', def: 'off', con: 'autoGainControl', opts: OFFON },
+    cap_vi:      { kind: 'select', def: '', con: 'voiceIsolation', opts: OFFON }
+  };
+  // Only the two sliders get a lock. A lock is there because a thumb brushing
+  // the page can drag a slider; a select cannot be opened and chosen from by
+  // accident, and eleven more padlocks would be eleven more taps in the pass
+  // this panel exists to make quick.
+  const CAPLOCK = ['cap_seg', 'cap_bitrate'];
+
+  const capNum = id => parseFloat($(id).value);
+  const capStr = id => $(id).value;
+  const showCap = id => { $(id + 'val').textContent = $(id).value; };
+  // The name a control is called on screen, taken off its own label, so the
+  // report below and the panel can never disagree about what a thing is called.
+  const capName = id => {
+    const el = document.querySelector('label[for="' + id + '"] .band');
+    return el ? el.textContent : id;
+  };
+
+  const mimeOpts = () => {
+    const seen = [['', 'automatic - first one that works']];
+    for (const m of MIME_ORDER.concat(MIME_MORE)) {
+      try { if (MediaRecorder.isTypeSupported(m)) seen.push([m, m]); } catch {}
+    }
+    return seen;
+  };
+
+  function capDraw() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(CAP_KEY) || '{}') || {}; } catch {}
+    for (const id in CAP) {
+      const d = CAP[id], el = $(id);
+      if (d.kind === 'range') {
+        // min/max/step before the value, or the input rounds the value it is
+        // handed against whatever range it happens to be holding.
+        el.min = d.min; el.max = d.max; el.step = d.step;
+      } else {
+        el.innerHTML = '';
+        for (const [v, t] of (id === 'cap_mime' ? mimeOpts() : d.opts)) {
+          const o = document.createElement('option');
+          o.value = v; o.textContent = t; el.appendChild(o);
+        }
+      }
+      el.value = (id in saved) ? String(saved[id]) : String(d.def);
+      // A codec this browser no longer offers, or a value from an older list:
+      // a select given something it does not have goes to no selection at all.
+      if (el.selectedIndex === -1) el.value = String(d.def);
+      if (d.kind === 'range') showCap(id);
+    }
+  }
+
+  function capSave() {
+    const o = {};
+    for (const id in CAP) o[id] = $(id).value;
+    try { localStorage.setItem(CAP_KEY, JSON.stringify(o)); } catch {}
+    setStatus(recording ? 'on air' : 'streaming settings saved on this device');
+  }
+
+  capDraw();
+  for (const id in CAP) {
+    const d = CAP[id], el = $(id);
+    // Same two-step as every other slider: dragging redraws the number, and
+    // release is what commits it.
+    if (d.kind === 'range') el.addEventListener('input', () => showCap(id));
+    el.addEventListener('change', () => { if (d.kind === 'range') showCap(id); capSave(); });
+  }
+  // Said once, at load: a constraint this browser has never heard of is
+  // silently ignored by getUserMedia, and silently is the one thing this panel
+  // is not allowed to be.
+  {
+    const sc = (navigator.mediaDevices && navigator.mediaDevices.getSupportedConstraints)
+      ? navigator.mediaDevices.getSupportedConstraints() : {};
+    if (Object.keys(sc).length) {
+      for (const id in CAP) {
+        if (!CAP[id].con || sc[CAP[id].con]) continue;
+        const lab = document.querySelector('label[for="' + id + '"]');
+        if (lab) lab.insertAdjacentHTML('beforeend', ' <span class="when">this browser ignores it</span>');
+      }
+    }
+  }
+  $('capreset').addEventListener('click', () => {
+    try { localStorage.removeItem(CAP_KEY); } catch {}
+    capDraw();
+    capSave();
+  });
+
+  // What the panel becomes on the way out: a constraints object for
+  // getUserMedia, and an options object for MediaRecorder. Nothing else in this
+  // page decides any of it.
+  function captureConstraints() {
+    const c = {};
+    for (const id in CAP) {
+      const d = CAP[id], v = $(id).value;
+      if (!d.con || v === '') continue;         // '' means: ask for nothing
+      c[d.con] = (d.opts === OFFON) ? (v === 'on') : parseFloat(v);
+    }
+    return c;
+  }
+  function recorderOpts(mime) {
+    const o = { mimeType: mime };
+    const br = capNum('cap_bitrate');
+    if (isFinite(br)) o.audioBitsPerSecond = br;
+    if (capStr('cap_bitmode')) o.audioBitrateMode = capStr('cap_bitmode');
+    return o;
+  }
+
+  // Asked for, and granted. A phone will take half of what you ask and say
+  // nothing, so both columns are printed and the ones that came back different
+  // are marked. Everything the device volunteers that we never asked about is
+  // listed underneath - that is where a surprise usually is.
+  let track = null, reported = false;
+  function capReport(r) {
+    const ul = $('capgot');
+    ul.innerHTML = '';
+    const row = (name, want, got) => {
+      const li = document.createElement('li');
+      const a = document.createElement('span');
+      a.textContent = name;
+      const b = document.createElement('span');
+      const asked = (want === '' || want === undefined || want === null);
+      b.className = asked ? '' : (String(want) === String(got) ? 'ok' : 'bad');
+      b.textContent = (asked ? 'asked nothing' : 'asked ' + want) + ' \u00b7 got ' +
+                      (got === undefined ? 'not reported' : got);
+      li.appendChild(a); li.appendChild(b); ul.appendChild(li);
+    };
+    let got = {};
+    try { got = track ? track.getSettings() : {}; } catch {}
+    for (const id in CAP) {
+      const d = CAP[id];
+      if (!d.con) continue;
+      let want = $(id).value;
+      if (want !== '' && d.opts === OFFON) want = (want === 'on');
+      row(capName(id), want, got[d.con]);
+    }
+    if (r) {
+      row(capName('cap_mime'), $('cap_mime').value, r.mimeType);
+      row(capName('cap_bitrate'), $('cap_bitrate').value, r.audioBitsPerSecond);
+      row(capName('cap_bitmode'), $('cap_bitmode').value, r.audioBitrateMode);
+    }
+    const shown = {};
+    for (const id in CAP) if (CAP[id].con) shown[CAP[id].con] = 1;
+    for (const k in got) {
+      if (shown[k] || k === 'deviceId' || k === 'groupId') continue;
+      row(k, '', got[k]);
+    }
+    if (track) row('device', '', track.label || 'unnamed');
+  }
+
+  // Nothing is thrown away any more. A slice of zero bytes is the one thing
+  // still skipped, and skipping it discards no audio: it is an encoder that
+  // produced nothing, and putting it would file an empty note for liquidsoap to
+  // choke on. The count is on the panel so even that is not silent. What used
+  // to be here - under 200 bytes, or under 0.05s - could drop a real slice.
+  let dropped = 0, lastSlice = '';
+  const showDrop = () => {
+    $('capdrop').textContent = 'Nothing is discarded. A slice of zero bytes is skipped, ' +
+      'because there is no audio in it: ' + dropped + ' so far.' + lastSlice;
+  };
+  showDrop();
+
   function meter() {
     if (!analyser) return;
     const buf = new Uint8Array(analyser.fftSize);
@@ -318,13 +590,20 @@
     raf = requestAnimationFrame(meter);
   }
 
+  // The panel's choice if there is one and the browser still supports it,
+  // otherwise the automatic order, unchanged.
   function pickMime() {
-    for (const m of ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4']) {
+    const want = $('cap_mime').value;
+    try { if (want && MediaRecorder.isTypeSupported(want)) return want; } catch {}
+    for (const m of MIME_ORDER) {
       if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
     }
     return '';
   }
-  const extFor = m => m.includes('ogg') ? 'ogg' : m.includes('mp4') ? 'm4a' : 'webm';
+  // The extension decides how liquidsoap decodes it and which names caddy
+  // accepts at all, so every format the panel can offer has one here.
+  const extFor = m => m.includes('ogg') ? 'ogg' : m.includes('mp4') ? 'm4a'
+                    : m.includes('mpeg') ? 'mp3' : m.includes('wav') ? 'wav' : 'webm';
 
   async function begin() {
     $('err').textContent = '';
@@ -333,23 +612,31 @@
     const mime = pickMime();
     if (!mime) return fail('This browser cannot encode audio.');
     const devId = $('dev').value;
-    // This page is voice only, so let the phone do what it is good at:
-    // noise suppression before anything is uploaded. (The DJ page kept these
-    // off because music could pass through it and they mangle music - here
-    // there is nothing but speech.) AGC stays off so it does not fight the
-    // compressor on the server.
-  // All three off on purpose. These are telephone algorithms: noiseSuppression
-  // spectrally subtracts anything it decides is not speech, which hollows out
-  // the low end and the tail of every word - the "box" sound - and
-  // echoCancellation adds its own filtering for a problem that does not exist
-  // when the mic and the speakers are different devices. A radio voice wants
-  // the room it was recorded in. Turn echoCancellation back on if you ever
-  // monitor out loud on the same device you talk into.
-  const constraints = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    // Every one of these comes off the Streaming panel now; none of it is
+    // written here any more. The panel still ships with what used to be
+    // hardcoded - the three phone algorithms off - because they are telephone
+    // algorithms: noiseSuppression spectrally subtracts anything it decides is
+    // not speech, which hollows out the low end and the tail of every word (the
+    // "box" sound), and echoCancellation adds its own filtering for a problem
+    // that does not exist when the mic and the speakers are different devices.
+    // A radio voice wants the room it was recorded in.
+    //
+    // What is new is that sampleRate and channelCount are asked for at all.
+    // Saying nothing about them is what let a phone record at a phone-call
+    // rate. These are plain values, not { exact: }, so they are a request and
+    // not a demand: a device that cannot do 48k gives what it can instead of
+    // refusing outright - which is exactly why the panel prints what came back
+    // beside what was asked. The one thing still demanded is the deviceId,
+    // because the wrong microphone is not a near miss.
+    const constraints = captureConstraints();
     if (devId) constraints.deviceId = { exact: devId };
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
     } catch (e) { return fail('Microphone refused: ' + e.name); }
+    // What the device actually granted, which is rarely all of it.
+    track = stream.getAudioTracks()[0] || null;
+    reported = false;
+    capReport(null);
     listDevices();   // permission now exists, so the names are real
     // Swapping the mic mid-slice would mean tearing down the stream, the
     // recorder and the meter with a slice in flight - a dropped or doubled
@@ -371,16 +658,32 @@
     segment(mime);          // start the first slice
   }
 
-  // A slice is a whole self-contained recording: start, run for SEG seconds,
-  // stop. Stopping is what produces a complete file with its own header, so
-  // each one plays on its own. Then immediately begin the next.
-  // Liquidsoap's 10s ducking tail spans the seams, so the music stays down
-  // between slices instead of jumping back in.
+  // A slice is a whole self-contained recording: start, run for the slice
+  // length on the panel, stop. Stopping is what produces a complete file with
+  // its own header, so each one plays on its own. Then immediately begin the
+  // next. Liquidsoap's 10s ducking tail spans the seams, so the music stays
+  // down between slices instead of jumping back in.
   function segment(mime) {
     if (!recording) return;
     parts = [];
     startedAt = Date.now();
-    rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 96000 });
+    // The recorder is built fresh for every slice, which is why the bitrate and
+    // the bitrate mode land on the next one and do not wait for the mic. A
+    // combination this browser will not take throws here rather than at the
+    // slider, so it is caught here: better one plain sentence than a button
+    // that has quietly stopped recording.
+    try {
+      rec = new MediaRecorder(stream, recorderOpts(mime));
+    } catch (e) {
+      recording = false;
+      $('rec').textContent = 'Start talking';
+      $('rec').classList.remove('recording');
+      fail('The recorder refused those Streaming settings: ' + e.name + ' - ' + e.message);
+      setStatus('stopped');
+      teardown();
+      return;
+    }
+    if (!reported) { reported = true; capReport(rec); }
     rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
     rec.onstop = () => {
       const secs = (Date.now() - startedAt) / 1000;
@@ -390,9 +693,13 @@
     };
     rec.start();
     clearTimeout(segTimer);
+    // Read per slice, so moving the slider changes the very next one. isFinite
+    // because a setTimeout of NaN fires immediately, which here would be an
+    // unbroken loop of empty slices.
+    const seg = capNum('cap_seg');
     segTimer = setTimeout(() => {
       try { rec && rec.state === 'recording' && rec.stop(); } catch {}
-    }, SEG * 1000);
+    }, (isFinite(seg) ? seg : 1.5) * 1000);
   }
 
   function end() {
@@ -416,12 +723,26 @@
 
   // The whole point: an ordinary upload with a length, not a live stream.
   async function send(blob, mime, secs) {
-    // A slice is dropped only if it is genuinely empty - a stopped encoder or a
-    // dead device. It used to drop anything under 1500 bytes or 0.4s, which
-    // silently deleted every pause: the lead-in before you start talking, and
-    // the beat between sentences. That is why speech arrived with no room
-    // around it. Silence is part of the performance.
-    if (blob.size < 200 || secs < 0.05) return;
+    // Nothing is discarded. Not a short slice, not a quiet one, not a header
+    // with no audio behind it - all of that is the performance, and the page is
+    // no longer the judge of what counts as speech. The single exception is a
+    // blob of zero bytes, which is not audio at all: there is nothing in the
+    // body to send, and caddy would file an empty note for liquidsoap to open
+    // and fail on. It is counted on the Streaming panel so even that is visible.
+    // This used to drop under 200 bytes or 0.05s, and before that under 1500
+    // bytes or 0.4s, which silently deleted every pause - the lead-in before you
+    // start talking, and the beat between sentences.
+    if (!blob.size) { dropped++; showDrop(); return; }
+
+    // What the last slice actually weighed. This is the honest answer to a
+    // bitrate change - the encoder's own idea of what it produced, in seconds
+    // and in bytes - and it is how you tell a setting that did something from
+    // one the browser politely ignored.
+    if (secs > 0) {
+      lastSlice = ' Last slice: ' + secs.toFixed(2) + ' s, ' + (blob.size / 1024).toFixed(1) +
+                  ' kB, about ' + Math.round(blob.size * 8 / secs) + ' bits/s.';
+      showDrop();
+    }
 
     // Name carries the order: liquidsoap lists the folder sorted, so slices
     // play in the order they were spoken even if one arrives late.
@@ -728,6 +1049,9 @@
   // lock is the host's, not the page's: once open it stays open until the same
   // button is tapped again, so a run of adjustments costs one tap and not one
   // tap per move.
+  // set() is kept in `locks` so a whole panel can be driven through the same
+  // one - see lockAll below - rather than a second way of locking existing.
+  const locks = {};
   function lockable(id) {
     const input = $(id), btn = $('lock' + id);
     const set = open => {
@@ -737,12 +1061,41 @@
       btn.title = open ? 'lock it again' : 'unlock to change';
       btn.setAttribute('aria-label', btn.title);
     };
-    btn.addEventListener('click', () => set(input.disabled));
+    locks[id] = set;
+    btn.addEventListener('click', () => { set(input.disabled); paintAll(); });
     set(false);
+  }
+  // Eight sliders on the voice panel and nine on the desk is seventeen taps
+  // before a tuning pass has changed anything. One button per panel calls that
+  // panel's own set() for every control it holds - the same one its padlock
+  // calls - so there is still exactly one locking mechanism. The button says
+  // which way it goes, and it says it again after any single padlock is tapped,
+  // which is what paintAll is for.
+  const painters = [];
+  const paintAll = () => { for (const p of painters) p(); };
+  function lockAll(btnId, ids) {
+    const b = $(btnId);
+    const anyOpen = () => ids.some(i => !$(i).disabled);
+    const paint = () => {
+      const open = anyOpen();
+      b.textContent = open ? 'Lock all' : 'Unlock all';
+      b.classList.toggle('on', open);
+      b.setAttribute('aria-pressed', String(open));
+    };
+    b.addEventListener('click', () => {
+      const open = !anyOpen();
+      for (const i of ids) locks[i](open);
+      paintAll();
+    });
+    painters.push(paint);
+    paint();
   }
   lockable('gain');
   for (const b of BANDS) lockable('eq' + b);
   for (const k in KNOBS) lockable(k);
+  for (const c of CAPLOCK) lockable(c);
+  lockAll('lockallvoice', ['gain'].concat(BANDS.map(b => 'eq' + b)));
+  lockAll('lockalldesk', Object.keys(KNOBS));
 
   // Liquidsoap polls this folder, so the setting IS the button: it lands on air
   // within a quarter second and there is nothing else to tell.
