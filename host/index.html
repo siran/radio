@@ -232,6 +232,36 @@
     <div class="status" id="capdrop"></div>
   </details>
 
+  <!-- A sound is both panels at once - the streaming settings above, which
+       live on this device, and the voice settings, which live on the server -
+       so a preset saves both together or it is not the sound that was tuned.
+       The file sits in the speaker's own folder beside settings.json, which is
+       what makes it survive a cleared cache and arrive on a second phone. -->
+  <details class="panel" id="preswrap" open>
+    <summary title="Both halves of your sound, saved on the server under a name.">Presets</summary>
+    <div class="status" id="presnote">Your voice and your streaming settings together, saved in your
+      own folder on the server &mdash; not on this phone, so clearing your browser cannot lose them.
+      Loading one puts your voice on the air <span class="when">within a quarter second</span>;
+      slice length, bitrate and bitrate mode land on the <span class="when">next slice</span>;
+      everything else on Streaming needs a <span class="when">mic reopen</span>.</div>
+
+    <label for="presname">Name &mdash; letters, digits, space, hyphen, underscore</label>
+    <input id="presname" type="text" maxlength="24" placeholder="dj" autocomplete="off"
+           autocapitalize="none" spellcheck="false" aria-label="Preset name">
+    <div class="btns">
+      <button class="tbtn" id="pressave" title="save both halves of your sound under the typed name">Save this sound</button>
+    </div>
+
+    <label for="preslist">Saved</label>
+    <select id="preslist" aria-label="Saved presets"></select>
+    <div class="btns">
+      <button class="tbtn" id="presload" title="apply both halves">Load</button>
+      <button class="tbtn" id="presdel" title="remove it from the server">Delete</button>
+    </div>
+    <div class="status" id="presmsg"></div>
+    <div class="err" id="preserr"></div>
+  </details>
+
   <details class="panel" id="musicpanel" open>
     <summary>Now playing</summary>
     <div class="np" id="npTitle">&mdash;</div>
@@ -1104,7 +1134,211 @@
     showDuck();
     saveSettings('music dips under you: ' + (settings.duck ? 'on' : 'off'));
   });
-  loadSettings();
+
+  // ----- presets: both halves of the sound, under a name ----------------------
+  // An hour of tuning used to live in one phone's localStorage and die with a
+  // cleared cache, and a second device started from nothing. A preset is the
+  // whole sound: `cap` is field for field the object capSave() writes to
+  // localStorage, built from the CAP table so a control added there is in every
+  // preset saved afterwards without a line changing here; `voice` is the gain,
+  // the duck and the seven bands out of settings.json. Saving one without the
+  // other would save half a sound.
+  //
+  // The file is written through /host/presets/, which is the /host/setting/
+  // block again with a different filename - so caddy files it under whoever
+  // authenticated, the browser sends the credential it already holds, and
+  // presets.json lands beside settings.json in the speaker's own folder.
+  // Liquidsoap never reads it: applying a preset writes settings.json through
+  // the read-modify-write below, which is still the only thing that reaches
+  // the air.
+  const PRESETS_URL = '/host/presets/presets.json';
+  // The route caps the body at 32KB and caddy TRUNCATES rather than refusing,
+  // so the page has to be what says no. At most 20 names of at most 24
+  // characters the worst case is 7961 bytes (see the Caddyfile, where the same
+  // count is written out); refusing at 8KB means this page cannot produce a
+  // body that route would cut, and the route still has four times that.
+  const PRES_MAX = 20, PRES_BYTES = 8192;
+  // Also the reason the charset is this narrow: every byte of a name is one
+  // byte of the file, with nothing for JSON to escape and nothing outside
+  // ascii, so the count above is a count and not an estimate.
+  const PRES_NAME = /^[A-Za-z0-9 _-]{1,24}$/;
+  let presets = {};
+
+  const presErr = m => { $('preserr').textContent = m; };
+  const presSay = m => { $('presmsg').textContent = m; };
+
+  function presDraw() {
+    const sel = $('preslist'), had = sel.value;
+    const names = Object.keys(presets).sort();
+    sel.innerHTML = '';
+    for (const n of (names.length ? names : [''])) {
+      const o = document.createElement('option');
+      o.value = n;
+      o.textContent = n || 'nothing saved yet';
+      sel.appendChild(o);
+    }
+    sel.value = names.indexOf(had) !== -1 ? had : (names[0] || '');
+  }
+
+  // What the two panels are holding at this moment. The capture half is read
+  // off the controls rather than out of localStorage so that what is on screen
+  // is what gets saved, which is also what capSave() has just written there.
+  function presCurrent() {
+    const cap = {};
+    for (const id in CAP) cap[id] = $(id).value;
+    const eq = {};
+    for (const b of BANDS) eq[b] = settings.eq[b];
+    return { cap: cap, voice: { gain: settings.gain, duck: settings.duck, eq: eq } };
+  }
+
+  // Every write is the whole map - there is no DELETE on that route and no
+  // need for one, since removing a name is writing the map back without it.
+  async function presPut(msg) {
+    const body = JSON.stringify(presets);
+    // Measured on this project: an oversized body is TRUNCATED, not refused,
+    // and webdav writes the truncated bytes - which would not lose one preset,
+    // it would make the map unparseable and read back as none at all.
+    if (body.length > PRES_BYTES) {
+      presErr('Too much to save - delete a preset first.');
+      return false;
+    }
+    try {
+      const res = await fetch(PRESETS_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: body
+      });
+      if (!(res.ok || res.status === 201 || res.status === 204))
+        throw new Error(res.status === 401
+          ? 'your sign-in expired, reload the page' : 'HTTP ' + res.status);
+      presErr('');
+      presSay(msg);
+      return true;
+    } catch (e) {
+      presErr('Could not save your presets: ' + e.message);
+      return false;
+    }
+  }
+
+  // Both halves, each down the path that already exists for it. The capture
+  // half goes into localStorage and then through capDraw(), which is the one
+  // way this panel is ever drawn; the voice half goes onto `settings` and out
+  // through saveSettings(), the same read-modify-write the sliders use - so a
+  // key in the file that this page knows nothing about still rides through.
+  function presApply(n) {
+    const p = presets[n];
+    if (!p || typeof p !== 'object') return presErr('There is no preset called "' + n + '".');
+    if (p.cap && typeof p.cap === 'object') {
+      try { localStorage.setItem(CAP_KEY, JSON.stringify(p.cap)); } catch {}
+      capDraw();              // unknown ids ignored, missing ones back to `def`
+      // and back out again, so what this device remembers is what the panel
+      // ended up showing: a codec this browser does not have went to `def` on
+      // the way in and would otherwise sit in localStorage unreachable.
+      capSave();
+    }
+    const v = (p.voice && typeof p.voice === 'object') ? p.voice : {};
+    const g = parseFloat(v.gain);
+    if (isFinite(g)) settings.gain = g;
+    if (typeof v.duck === 'boolean') settings.duck = v.duck;
+    const had = (v.eq && typeof v.eq === 'object') ? v.eq : {};
+    $('gain').value = settings.gain;
+    showGain();
+    showDuck();
+    for (const b of BANDS) {
+      const x = parseFloat(had[b]);
+      if (isFinite(x)) settings.eq[b] = x;
+      $('eq' + b).value = settings.eq[b];
+      showBand(b);
+    }
+    presErr('');
+    saveSettings('preset "' + n + '" loaded');
+    // Said every time, because half of it is not true yet. Liquidsoap polls
+    // the folder four times a second, so the voice is already different; the
+    // microphone is opened once and keeps the constraints it was opened with.
+    presSay('Loaded "' + n + '". Your voice is on the air within a quarter second. ' +
+            'Slice length, bitrate and bitrate mode land on the next slice. ' +
+            'Format, sample rate, channels, sample size, latency, echo cancellation, ' +
+            'noise suppression, auto gain and voice isolation need the microphone reopened' +
+            (recording ? ' - tap Stop talking, then Start talking.' : '.'));
+  }
+
+  $('pressave').addEventListener('click', async () => {
+    const n = $('presname').value.trim();
+    if (!PRES_NAME.test(n))
+      return presErr('A name is 1 to 24 characters: letters, digits, space, hyphen, underscore.');
+    // Two keys differing only in case make the whole file unreadable to
+    // ConvertFrom-Json, and PowerShell is what maintains this station - so a
+    // second spelling of a name is refused at the keyboard rather than written
+    // and discovered later. Saving over the SAME spelling is ordinary.
+    const clash = Object.keys(presets).find(k => k !== n && k.toLowerCase() === n.toLowerCase());
+    if (clash)
+      return presErr('"' + clash + '" already exists, and two names differing only in case ' +
+                     'cannot both be saved. Use that spelling, or delete it first.');
+    if (!(n in presets) && Object.keys(presets).length >= PRES_MAX)
+      return presErr('That is already ' + PRES_MAX + ' presets - delete one first.');
+    const prev = presets[n];
+    presets[n] = presCurrent();
+    if (await presPut('Saved "' + n + '" - your voice and your streaming settings, on the server.')) {
+      presDraw();
+      $('preslist').value = n;
+    } else if (prev === undefined) { delete presets[n]; } else { presets[n] = prev; }
+  });
+
+  $('presload').addEventListener('click', () => {
+    const n = $('preslist').value;
+    if (!n) return presErr('There is nothing saved to load.');
+    presApply(n);
+  });
+
+  $('presdel').addEventListener('click', async () => {
+    const n = $('preslist').value;
+    if (!n) return presErr('There is nothing saved to delete.');
+    const gone = presets[n];
+    delete presets[n];
+    if (await presPut('Deleted "' + n + '".')) presDraw();
+    else presets[n] = gone;
+  });
+
+  // Read AFTER settings.json, never beside it: the seed below has to be his
+  // real voice settings and not the defaults this page starts with.
+  async function loadPresets() {
+    try {
+      const res = await fetch(PRESETS_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (res.status === 404) {
+        // No file yet, so this is the first load after presets existed. What
+        // the page is holding right now IS the tuning - an hour of it, living
+        // nowhere but this browser - so it is written to the server as "dj"
+        // before anything can clear it, rather than waiting to be asked.
+        // The voice half is settings.json, which was already on the server and
+        // is his either way. The capture half is only as good as this device:
+        // if localStorage is empty - a fresh phone, or cleared data - capDraw()
+        // has already filled the panel with this page's shipped defaults, and
+        // those are what "dj" is seeded with. That is why it says which of the
+        // two it got rather than saving in silence: if it was seeded from the
+        // wrong device, saving over "dj" from the right one is the fix.
+        let onDevice = false;
+        try { onDevice = !!localStorage.getItem(CAP_KEY); } catch {}
+        presets = { dj: presCurrent() };
+        presDraw();
+        $('preslist').value = 'dj';
+        await presPut('Saved your current sound as "dj": your voice settings from the server, ' +
+          'your streaming settings from ' + (onDevice
+            ? 'this device.'
+            : "this page's defaults, because this device had none stored - " +
+              'save over it from the phone you tuned on.'));
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const got = await res.json();
+      presets = (got && typeof got === 'object' && !Array.isArray(got)) ? got : {};
+      presDraw();
+    } catch (e) {
+      presErr('Could not read your presets: ' + e.message);
+    }
+  }
+
+  loadSettings().then(loadPresets);
 
   // One click opens the mic, another closes it. Holding a phone button for a
   // whole thought is miserable, and this makes a back-and-forth possible.

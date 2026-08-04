@@ -210,6 +210,59 @@ import admins.caddy
 			respond 403
 		}
 	}
+	# Named presets, beside settings.json in the same folder and behind the
+	# same credential. A preset is BOTH halves of a speaker's sound at once:
+	# the streaming settings, which until now lived only in one phone's
+	# localStorage and died with a cleared cache, and the gain, duck and seven
+	# bands out of settings.json. This is the block above with a different
+	# filename - nothing new: fixed name, GET PUT only, folder chosen by the
+	# credential and never by the client, everything else 403.
+	# Liquidsoap never reads this file; it is the page's own memory. What it
+	# writes into settings.json is what reaches the air.
+	handle /host/presets/* {
+		import speakers
+		@presets {
+			method GET PUT
+			path /host/presets/presets.json
+		}
+		handle @presets {
+			# Same measured trap as settings.json above - max_size TRUNCATES
+			# the body and webdav writes the truncated bytes - and here the
+			# ending is worse, because one oversized PUT does not corrupt one
+			# preset, it makes the whole map unparseable and every saved sound
+			# reads back as "no presets".
+			# Counted, not guessed. The longest preset the page can produce,
+			# taking every control at its longest value:
+			#   {"cap":{"cap_seg":"5.9","cap_bitrate":"256000",
+			#    "cap_bitmode":"variable","cap_mime":"audio/mp4;codecs=mp4a.40.2",
+			#    "cap_srate":"44100","cap_ch":"2","cap_bits":"32",
+			#    "cap_lat":"0.01","cap_aec":"off","cap_ns":"off",
+			#    "cap_agc":"off","cap_vi":"off"},"voice":{"gain":11.5,
+			#    "duck":false,"eq":{"f100":-8.5,"f200":-8.5,"f400":-8.5,
+			#    "f800":-8.5,"f1600":-8.5,"f3150":-8.5,"f6300":-8.5}}}
+			# = 370 bytes. The page caps a name at 24 characters of
+			# [A-Za-z0-9 _-], so a name is 24 bytes and never grows under JSON
+			# escaping, and it caps the map at 20 names:
+			#   2 + 20*(1 + 24 + 1 + 1 + 370) + 19 = 7961 bytes.
+			# The page counts the body and refuses to PUT past 8KB, so it
+			# cannot produce a body this route would cut. 32KB is four times
+			# that guard - the same headroom narrator.json is given - so a
+			# field added to the CAP table later grows every preset without
+			# anyone having to remember this number.
+			request_body {
+				max_size 32KB
+			}
+			# The folder is whoever authenticated - never what the client says.
+			webdav {
+				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+				prefix /host/presets
+			}
+		}
+		# any other name, and any other method, is refused
+		handle {
+			respond 403
+		}
+	}
 	# Sign out. A 401 from a path that asks for no credential of its own is
 	# what makes a browser forget the one it cached for /host/ and prompt again.
 	# Who you are, straight from the credential you sent. Basic auth gives the
