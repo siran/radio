@@ -207,6 +207,59 @@ def again() =
   end
 end
 
+# What has already finished, most recent first, so there is something to go
+# back TO. Nothing else in this file remembers it: now_playing reads
+# library.current and library.last_metadata, and both of those only ever
+# describe the request that is playing right now.
+#
+# Bounded on purpose. This is a radio - nobody is walking back an hour, and an
+# unbounded ref in a process that runs for weeks is a slow leak.
+history     = ref([])
+history_max = 10
+
+# Set while a previous() is landing. previous() skips, and a skip is a track
+# boundary like any other, so without this the track it just cut short gets
+# recorded as having finished - and pressing previous twice hands back the song
+# you were already on instead of the one before it. Measured: A skip B skip C,
+# then previous gave B correctly and previous again gave C.
+rewinding = ref(false)
+
+# The file playing at this moment, held so that the next boundary knows what
+# just ENDED. The metadata a boundary hands us belongs to the track that is
+# starting, so without this there is no way to name the one that finished.
+now_file = ref("")
+
+def remember(f) =
+  if f != "" then
+    history := list.prefix(history_max, list.add(f, history()))
+  end
+end
+
+# Play what finished last, immediately. Same front-of-queue trick as again()
+# above - and the same reason for it: library.add appends BEHIND whatever the
+# playlist has already prefetched, so the track would arrive one late. The skip
+# is what makes it now rather than after the current song.
+#
+# The entry is consumed, so pressing previous repeatedly walks backwards
+# instead of bouncing between two tracks. A replayed track goes back on the
+# history when it finishes, which is right: by then it really is the previous
+# track again.
+def previous() =
+  h = history()
+  if list.length(h) > 0 then
+    f = list.hd(default = "", h)
+    history := list.tl(h)
+    if f != "" then
+      rewinding := true
+      library.set_queue(list.add(request.create(f), library.queue()))
+      library.skip()
+      log.important(label = "control", "previous: #{f}")
+    end
+  else
+    log.important(label = "control", "previous: nothing behind us yet")
+  end
+end
+
 # Repeat re-queues the track shortly before it ends rather than when it starts.
 # Deciding late is what makes switching repeat off take effect immediately: do
 # it at the start of a track and there is always one more copy already
@@ -238,6 +291,8 @@ harbor.http.register(port = 8005, method = "GET", "/control/now",
   endpoint(fun (_) -> ()))
 harbor.http.register(port = 8005, method = "POST", "/control/skip",
   endpoint(fun (_) -> library.skip()))
+harbor.http.register(port = 8005, method = "POST", "/control/previous",
+  endpoint(fun (_) -> previous()))
 harbor.http.register(port = 8005, method = "POST", "/control/again",
   endpoint(fun (_) -> again()))
 harbor.http.register(port = 8005, method = "POST", "/control/repeat",
@@ -947,6 +1002,17 @@ def forward_meta(m) =
   else
     radio.insert_metadata(new_track = true, m)
   end
+  # The track that was playing has just ended, so it becomes the one to go
+  # back to; then the new one takes its place. Order matters - swap these two
+  # lines and previous() would hand back the song you are already hearing.
+  # A track cut short by previous() is not remembered: it did not finish, it
+  # was interrupted, and recording it would break walking backwards.
+  if rewinding() then
+    rewinding := false
+  else
+    remember(now_file())
+  end
+  now_file := m["filename"]
   # The new title reaches the stream first; the announcement is about
   # the one before it and can wait the millisecond a file write takes.
   announce(m)

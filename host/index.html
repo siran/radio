@@ -187,6 +187,7 @@
     <div class="np" id="npTitle">&mdash;</div>
     <div class="path" id="npPath"></div>
     <div class="btns">
+      <button class="tbtn" id="bPrev" title="play what finished last; press again to keep going back">Previous</button>
       <button class="tbtn" id="bSkip">Skip</button>
       <button class="tbtn" id="bAgain" title="play this track once more">Play again</button>
       <button class="tbtn" id="bRepeat">Repeat</button>
@@ -554,6 +555,12 @@
     await control('skip', 'POST');
     nowPlaying();     // skip answers with the state before it - the next track
   });                 // is prepared a moment later, and the poll below catches it
+  // Like skip, this answers with the state as it was a moment ago - the new
+  // track is prepared just after - so re-poll rather than trusting the reply.
+  $('bPrev').addEventListener('click', async () => {
+    await control('previous', 'POST');
+    nowPlaying();
+  });
   $('bAgain').addEventListener('click', () => control('again', 'POST'));
   $('bRepeat').addEventListener('click', () => control('repeat?on=' + !cur.repeat, 'POST'));
   $('bMusic').addEventListener('click', () => control('music?on=' + !cur.music, 'POST'));
