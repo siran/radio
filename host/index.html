@@ -75,6 +75,16 @@
   li:last-child { border-bottom:0; }
   li .ok { color:var(--on); }
   li .bad { color:var(--rec); }
+  /* Finding a track, in the panel that plays it. A row is the name on the
+     left and the two things you can do with it on the right; min-width:0 is
+     what lets a long title wrap instead of shoving the buttons off the edge. */
+  #qfind { margin-top:14px; }
+  #qresults li { align-items:center; }
+  #qresults .who { min-width:0; }
+  #qresults .name { color:var(--fg); word-break:break-word; }
+  #qresults .why { font-size:11px; margin-top:2px; }
+  #qresults .acts { flex:0 0 auto; display:flex; gap:6px; }
+  #qresults .acts .tbtn { padding:7px 10px; font-size:12px; }
   .foot { text-align:center; font-size:12px; color:var(--dim); margin-top:18px; }
   a { color:var(--dim); }
 
@@ -273,6 +283,13 @@
       <button class="tbtn" id="bRepeat">Repeat</button>
       <button class="tbtn" id="bMusic" title="off is silence">Music</button>
       <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
+    </div>
+    <div id="qfind">
+      <label for="qsearch">Find a track</label>
+      <input id="qsearch" type="text" autocomplete="off" spellcheck="false"
+             placeholder="artist or title">
+      <div class="status" id="qnote"></div>
+      <ul id="qresults"></ul>
     </div>
     <div class="err" id="cerr"></div>
   </details>
@@ -979,6 +996,138 @@
 
   nowPlaying();
   setInterval(nowPlaying, 3000);   // the track changes on its own; so must the name
+
+  // --- finding a track in the library ---------------------------------------
+  // A search walks the whole index on a harbor thread, and that thread holds
+  // the same runtime lock the streaming thread wants - about 0.13s a query.
+  // Measured on this station: one search costs the stream nothing, eight back
+  // to back cost a 0.37s clock catchup, forty leave the clock 4.3s behind. So
+  // this never fires per keystroke. It fires once, 350ms after the last key -
+  // longer than the gap between keys at speed, so a typed word costs one query
+  // instead of eight, and short enough that the list still answers the typing
+  // rather than waiting to be asked.
+  const SEARCH_WAIT = 350;
+
+  // Two searches can be in flight when one is slow, and they can land out of
+  // order. Only the newest may draw; the rest are counted out by this.
+  let findTimer = 0, findSeq = 0;
+
+  // Why a row is here. A path hit is the one worth spelling out: it means the
+  // query matched the folder or the file name rather than any tag.
+  const WHY = { title:  'matched the title',
+                artist: 'matched the artist',
+                path:   'matched the folder or file name' };
+
+  const qnote  = msg => { $('qnote').textContent = msg; };
+  const qclear = () => { findSeq++; $('qresults').innerHTML = ''; };
+
+  // Every string in a row is a file name off a disk, and this library has
+  // quotes, apostrophes, ampersands, brackets and underscores in its titles.
+  // So a row is built element by element and each string goes in as
+  // textContent - never joined into innerHTML, where a title carrying markup
+  // would run in the console of a logged-in host.
+  function findRow(r) {
+    const li = document.createElement('li');
+
+    const who = document.createElement('div');
+    who.className = 'who';
+
+    const name = document.createElement('div');
+    name.className = 'name';
+    // Liquidsoap already falls back to the file name for a file with no tags,
+    // so an empty title is not expected here. But no path ever crosses the
+    // wire, so if both fields did come back empty there would be nothing left
+    // to show - say so, rather than draw a blank row that cannot be told from
+    // a broken one, and keep it selectable either way since the id is enough.
+    name.textContent = r.title || r.artist || 'Untitled - this file has no tags';
+    who.appendChild(name);
+
+    const why = document.createElement('div');
+    why.className = 'why';
+    why.textContent = (r.title && r.artist ? r.artist + ' \u00b7 ' : '') +
+                      (WHY[r.match] || '');
+    who.appendChild(why);
+
+    // Two different tools, not one with an option: one programmes what plays
+    // after this, the other interrupts what is playing. The labels have to
+    // carry that difference on their own.
+    const acts = document.createElement('div');
+    acts.className = 'acts';
+    acts.appendChild(findBtn('Play next', r.id, false,
+      'put it at the front of the queue - what is on air finishes first'));
+    acts.appendChild(findBtn('Play now', r.id, true,
+      'cut what is on air short and start this one instead'));
+
+    li.appendChild(who);
+    li.appendChild(acts);
+    return li;
+  }
+
+  // Enqueue answers with the same state object as every other control, so it
+  // goes through control() and the Now playing lines above redraw themselves
+  // from the one reply. An id the index no longer holds is not an error there:
+  // it does nothing and reports the state as it stands, so a list left over
+  // from before a rescan cannot break anything.
+  function findBtn(label, id, now, why) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tbtn';
+    b.textContent = label;
+    b.title = why;
+    b.addEventListener('click', async () => {
+      await control('enqueue?id=' + encodeURIComponent(id) +
+                    (now ? '&now=true' : ''), 'POST');
+      // now=true skips, and a skip answers with the state as it was a moment
+      // ago - the new track is prepared just after - so re-poll like Skip does.
+      if (now) nowPlaying();
+    });
+    return b;
+  }
+
+  function findDraw(d) {
+    const ul = $('qresults');
+    ul.innerHTML = '';           // only rows this page built are ever in here
+    const rows = d.results || [];
+    if (!rows.length) { qnote('Nothing in the library matches that'); return; }
+    // The server caps the list at its own limit; total is the true count.
+    // Showing the capped number alone would read as "that is all there is".
+    qnote(rows.length < d.total
+      ? 'Showing ' + rows.length + ' of ' + d.total + ' - type more to narrow it'
+      : (d.total === 1 ? '1 track' : d.total + ' tracks'));
+    for (const r of rows) ul.appendChild(findRow(r));
+  }
+
+  async function findRun(q) {
+    const mine = ++findSeq;
+    try {
+      const res = await fetch('/control/search?q=' + encodeURIComponent(q),
+        { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      if (mine !== findSeq) return;    // a newer search already answered
+      findDraw(d);
+      $('cerr').textContent = '';
+    } catch (e) {
+      if (mine !== findSeq) return;
+      $('qresults').innerHTML = '';
+      qnote('');
+      $('cerr').textContent = 'Search: ' + e.message;
+    }
+  }
+
+  $('qsearch').addEventListener('input', () => {
+    clearTimeout(findTimer);
+    const q = $('qsearch').value.trim();
+    // Nothing on an empty box, and nothing on one letter: a single letter
+    // matches most of the library, so it is the most expensive query there is
+    // and its answer is never the track anyone was looking for.
+    if (q.length < 2) {
+      qclear();
+      qnote(q ? 'Keep typing' : '');
+      return;
+    }
+    findTimer = setTimeout(() => findRun(q), SEARCH_WAIT);
+  });
 
   // Your own settings. One small json file in your own folder, which
   // liquidsoap reads when it queues your note: how loud you play, whether
