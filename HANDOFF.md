@@ -1,313 +1,273 @@
-# Handoff — 2026-08-02
+# Handoff — 2026-08-05
 
 Read `CLAUDE.md` in this repo first. It is the working agreement.
 
-## Where we are
+The repo is **public**: `git@github.com:siran/radio.git`. History has been rewritten
+twice to purge things that should not have been published. Anything committed
+here is published.
 
-The station is a **talk radio you can speak on from a phone, anywhere**.
-
-An opens `https://radio.wildnloyal.org/talk/`, signs in once, clicks a button,
-and talks. His voice is recorded in 1.5-second slices, each uploaded as an
-ordinary file, and played on air over the music within about a second of
-arriving. Several people can talk at once without cutting each other off.
-
-Four services on Dolly, all non-admin, all automatic:
-`IcecastServer` (transmitter, loopback only), `LiquidsoapRadio` (the station),
-`CaddyServer` (TLS, every public URL), `JellyfinServer` (the library).
-
-The repo now has a remote: `git@github.com:siran/radio.git`, and it is PUBLIC.
-History was rewritten on 2026-08-02: the ACME address and 37 guestbook posts
-were purged from every commit. Anything committed here is published.
-
-### How a voice note travels
+## Operating it
 
 ```
-/talk/ records 1.5s  ->  PUT /talk/upload/<name>.webm
-                          caddy writes it to messages/voice/{who authenticated}/
-                          liquidsoap polls that folder 4x a second
-                          queues it into that speaker's lane
-                          plays it over the music, which ducks if they asked
-                          deletes the file five minutes later
+.\restart-radio.ps1 -Status              look, change nothing
+.\restart-radio.ps1                      icecast then liquidsoap, then the watchers
+.\restart-radio.ps1 -What liquidsoap     just the station
 ```
 
-**No application server anywhere in that path.** Caddy writes the file, a poll
-finds it. That is the same shape as the guestbook, and it is why eGPT needs no
-integration: dropping a file in `messages/voice/egpt/` is the entire API.
+Order matters: restarting icecast drops liquidsoap's connection, so liquidsoap
+follows it. Caddy is excluded from `-What all` on purpose — restarting it
+disconnects every listener; reload it instead (`caddy reload --config Caddyfile`),
+and note that `caddy validate` needs `ACME_EMAIL`, which is a machine variable.
 
-### The two ideas worth not breaking
+Four services, all as `svc-radio`, all automatic: `IcecastServer`,
+`LiquidsoapRadio`, `CaddyServer`, `JellyfinServer`. Two scheduled tasks:
+`RadioNarratorWatcher`, `RadioAdminWatcher`.
 
-**The folder is the interface.** Comments are markdown files, broadcasts are
-audio files, admin requests are json files with a watcher. Nothing sits in a
-request path that can be running-but-broken.
+## What it is
 
-**Identity comes from the server, never the client.** Caddy's webdav root is
-`messages/voice/{http.auth.user.id}`, so a speaker can only write into their own
-folder. Liquidsoap reads the speaker from the folder name. There is no name
-field anywhere, and there must not be — an earlier version had one and it was
-a claim, not a fact.
+A radio you can host from a phone, anywhere. Sign in at `/host/`, press one
+button, and your voice goes out over the music in 1.5-second slices. A narrator
+speaks between the tracks. Anyone listening can like a song. Everything is
+files on disk and something noticing them.
 
 ### Endpoints
 
 ```
-/                            the station          public
-/stream                      raw audio            public
-/status-json.xsl             now playing          public
-/next/                       staging copy         public
-/talk/                       speak on air         speakers  (sign in once)
-/talk/upload/*               where slices land    speakers
-/talk/setting/settings.json  your own settings    speakers
-/talk/logout                 401, clears the login
-/interactive                 liquidsoap's knobs   speakers  (embedded in /talk/)
-/admin*                      create speakers      admins
-/live                        harbor over TLS      for a source client
+/                            the station                       public
+/stream                      raw audio                         public
+/likes/now  /likes/add       likes, no login by design          public
+/live/narrator.json          what the narrator just said        public
+/host/                       the console                        hosts
+/host/upload/*               voice slices land here             hosts
+/host/setting/settings.json  gain, duck, seven-band EQ          hosts
+/host/presets/presets.json   named presets                      hosts
+/host/logout                 401 with a real page               hosts
+/whoami                      the server says who you are        hosts
+/control/*                   now, skip, previous, again,        hosts
+                             repeat, music, pause, knobs,
+                             search, enqueue
+/interactive                 liquidsoap's own knobs             hosts
+/narrator/                   the narrator dashboard             hosts
+/narrator/config/*           its settings                       hosts
+/narrator/announcer/*        its volume, and the say box        hosts
+/admin*                      make and remove hosts              admins
+/talk*                       308 to /host                        —
 ```
 
-Speakers: `dj`, `roger`, `reinie`, `egpt`. Admin: `djadmin`. Credentials in
-`CREDENTIALS.md` (gitignored). Add one with `/admin` or `.\mint-speaker.ps1`.
+Realms are separate: `wild n loyal host` and `wild n loyal admin`. They used to
+share one, which meant a browser holding a host password would send it to
+`/admin/` and never prompt.
 
-### Per-speaker settings — done 2026-08-02
+### The two shapes, and why it matters
 
-Each speaker owns one file, written by the talk page over the same webdav route
-Caddy already files under whoever authenticated:
+**File-drop.** The browser PUTs a file, Caddy writes it, something polls and
+finds it. Voice notes, settings, presets, chat, the guestbook, narrator config.
+Nothing we wrote sits between the click and the disk.
 
-```json
-{ "gain": 2.5, "duck": true }
-```
+**Live call.** The browser POSTs, Caddy proxies to liquidsoap's own HTTP server
+on 8005, and `radio.liq` — our code — answers. Transport, likes, knobs, search.
 
-Both values ride with the note as annotations — `liq_amplify` and `liq_duck` —
-so they apply to that note alone, and two speakers can be on air at once with
-different answers. The rms threshold detection is gone: both thresholds had been
-set to `0.0`, which was not a tuning but the mechanism switched off.
+The old line "no application server anywhere" was sloppy and the operator caught
+it. Caddy *is* the server. What is absent is *our* server, and only on the
+file-drop half. The browser code is ours everywhere and can fail everywhere —
+it did, for twenty minutes, from one stray backslash.
 
-Verified on air: `music down` when a note with `liq_duck="true"` starts,
-`music back up` after it ends.
+## Debts, largest first
 
-## Decisions already made — do not relitigate
+### 1. The capture path loses audio at every seam — the big one
 
-- **Ducking is per speaker**, carried by the note. "Radio control is
-  collaborative, people are not competing on settings."
-- **The manual duck button is the same file mechanism.** "No button needs fake
-  latency." A 0.25s poll is fine.
-- **Hosts mix, machines queue.** A new note from a human host mixes with one
-  already on air. An automated note — the time, an announcer, a podcast segment
-  — waits for the air to clear. This becomes an `automated` flag in
-  `settings.json` when the announcer is built; do not add the field before
-  something reads it.
-- **Notes that arrive while the station is down are dropped.** Only notes
-  written after the process started get queued. A three-minute-old "hello
-  everyone" landing mid-song is worse than silence.
-- **Piper for text to speech**, not Windows SAPI, and not a cloud API by
-  default. Local, offline, one binary plus `.onnx` voice files — the same shape
-  as everything else here, and the mirror image of the whisper server eGPT
-  already runs.
-- **Piper runs as a server, with a CLI fallback.** Shape borrowed from eGPT's
-  own config: `fallback_order: [ remote, cli ]`. The station keeps talking
-  through a restart instead of going mute. A resident model also answers fast
-  enough to feel conversational, which matters the moment it answers anything.
-- **The announcer talks over the ramp and over the outro.** At track start,
-  "you're listening to X"; near track end, "and we just heard X by Y". Both come
-  off metadata the station already has. Announcing what is coming *next* is the
-  expensive variant — the library is `mode = "randomize"`, so the next track
-  does not exist until it is needed — and is not being built.
-- **Admin is a role a host holds**, not a separate person. The account goes in
-  both `admins.caddy` and `speakers.caddy`. Admin transport and duck commands
-  take precedence: peers do not compete, but someone can arbitrate.
-- **Video notes**: audio on the radio, `<video>` opened and closed on the site.
-  Not a video channel. That was considered and is much larger.
+`/host/` records by constructing a `MediaRecorder`, running it for the slice
+length, calling `stop()`, and then constructing a **new one**. Stopping is what
+produces a self-contained file that can be played on its own. But between
+`stop()` and the next `start()`, **nothing is recording**. That audio is gone —
+not smeared, not badly decoded. Gone, every 1.5 seconds. Each slice is also a
+fresh Opus session, so encoder priming restarts too.
 
-## Where we are going
+The operator hears this as choppiness and has been fighting it with EQ. No
+setting fixes it.
 
-### 1. The host console at `/talk/` — DONE 2026-08-02
+**The fix**: an `AudioWorklet` taking continuous PCM off the stream, cut at exact
+sample boundaries, each cut wrapped in a WAV header. No stop/start, no lost
+samples, no priming. Liquidsoap decodes WAV happily — the narrator proves it.
+Cost is bandwidth: 48 kHz mono 16-bit is ~768 kbps against the current 96. At
+24 kHz it is ~384. That belongs on the Streaming panel like everything else.
 
-One URL for everyone; the link that makes them log in, not a per-host URL. A
-per-host URL would be a name the client claims, which is the one thing this
-station does not do. A "i'm a radio host" link goes in the footer of the station
-page next to `stream` and `try the newest version`.
+This is the difference between polishing a chopped signal and having a clean one.
 
-The console shows the station plus, on top: duck on/off, recording on/off,
-music on/off, pause/play/repeat/skip, the filename being played, an equalizer,
-and liquidsoap's own controls.
+### 2. Port 8005 is shared, and it races
 
-All of it is built and on air:
+`input.harbor` (where Cool Mic connects) and every `harbor.http.register` share
+port 8005. Which one ends up serving HTTP depends on initialisation order. On
+2026-08-05 the station came up after an unattended restart with the source
+harbor answering, so **every `/control/*` returned 404 while the station played
+perfectly**. The console showed "Music controls: HTTP 404" and nothing else was
+wrong.
 
-- per-speaker `settings.json` — gain, duck, and a three-band EQ
-- `/control/*` on the harbor at 8005 behind `import speakers`: now-playing path,
-  skip, again, repeat, music on/off, pause. Any host may drive the music.
-- the page itself, plus a microphone picker that shows real device names
+Diagnosis is unambiguous when it happens — the 404 body says
+`<title>Liquidsoap source harbor</title>` rather than being a plain 404.
 
-Three wide peak bells at 160Hz, 1kHz and 4kHz carry the EQ. NOT a shelf pair:
-`filter.iir.eq.lowshelf` and `.highshelf` exist but take a `slope` and no gain,
-and measured here they are unusable as tone controls — a 100Hz tone through
-`lowshelf(frequency=500)` came out 56dB DOWN, and a negative slope returned inf.
-A peak is unity away from its centre, so 0dB on all three sliders is exactly
-flat. An earlier note in this file said shelves were missing; they exist, they
-are just the wrong tool.
+A restart usually takes it back. **The real fix is to stop sharing: leave 8005 to
+the source protocol and move the HTTP surface to its own port**, repointing the
+`/control/*`, `/likes/*` and `/interactive` proxies in the Caddyfile. Then there
+is nothing to race. Not yet done.
 
-The per-note trick: a filter parameter can be a GETTER, `{...}`, re-evaluated as
-it runs, so it reads `q.last_metadata()` and follows the current note without
-any `override` parameter. Bind the getters BEFORE `amplify` — amplify returns a
-plain source, and passing the queue to it first pins the type so `last_metadata`
-stops typechecking.
+### 3. Caddy and liquidsoap share `svc-radio`
 
-Transport was originally headed for `/admin`. It belongs on the console
-instead; `/admin` stays the place you make speakers.
+So granting Caddy write access to `config/` necessarily gave the *station* write
+access to its own settings. `live/` and `config/` are both writable by the
+account that also runs liquidsoap. Only a separate Caddy account fixes it, which
+is an argument for the `C:\services\` split below.
 
-### 2. Startup must not replay the backlog — FIXED 2026-08-02
+### 4. Smaller
 
-`seen` lives only in memory, so **every restart re-queues every note still on
-disk** — up to five minutes' worth, all at once. This replayed 21 notes on air
-on 2026-08-02 while the operator was recording. Fix: only queue notes whose
-mtime is after process start, and let the existing cleanup sweep the rest.
+- `messages/voice/announcer/settings.json` still carries a three-band `eq`
+  (`low/mid/high`) from before the seven-band change. Harmless — a mismatched
+  shape reads as null and plays flat — but stale.
+- `interactive.float` accepts a value past its own slider maximum without
+  complaint, so a bad number gives a dial reading off its own end.
+- The `dj` preset seeds from whichever browser opens `/host/` first. If that is
+  not the phone the operator tuned on, it seeds page defaults and the file then
+  exists, so the real tuning never seeds. Recoverable by saving over it.
+- Guestbook posts are gitignored and never committed. Deliberate, for now.
 
-Fixed: `started = time()` at load, and `is_new(f)` gates the queueing while
-`seen` still records every path, so an old note costs one stat rather than four
-a second. Verified across a restart: 0 notes queued.
+## What the numbers actually are
 
-### 3. The narrator
+Measured on this machine. Several of these contradict what was assumed:
 
-A `.md` dropped in a voice folder gets read aloud. Frontmatter for the
-parameters, body for the words:
+- **1,175 audio files**, 0.5 s for a recursive walk, 0.1 MB of paths.
+- **216 of them have neither title nor artist** — about one in five, not one in
+  twenty. A 60-file sample said one in twenty and was unrepresentative.
+- **Reading tags costs 13 ms per file**, 15.6 s for the library. It does *not*
+  stall the stream: `file.metadata` shells out to ffmpeg and releases the runtime
+  lock while it waits. **The recursive walk does stall it** — it holds the lock
+  throughout. The opposite of the intuition.
+- **`string.contains` costs ~1 ms per call.** Searching three fields across the
+  library that way would hold the lock ~2.8 s per query. `string.index` is 16×
+  cheaper; entries carry one pre-joined field and a search is 0.13 s flat.
+- **A search holds the lock 0.13 s.** One is inaudible; forty in a burst leave the
+  clock 4.3 s behind. The UI debounces at 350 ms with a two-character floor.
+- **`hold` is real seconds** as of 2026-08-03. It used to be worth half its face
+  value, so any tuning from before that date meant half what it said.
+- **icecast `burst-size` 16384 → 65536.** Through Caddy, 64 kB of audio arrived
+  in 3578 ms before and 484 ms after. Listeners now start almost immediately, at
+  the cost of joining ~4 s further behind live.
+- **Piper renders ~1.7 s per line.** End to end, text file to air, is 5–8 s,
+  dominated by the watcher's 3 s poll and its two-poll stability rule.
+- **Piper has no pitch control and no SSML.** Measured: repeated vowels stretch a
+  word 54%, hyphenated repeats 65%, ellipses *shorten* it 19%, and `[[ l aI v ]]`
+  does nothing. Spelling is the only lever.
 
-```markdown
----
-voice: zira
-rate: -1
-pitch: +10%
----
-Good evening. Coming up, three hours of Ethiopian jazz.
-```
+## Vision, and the backburner
 
-**The shape:** a watcher renders the `.md` to a `.wav` in the same folder, and
-the existing pickup plays it. Liquidsoap never learns what markdown is. Same
-pattern as `admin-watcher.ps1`.
+The operator's framing, worth keeping: this is *a collaborative audio-note
+radio-hosts radio, infused with an AI narrator*. Voice notes are not a
+workaround for failed streaming — they are the first-class way to host a show,
+and the same shape as everything else here.
 
-**The watcher must stage the wav inside the speaker's own folder** under a name
-the pickup ignores, then rename it. See the traps below — this is not a style
-preference, both of the obvious alternatives are broken.
+- **Skip tug of war.** 12 clicks per listener per song, both directions, net
+  force against half the pool. Designed in full, not built. Held until likes
+  prove themselves.
+- **Per-track `.md`** for notes and statistics, and the natural home for a
+  `lang:` field. Needs a 404 on the folder or it publishes the library layout.
+- **Bilingual announcements.** A voice *and* a sentence template per language,
+  keyed off `lang:`. Three Spanish voices are already installed
+  (`es_ES-sharvard`, `es_ES-davefx`, `es_MX-claude`). Not a piper feature — piper
+  is one language per model, which is why the pronunciation table existed and
+  why removing it means Spanish names stay wrong.
+- **Guest DJ takeover.** Mixxx speaks Icecast source natively and points at
+  `/live` today. What is missing is the *mode*: music off rather than ducked
+  while a guest is connected, visible on the console, restored on disconnect.
+  `music_on` and `connected` both already exist.
+- **System audio from the browser.** `getDisplayMedia({audio:true})` on
+  Chrome/Edge for Windows captures system or tab audio into the same pipeline —
+  a Zoom call or anything else, over the ducked music. Firefox cannot. Probably
+  wants mic and system audio mixed rather than either alone.
+- **Chat with the radio.** whisper in, an answer, piper out. Every piece exists.
+  "Machines queue, hosts mix" already governs when it may speak.
+- **Clean intro.** Pause the music, introduce the song, resume. The `paused` ref
+  exists; the hard part is knowing when the line has finished.
+- **Video notes.** Audio on the radio, `<video>` opened and closed on the site.
+  Not a video channel.
+- **Podcasts on demand**, **multilingual mounts** (`sources` is 10 now),
+  **±15 s seeking**, **autocommit guestbook posts**.
+- **Services out of the profile** — `D:\services\{...}`, which has the space;
+  `C:` has 1.8 GB free. Sources stay in `src`. Piper already lives there.
+- **Tag the library.** 216 untagged files is the root of several irritations at
+  once, and it would fix Jellyfin browsing too.
+- **China.** Still waiting on whether `/stream` opens directly there.
 
-The guestbook connects to this for nothing: `chat/` is already `.md` files and
-the narrator already eats `.md` files. Reading listeners' comments on air is a
-small change once the announcer exists.
+## Decisions not to relitigate
 
-### Later, agreed but not urgent
+- Identity has two kinds: **verified** for hosts, **claimed** for everyone else.
+  Never the word *anonymous* — it describes the system's ignorance and then
+  blames the person for it.
+- **Hosts mix, machines queue.** A new note from a person mixes with one already
+  on air; an automated one waits for a gap.
+- Notes that arrive while the station is down are dropped.
+- The folder is the interface. Identity comes from the server, never the client.
+- Likes are kept forward; skip votes die with the track.
+- Search returns an opaque id and never a path.
+- **A question is a question.** "What do you think?" asks for an answer, not an
+  implementation.
 
-- **EQ per note** — same annotation channel as gain. This build DOES have
-  `filter.iir.eq.lowshelf`, `highshelf` and `peak`, so a real three-band EQ is
-  available. (An earlier version of this file said otherwise. It was wrong.)
-- **Presets** — a named bundle of per-note values, chosen in `/talk/`.
-- **Reduce `lane_count`** — 8 was arbitrary. Last, because nothing else should
-  depend on lane identity.
-- **China** — his wife loads the page but the audio stalls. HLS is the likely
-  fix and this build has `output.file.hls` and `output.harbor.hls`. **Waiting on
-  one datum**: can she open `/stream` directly, or does that stall too?
-- **Autocommit guestbook posts** — untracked for now, deliberately.
-- **A station-level `config.json`** for announcer cadence and house voice, read
-  with `json.parse` and `file.watch`. Liquidsoap can also `json.stringify`, so
-  the save button and the file are the same object. **If it lands, the rule is:
-  the file is truth at startup, the `interactive` knobs are live overrides, and
-  save writes the knobs back.** Otherwise a restart silently reverts a tuning.
+## Traps that have cost real time
 
-## Who anyone is — the identity model
+- **Liquidsoap caches compiled scripts.** `Loading main script from cache!` means
+  your edit did not run. `restart-radio.ps1` clears it.
+- **`file.ls` with `recursive = true` ignores `pattern`**, returns directories,
+  and yields mixed separators.
+- **`string.split` takes a REGEX**; a bare backslash throws and silently kills
+  the thread it is on.
+- **`x = try ... end` does not parse.** A `try` is only valid where a statement is.
+- **`string.char` is a BYTE, not a code point.** `string.char(0x1F4E2)` throws at
+  load and takes the station off air.
+- **A throw inside a metadata callback kills it silently** and titles stop
+  reaching icecast while the music plays on.
+- **`file.mtime` does NOT throw on an unreadable file** on this build.
+- **`filter.iir.eq.lowshelf`/`highshelf` take a slope and no gain** and are
+  useless as tone controls. `peak` behaves. A filter parameter can be a getter,
+  so it can follow the current note — bind the getters BEFORE `amplify` or
+  `last_metadata` stops typechecking.
+- **Caddy's `request_body max_size` TRUNCATES rather than rejecting**, and webdav
+  writes the truncated bytes. A too-small cap silently corrupts a settings file.
+- **`Move-Item` carries the SOURCE ACL**, so a file moved into a voice folder is
+  unreadable to `svc-radio` and reported as a codec error. Files created *in* the
+  folder inherit it. Stage in place, then rename — which also closes the
+  half-written race, since the pickup polls four times a second.
+- **`Set-Content -Encoding UTF8` writes a BOM.** Use `[IO.File]::WriteAllText`
+  with `UTF8Encoding($false)`, or `scp`.
+- **A `.ps1` must be pure ASCII or carry a UTF-8 BOM** — PowerShell 5.1 reads a
+  BOM-less file as ANSI and one em-dash breaks parsing.
+- **Never write `\$(...)` in a PowerShell here-string.** PowerShell escapes with a
+  BACKTICK; the backslash form is evaluated and writes a literal `\x`. This broke
+  the station page for twenty minutes.
+- **`cd` in a PowerShell one-liner does not move .NET's working directory.**
+- **PowerShell 5.1 has no `-SkipHttpErrorCheck`**, `Restart-ScheduledTask` does
+  not exist, and `Invoke-WebRequest`'s exception path may consume the response
+  body — which made a working page look like it returned zero bytes, twice.
+- **`ConvertFrom-Json` throws on two keys differing only in case**, taking the
+  whole file with it.
+- **Line endings are per file**: `radio.liq` and `Caddyfile` pure LF, the HTML
+  pure CRLF, `admin/index.html` LF. Check, never assume. Use `--index-filter`
+  for history rewrites; `--tree-filter` checks files out and normalises them.
+- **Caddy writes progress to stderr on success.** Read the exit code. Git does
+  the same on push.
 
-Two kinds, ordered by authority, and there is no third:
+## How to work here
 
-- **Verified** — hosts. The server decides who they are, because they can talk
-  on air and drive liquidsoap. Authority needs proof.
-- **Claimed** — everyone else. They put a name to what they say and nobody
-  checks it. Enough, because the only thing at stake is their own words.
+Source work goes to a background agent with a brief that names the existing code
+to route into, forbids parallel paths, and demands a stated shape. Verify every
+diff yourself before committing — over this session agents caught a live
+unauthenticated route, a prototype-pollution bug, a lock-holding search that
+would have glitched the air, and several of my own wrong premises. They also
+reported a CSS bug that did not exist, so verify their findings too.
 
-Do NOT call the second kind anonymous. An's ruling, and he is right: that word
-describes the system's ignorance and then pins it on the person as though it
-were a property they have. If you want to know who someone is, ask who they
-claim to be.
+Two checks are not optional on any page edit: `node --check` on the extracted
+script, **and** confirming every id the script references exists in the markup.
+`node --check` passes happily on `$('gone').value`; the browser throws. That
+exact pair broke the console twice.
 
-## Skip votes — designed, not built
-
-- **12 clicks per listener, per song.** The budget refills each track, so every
-  song is its own contest.
-- **Clicks go both ways.** Skip and keep. A tug of war, not a poll. The
-  counter-click IS the veto, which is why the threshold need not be the whole
-  pool — requiring every click in the room lets one absent listener veto it.
-- **Threshold is net force against a fraction of the pool.** Half is the
-  working proposal: 60 net out of 120 with ten listeners.
-- **Show the tug while it happens.** Watching the bar move is the feature. A
-  vote you cannot see is admin; one you can see is a crowd.
-- **Skip votes live in memory; LIKES are kept on disk.** They look like the same
-  mechanic and they are not. A skip vote dies with the song, so a restart
-  clearing it is correct rather than data loss - the one place where
-  folder-is-the-interface is the wrong answer. A like is kept forward, so it is
-  exactly the folder case, like the guestbook. An's ruling; I had lumped them
-  together.
-- **Key a like by the file path, not the title.** Untagged files come back with
-  empty title and artist - the path is the only identifier always present. Over
-  time that means the station knows which tracks are loved, which is worth
-  something to rotation later. Do not build that now.
-- `on_metadata` already fires on every track change, so the count resets itself.
-- Voting is public, so it needs its own unauthenticated route; `/control/*` is
-  behind the speaker credential.
-- The per-listener budget is browser-local and defeatable. Fine. It is a song.
-## Traps that have already cost real time
-
-The README has the full list. These bit hardest:
-
-- **Liquidsoap caches compiled scripts.** `Loading main script from cache!` in
-  the log means your edit did not run. Clear `D:\Liquidsoap\cache`. The running
-  station was not the file on disk for a stretch of one session.
-- **`file.ls` with `recursive = true` ignores `pattern`**, returns directories
-  too, and yields MIXED separators — forward slashes for the directory you gave
-  it, backslashes below. `path.*` only understands `/`.
-- **`string.split` takes a REGEX.** A bare backslash is not one; it throws and
-  kills the polling thread silently.
-- **There is no `path.extension`.** `path.remove_extension` exists.
-- **`x = try ... end` does not parse** in liquidsoap 2.4.5 — a `try` is only
-  valid where a statement is. Anything fallible has to be its own function.
-- **`Set-Content -Encoding UTF8` writes a BOM**, which makes liquidsoap's parse
-  fail and silently fall back — a slider that appears to do nothing. Use
-  `[IO.File]::WriteAllText(p, t, (New-Object System.Text.UTF8Encoding($false)))`.
-- **`Move-Item` from TEMP carries the SOURCE ACL**, so `svc-radio` gets
-  `Permission denied` and the file never plays. A file *created* inside the
-  folder inherits the folder's ACL. Stage in place, then rename.
-- **A file written in place gets picked up half-written** — the poll runs four
-  times a second. Rename is atomic; writing directly is not. Both halves of this
-  and the ACL trap have to be solved together.
-- **Caddy's `request_body max_size` truncates rather than rejecting**, and
-  webdav writes the truncated bytes. An oversized PUT returns 405 *and* leaves a
-  corrupt file. Measured 2026-08-02.
-- **`hold` on the dial is worth half what it reads.** The accumulator adds
-  `0.04` per call against a `0.02s` frame. Measured: 14 seconds at a setting of
-  28. Every hold value tuned by ear means half its number.
-- **Windows PowerShell 5.1 has no `-SkipHttpErrorCheck`.** A 4xx throws; read
-  the status off `$_.Exception.Response`.
-- **Caddy writes progress to stderr**, which PowerShell under
-  `$ErrorActionPreference = 'Stop'` treats as a terminating error on success.
-  Git does the same on push.
-- **Caddy reload, never restart.** Restarting drops listeners.
-- **Restarting Liquidsoap replays the note backlog** — see the pending fix
-  above. Do not restart the service while anyone is on air.
-- **Line endings are consistent per file, deliberately**: `radio.liq` and
-  `Caddyfile` are pure LF, the HTML pure CRLF. They used to be mixed, and mixed
-  is what let a whole file get converted by accident twice in one day — once by
-  a `--tree-filter`, once by an agent's editor. Use `--index-filter` for history
-  rewrites; it never checks a file out.
-- **`file.mtime` does NOT throw on an unreadable file** on this build — it
-  returns the true mtime, and 0.0 for a missing one. An earlier note here said
-  otherwise. Measured 2026-08-02.
-- **`{http.auth.user.id}` in a webdav root works** — verified, and it is the
-  whole basis of identity here.
-- **SAPI wav decodes fine** at 44100/16/stereo (`pcm_s16le`). Dolly has only
-  David and Zira installed; no natural voices are present.
-
-## How this session was run, and why
-
-Source work goes to background agents with briefs that name the existing code to
-route into, forbid parallel paths, and demand a stated shape. Every diff is
-verified independently before committing — twice an agent's summary was right
-but incomplete, and once one found a real bug the brief had not asked about.
-
-One correction worth carrying: *a question is a question*. "What do you think?"
-and "where does X come from?" ask for an answer, not an implementation.
-
-And one from today: **a permission granted in one context does not carry to
-another.** "Uptime is not sacred during transitions" was true when nobody was
-listening. Handing that line to an unattended agent while the operator was
-recording put 21 of his notes back on air.
+And the thing that made the audio better was not reasoning. It was putting every
+capture parameter in front of the person who can hear the result. `autoGainControl`
+was switched off on the theory that it was telephone processing; the operator
+turned it on and it helped. No amount of thinking from here would have found that.
