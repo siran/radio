@@ -232,6 +232,31 @@ import admins.caddy
 	# anybody's folder. Any host may write it, which is the same trust the desk
 	# itself already extends - the knobs have always changed the air for everyone
 	# the moment they move. This only makes that choice outlive the process.
+	# What the narrator has said. The watcher appends to it as each line is
+	# spoken; the page reads it to list them, and writes it back with one
+	# removed when a host deletes one. Same folder and same shape as the desk,
+	# because it is the same kind of thing: station state, not a speaker's.
+	# 200 lines at 500 characters is 100KB before quoting, so 256KB.
+	handle /narrator/history/* {
+		import speakers
+		@hist {
+			method GET PUT
+			path /narrator/history/history.json
+		}
+		handle @hist {
+			request_body {
+				max_size 256KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/config
+				prefix /narrator/history
+			}
+		}
+		handle {
+			respond 404
+		}
+	}
+
 	handle /host/desk/* {
 		import speakers
 		@desk {

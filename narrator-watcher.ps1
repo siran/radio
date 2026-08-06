@@ -35,6 +35,7 @@ $voice = 'C:\Users\an\src\radio\messages\voice'
 # It is re-read on EVERY poll, so a change is on the air at the next
 # announcement without stopping the scheduled task.
 $cfgFile = 'C:\Users\an\src\radio\config\narrator.json'
+$repoConfig  = "C:/Users/an/src/radio/config"   # where narrator.json and history.json live
 
 # What each field falls back to. These are exactly the values that were
 # hardcoded at this spot before the file existed, so a missing or malformed
@@ -196,6 +197,34 @@ while ($true) {
             }
 
             Rename-Item $pending (Split-Path $wav -Leaf)
+
+            # Keep what was said. The .txt itself cannot stay - it would be
+            # rendered again three seconds later - so the words move into a
+            # ledger and the file goes. This is what lets a host see everything
+            # the station has said, say one again, and keep the ones worth
+            # keeping in a preset.
+            #
+            # Newest first, deduplicated on the text, capped at 200. This is a
+            # list to pick from, not an archive: an unbounded array rewritten
+            # every few seconds is a cost with no reader. Wrapped, because a
+            # ledger that cannot be written is not worth losing a broadcast
+            # over.
+            try {
+                $hist = Join-Path $repoConfig 'history.json'
+                $rows = @()
+                if (Test-Path $hist) {
+                    $raw = Get-Content $hist -Raw
+                    if ($raw -and $raw.Trim()) { $rows = @(ConvertFrom-Json $raw) }
+                }
+                $row  = [pscustomobject]@{
+                    t    = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+                    text = $text
+                }
+                $rows = @($row) + @($rows | Where-Object { $_ -and $_.text -ne $text })
+                if ($rows.Count -gt 200) { $rows = $rows[0..199] }
+                [IO.File]::WriteAllText($hist, (ConvertTo-Json @($rows) -Depth 4), $utf8)
+            } catch { }
+
             Remove-Item $f.FullName -Force
             Remove-Item "$wav.err" -Force -ErrorAction SilentlyContinue
         }

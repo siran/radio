@@ -89,8 +89,7 @@
       literally, so it is spoken exactly as typed. 500 characters at most.</div>
 
     <label for="voice">Voice &mdash; which installed voice speaks, and therefore which language</label>
-    <input id="voice" list="voicelist" spellcheck="false" autocapitalize="off" autocorrect="off">
-    <datalist id="voicelist"></datalist>
+    <select id="voice"></select>
     <div class="hint" id="voicenote">Installed voices, loading.</div>
 
     <label for="speed">Speed &mdash; how fast it talks; above 1.0 is slower &mdash; <span id="speedval">1.15</span></label>
@@ -187,19 +186,31 @@
         .filter(f => !f.is_dir && f.name.endsWith('.onnx'))
         .map(f => f.name.slice(0, -5))
         .sort();
-      const dl = $('voicelist');
-      dl.innerHTML = '';
-      for (const n of names) {
+      // A select, not an input with a datalist. A datalist is a set of
+      // SUGGESTIONS filtered by what is already typed - and this field is
+      // filled in with the voice currently in use - so the browser matched
+      // that one string and hid the other six. It said "7 installed" in the
+      // line below while offering one, which is worse than offering none.
+      const sel = $('voice');
+      const want = sel.value || cfg.voice || '';
+      sel.innerHTML = '';
+      // The configured voice goes in even when the folder does not list it, so
+      // a name that was set by hand, or a voice since removed, is still shown
+      // rather than silently becoming whichever one sorts first.
+      const all = names.includes(want) || !want ? names : [want].concat(names);
+      for (const n of all) {
         const o = document.createElement('option');
         o.value = n;
-        dl.appendChild(o);
+        o.textContent = n + (names.includes(n) ? '' : '  (not installed)');
+        sel.appendChild(o);
       }
+      if (want) sel.value = want;
       $('voicenote').textContent = names.length
-        ? names.length + ' installed: ' + names.join(', ')
+        ? names.length + ' installed.'
         : 'no .onnx voices found in that folder.';
     } catch (e) {
       $('voicenote').textContent =
-        'Could not list the installed voices (' + e.message + ') - type the name of one.';
+        'Could not list the installed voices (' + e.message + ').';
     }
   }
 
@@ -508,7 +519,7 @@
   // change rather than input on the text fields: it fires when the field is
   // left, so a save is one per edit rather than one per keystroke.
   $('voice').addEventListener('change', () => {
-    cfg.voice = $('voice').value.trim();
+    cfg.voice = ($('voice').value || '').trim();
     save('voice saved: ' + cfg.voice + ' - on air in a few seconds');
   });
   $('ident').addEventListener('change', () => {
