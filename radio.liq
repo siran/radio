@@ -71,6 +71,41 @@ end
 
 ncfg = narrator_cfg()
 
+# The mixing desk, saved. Every knob below is live - moving it changes the air
+# at once - but until now that was ALL it was, so a restart threw the lot back
+# to whatever numbers were typed here months ago. An afternoon of listening was
+# lost that way twice in one day before this existed.
+#
+# Same shape as narrator.json above and for the same reason: every field
+# optional, the whole thing wrapped, and a file that is missing or malformed
+# falls through to the built-in numbers rather than taking the station with it.
+# The page writes this file; nothing here writes it back, so what is on disk is
+# always what somebody chose.
+desk_config = "C:/Users/an/src/radio/config/desk.json"
+
+def desk_cfg() =
+  try
+    let json.parse ( c : {
+      mic_gain   : float?,
+      voice_gain : float?,
+      hp_freq    : float?,
+      comp_thr   : float?,
+      comp_ratio : float?,
+      comp_gain  : float?,
+      duck_to    : float?,
+      hold       : float?,
+      glide      : float?
+    } ) = file.contents(desk_config)
+    c
+  catch _ do
+    { mic_gain = null, voice_gain = null, hp_freq = null, comp_thr = null,
+      comp_ratio = null, comp_gain = null, duck_to = null, hold = null,
+      glide = null }
+  end
+end
+
+dcfg = desk_cfg()
+
 # --- knobs -----------------------------------------------------------------
 # Every one of these can be changed WHILE THE STATION IS RUNNING, from the
 # mixing desk page. No restart, no gap in the audio.
@@ -78,32 +113,32 @@ ncfg = narrator_cfg()
 # voice chain
 mic_gain   = interactive.float("mic_gain",
   description = "Live microphone volume. Raise if the mic sounds far away.",
-  unit = "x", min = 0.0, max = 4.0, step = 0.1, 3.0)
+  unit = "x", min = 0.0, max = 4.0, step = 0.1, (dcfg.mic_gain ?? 3.0))
 
 voice_gain = interactive.float("voice_gain",
   description = "Volume of uploaded voice notes. Phone recordings arrive quiet, so this sits high.",
-  unit = "x", min = 0.0, max = 12.0, step = 0.25, 1.0)
+  unit = "x", min = 0.0, max = 12.0, step = 0.25, (dcfg.voice_gain ?? 1.0))
 
 hp_freq    = interactive.float("hp_freq",
   description = "Cuts rumble below this. Handling noise and desk bumps live down here.",
-  unit = "Hz", min = 40.0, max = 300.0, step = 5.0, 80.0)
+  unit = "Hz", min = 40.0, max = 300.0, step = 5.0, (dcfg.hp_freq ?? 80.0))
 
 comp_thr   = interactive.float("comp_thr",
   description = "Compressor: the level above which your voice starts being held back. Lower = more evening out.",
-  unit = "dB", min = -40.0, max = 0.0, step = 1.0, -26.0)
+  unit = "dB", min = -40.0, max = 0.0, step = 1.0, (dcfg.comp_thr ?? -26.0))
 
 comp_ratio = interactive.float("comp_ratio",
   description = "Compressor: how hard it holds back. 1 = off, 4 = normal speech, 10+ = squashed.",
-  unit = ":1", min = 1.0, max = 20.0, step = 0.5, 6.0)
+  unit = ":1", min = 1.0, max = 20.0, step = 0.5, (dcfg.comp_ratio ?? 6.0))
 
 comp_gain  = interactive.float("comp_gain",
   description = "Make-up volume, added AFTER the compressor. This is the one to raise if you are still too quiet.",
-  unit = "dB", min = 0.0, max = 24.0, step = 0.5, 12.0)
+  unit = "dB", min = 0.0, max = 24.0, step = 0.5, (dcfg.comp_gain ?? 12.0))
 
 # ducking
 duck_to    = interactive.float("duck_to",
   description = "How loud the music stays while someone talks. 1.0 = untouched, 0.0 = silent.",
-  unit = "x", min = 0.0, max = 1.0, step = 0.05, 0.6)
+  unit = "x", min = 0.0, max = 1.0, step = 0.05, (dcfg.duck_to ?? 0.6))
 
 # Starting value from narrator.json; the dial is live, the file is what comes
 # back after a restart.
@@ -114,11 +149,11 @@ duck_to    = interactive.float("duck_to",
 # by ear before 2026-08-03 meant half what it said.
 hold       = interactive.float("hold",
   description = "Seconds of quiet before the music comes back up. Covers pauses and gaps between clips.",
-  unit = "s", min = 0.0, max = 30.0, step = 0.5, (ncfg.hold ?? 3.0))
+  unit = "s", min = 0.0, max = 30.0, step = 0.5, (dcfg.hold ?? (ncfg.hold ?? 3.0)))
 
 glide      = interactive.float("glide",
   description = "How fast the music fader moves. Smaller is slower and smoother.",
-  unit = "", min = 0.01, max = 0.5, step = 0.01, 0.01)
+  unit = "", min = 0.01, max = 0.5, step = 0.01, (dcfg.glide ?? 0.01))
 
 # the announcer
 # Two switches, not a count. There are exactly two moments a host can speak at

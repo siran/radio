@@ -892,7 +892,44 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       $('derr').textContent = '';
       setStatus(recording ? 'on air' : k + ' set to ' + v);
+      saveDesk();          // live is not the same as kept
     } catch (e) { $('derr').textContent = 'Mixing desk: ' + e.message; }
+  }
+
+  // POST /interactive changes the air and nothing else - the value lives in a
+  // running process and dies with it. Twice in one afternoon a restart threw
+  // away an hour of tuning that way. This writes the whole desk to a file
+  // liquidsoap reads at startup, so a restart comes back where it was left.
+  //
+  // The WHOLE desk every time, never one key: a partial write would leave the
+  // file holding a mix of what is set now and what was set before, which is a
+  // desk nobody ever chose. Values come off the controls rather than out of
+  // KNOBS, so what is on screen is what is kept.
+  let deskTimer = 0;
+  function saveDesk() {
+    // Dragging a slider fires change once, but loading a preset moves nine in
+    // a row; one write after the last of them is enough.
+    clearTimeout(deskTimer);
+    deskTimer = setTimeout(async () => {
+      const d = {};
+      for (const k in KNOBS) {
+        const v = parseFloat($(k).value);
+        if (isFinite(v)) d[k] = v;
+      }
+      try {
+        const res = await fetch(DESK_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(d)
+        });
+        if (!res.ok && res.status !== 201 && res.status !== 204) {
+          $('derr').textContent = 'The desk is live but not saved: HTTP ' + res.status;
+        }
+      } catch (e) {
+        $('derr').textContent = 'The desk is live but not saved: ' + e.message;
+      }
+    }, 400);
   }
 
   for (const k in KNOBS) {
@@ -1304,6 +1341,7 @@
   // the read-modify-write below, which is still the only thing that reaches
   // the air.
   const PRESETS_URL = '/host/presets/presets.json';
+  const DESK_URL    = '/host/desk/desk.json';
   // The route caps the body at 32KB and caddy TRUNCATES rather than refusing,
   // so the page has to be what says no. At most 20 names of at most 24
   // characters the worst case is 7961 bytes (see the Caddyfile, where the same
@@ -1340,7 +1378,20 @@
     for (const id in CAP) cap[id] = $(id).value;
     const eq = {};
     for (const b of BANDS) eq[b] = settings.eq[b];
-    return { cap: cap, voice: { gain: settings.gain, duck: settings.duck, eq: eq } };
+    // The desk goes in too. It is not this speaker's - there is one desk and
+    // it belongs to the station - so loading a preset moves it for everybody
+    // listening. That is the same thing the desk has always done; a preset
+    // just makes it one press instead of nine.
+    const desk = {};
+    for (const k in KNOBS) {
+      const v = parseFloat($(k).value);
+      if (isFinite(v)) desk[k] = v;
+    }
+    return {
+      cap: cap,
+      voice: { gain: settings.gain, duck: settings.duck, eq: eq },
+      desk: desk
+    };
   }
 
   // Every write is the whole map - there is no DELETE on that route and no
@@ -1388,6 +1439,18 @@
       // ended up showing: a codec this browser does not have went to `def` on
       // the way in and would otherwise sit in localStorage unreachable.
       capSave();
+    }
+    // The desk half. Applied one knob at a time through the same path a hand
+    // uses, so liquidsoap hears it and saveDesk() keeps it - and an unknown or
+    // out-of-range key is simply skipped rather than poisoning the rest.
+    if (p.desk && typeof p.desk === 'object') {
+      for (const k in KNOBS) {
+        const x = parseFloat(p.desk[k]);
+        if (!isFinite(x)) continue;
+        $(k).value = x;
+        showKnob(k);
+        setKnob(k);
+      }
     }
     const v = (p.voice && typeof p.voice === 'object') ? p.voice : {};
     const g = parseFloat(v.gain);

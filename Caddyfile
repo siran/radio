@@ -226,6 +226,46 @@ import admins.caddy
 	# credential and never by the client, everything else 403.
 	# Liquidsoap never reads this file; it is the page's own memory. What it
 	# writes into settings.json is what reaches the air.
+	# The mixing desk, so it survives a restart. Unlike settings.json and
+	# presets.json this is NOT per speaker: there is one desk and it belongs to
+	# the station, so it lands in config/ beside narrator.json rather than in
+	# anybody's folder. Any host may write it, which is the same trust the desk
+	# itself already extends - the knobs have always changed the air for everyone
+	# the moment they move. This only makes that choice outlive the process.
+	handle /host/desk/* {
+		import speakers
+		@desk {
+			method GET PUT
+			path /host/desk/desk.json
+		}
+		handle @desk {
+			# Same measured trap as settings.json and presets.json: max_size
+			# TRUNCATES the body and webdav writes the truncated bytes, so too
+			# small a cap here is not a visible error - it is a desk.json that
+			# liquidsoap cannot parse, falling back to the built-in numbers at
+			# the next restart and quietly undoing the tuning this file exists
+			# to keep.
+			# Counted over every knob at its longest value:
+			#   {"mic_gain":4,"voice_gain":12,"hp_freq":300,"comp_thr":-40,
+			#    "comp_ratio":20,"comp_gain":24,"duck_to":0.05,"hold":30,
+			#    "glide":0.01}
+			# = 148 bytes with room for the decimals each can carry. 1KB is
+			# nearly seven times that and still far too small to be a way of
+			# putting anything else into config/.
+			request_body {
+				max_size 1KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/config
+				prefix /host/desk
+			}
+		}
+		# one file, one shape, nothing else reachable under this path
+		handle {
+			respond 404
+		}
+	}
+
 	handle /host/presets/* {
 		import speakers
 		@presets {
