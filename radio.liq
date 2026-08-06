@@ -100,6 +100,23 @@ comp_gain  = interactive.float("comp_gain",
   description = "Make-up volume, added AFTER the compressor. This is the one to raise if you are still too quiet.",
   unit = "dB", min = 0.0, max = 24.0, step = 0.5, 17.5)
 
+# the gate. Every other control on this desk lifts the voice and the room
+# together - make-up gain especially, which is at maximum gain during exactly
+# the silences it is least wanted in. A gate is the only thing here that can
+# tell them apart, because it does not scale the signal, it decides whether
+# there is one. Below the threshold the room is not quieter, it is gone.
+gate_thr   = interactive.float("gate_thr",
+  description = "Gate: below this, the room is shut out. Set it above your room and under your quietest word.",
+  unit = "dB", min = -60.0, max = 0.0, step = 1.0, -34.0)
+
+gate_range = interactive.float("gate_range",
+  description = "Gate: how far down it shuts. 0 = gate off. -20 is a closed door; -60 is a vacuum, and sounds like one.",
+  unit = "dB", min = -60.0, max = 0.0, step = 1.0, -22.0)
+
+gate_release = interactive.float("gate_release",
+  description = "Gate: how long it takes to close after you stop. Too fast chops the tail off words.",
+  unit = "ms", min = 20.0, max = 3000.0, step = 10.0, 500.0)
+
 # ducking
 duck_to    = interactive.float("duck_to",
   description = "How loud the music stays while someone talks. 1.0 = untouched, 0.0 = silent.",
@@ -683,6 +700,9 @@ def knobs() =
     ("comp_thr",       comp_thr()),
     ("comp_ratio",     comp_ratio()),
     ("comp_gain",      comp_gain()),
+    ("gate_thr",       gate_thr()),
+    ("gate_range",     gate_range()),
+    ("gate_release",   gate_release()),
     ("duck_to",        duck_to()),
     ("hold",           hold()),
     ("glide",          glide()),
@@ -1168,7 +1188,25 @@ live = filter(freq = hp_freq, mode = "high", live)
 #    their own speaker's gain, applied back in the lanes.
 talk = add(id = "talk", normalize = false, [live, voice])
 
-# 4. compressor on the WHOLE bus, so an uploaded note is levelled exactly like
+# 4. the gate, and it goes BEFORE the compressor on purpose. Compression pulls
+#    a voice and the room it was recorded in closer together - that is what it
+#    is for - so a gate placed after it has a smaller gap to aim at and has to
+#    be set more violently to do the same work. Here the distance between a
+#    spoken word and an empty room is still the full distance the microphone
+#    heard, which is the easiest thing in the chain to set by ear.
+#
+#    hold is left at its 1000ms default: it keeps the gate OPEN, so a pause for
+#    breath in the middle of a sentence cannot slam the door mid-thought.
+talk = gate(
+  id        = "gate",
+  threshold = gate_thr,
+  range     = gate_range,
+  release   = gate_release,
+  attack    = 10.0,
+  talk
+)
+
+# 5. compressor on the WHOLE bus, so an uploaded note is levelled exactly like
 #    the live mic. Putting it on the mic alone left notes uncompressed and
 #    inaudible.
 talk = compress(
@@ -1180,7 +1218,7 @@ talk = compress(
   talk
 )
 
-# 5. limiter. Eight lanes summing with normalize=false means eight people
+# 6. limiter. Eight lanes summing with normalize=false means eight people
 #    talking at once can overshoot badly, and the make-up gain makes that
 #    worse. This is the guard rail: inaudible when one person speaks, and it
 #    keeps a crowd from turning into distortion.
