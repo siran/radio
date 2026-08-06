@@ -348,13 +348,13 @@
       <button class="tbtn" id="presdel" title="remove it from the server">Delete</button>
     </div>
 
-    <label><span class="band">Everything, as one file</span> &mdash; your voice, your presets, your streaming settings, and the station's desk and narrator. Keep it, mail it to a co-host, or put it back after a mistake.</label>
+    <label><span class="band">This sound, as one file</span> &mdash; the saved sound picked above: voice, EQ, streaming settings, the desk it was tuned with, and which panels were open. Keep it, mail it to a co-host, or put it back after a mistake.</label>
     <div class="btns">
       <button class="tbtn" id="dlall">Download</button>
       <button class="tbtn" id="ulall">Upload</button>
       <input id="ulfile" type="file" accept="application/json,.json" hidden>
     </div>
-    <div class="status"><span class="when">Downloading is harmless. Uploading is not: the desk and the narrator belong to everyone listening, so those are asked for separately and left out unless you say yes.</span></div>
+    <div class="status"><span class="when">Downloading takes the sound selected above. Uploading saves the one in the file under the name in the box, replacing only that one &mdash; nothing else you have saved changes, and nothing reaches the air until you press Load.</span></div>
     <div class="status" id="iomsg"></div>
     <div class="status" id="presmsg"></div>
     <div class="err" id="preserr"></div>
@@ -1595,53 +1595,49 @@
   window.addEventListener('beforeunload', e => {
     if (recording) { e.preventDefault(); e.returnValue = ''; }
   });
-  // ----- everything, as one file --------------------------------------------
-  // Five things decide how this station sounds and they live in five places:
-  // settings.json and presets.json in your own folder, the Streaming panel in
-  // THIS browser and nowhere else, and desk.json and narrator.json in config/.
-  // Clearing your browser data has always silently destroyed the third one.
-  // This is one file that holds all five.
+  // ----- one preset, as one file ------------------------------------------
+  // A preset is the unit, not the whole folder. Downloading every saved sound
+  // in one file made restoring one of them impossible without also restoring
+  // the other five, which is the opposite of what a preset is for.
   //
-  // Two scopes, kept apart on purpose. `mine` is yours and applying it changes
-  // only what you sound like. `station` is the desk and the narrator, which
-  // every listener hears - so it is downloaded always and applied only when
-  // asked for, out loud, at the moment of asking.
-  const IO_VERSION = 1;
-  const NARRATOR_URL = '/narrator/config/narrator.json';
+  // So: the file holds exactly one, and putting it back touches exactly one
+  // key in presets.json. Everything else a host has saved is left alone.
+  const IO_VERSION = 2;
   const ioSay = t => { $('iomsg').textContent = t; };
 
-  async function getJSON(url) {
-    try {
-      const r = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
-      return r.ok ? await r.json() : null;
-    } catch (e) { return null; }
+  // yyyymmddhhmm, local time - the clock on the wall of whoever took it.
+  function stampNow() {
+    const d = new Date(), z = n => String(n).padStart(2, '0');
+    return String(d.getFullYear()) + z(d.getMonth() + 1) + z(d.getDate()) +
+           z(d.getHours()) + z(d.getMinutes());
   }
+  // Whatever is picked in the list, falling back to whatever is typed in the
+  // name box - so a sound can be exported straight after saving it.
+  function ioName() {
+    const sel = ($('preslist').value || '').trim();
+    return sel || ($('presname').value || '').trim();
+  }
+  const ioSafe = n => n.replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, '-') || 'preset';
 
-  $('dlall').addEventListener('click', async () => {
-    ioSay('gathering');
-    const cap = {};
-    for (const id in CAP) cap[id] = $(id).value;
+  $('dlall').addEventListener('click', () => {
+    const n = ioName();
+    if (!n) return ioSay('Pick a saved sound, or type a name, first.');
+    // From the file rather than from the screen: what gets exported is what is
+    // actually saved under that name, not what the sliders happen to show.
+    const one = presets[n];
+    if (!one) return ioSay('There is no saved sound called "' + n + '".');
     const bundle = {
       version: IO_VERSION,
+      kind: 'wildnloyal-host-preset',
       saved: new Date().toISOString(),
       who: ($('whoami').textContent || '').trim(),
-      mine: {
-        voice:   settings,
-        cap:     cap,
-        presets: await getJSON(PRESETS_URL)
-      },
-      station: {
-        desk:     await getJSON(DESK_URL),
-        narrator: await getJSON(NARRATOR_URL)
-      }
+      name: n,
+      preset: one
     };
-    // A name that sorts by when it was taken, so a folder of these reads as a
-    // history rather than as file, file (1), file (2).
-    const stamp = bundle.saved.replace(/[:.]/g, '-').slice(0, 19);
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'wildnloyal-' + (bundle.who || 'host') + '-' + stamp + '.json';
+    a.download = 'wildnloyal-radio-host-preset-' + ioSafe(n) + '-' + stampNow() + '.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
     ioSay('downloaded ' + a.download);
@@ -1661,79 +1657,33 @@
       return ioSay('That file was written by a newer version of this page (' +
                    b.version + '). Not applying it.');
     }
+    const one = b.preset;
+    if (!one || typeof one !== 'object') {
+      return ioSay('There is no preset in that file.');
+    }
+    // The name in the box wins, so a sound can be brought in under a name of
+    // your choosing; the file's own name is only the default.
+    const target = (($('presname').value || '').trim() || (b.name || '').trim());
+    if (!target) return ioSay('Type a name for it first.');
+    if (!/^[A-Za-z0-9 _-]{1,24}$/.test(target)) {
+      return ioSay('A name is up to 24 letters, digits, spaces, hyphens or underscores.');
+    }
+    const had = Object.prototype.hasOwnProperty.call(presets, target);
     const when = b.saved ? (' from ' + b.saved.slice(0, 16).replace('T', ' ')) : '';
-    if (!confirm('Apply YOUR settings' + when + '?\n\nYour volume, EQ, streaming ' +
-                 'settings and saved presets. Nothing anyone else hears changes.')) {
-      return ioSay('nothing applied');
+    if (!confirm((had ? 'Replace your saved sound "' + target + '"'
+                      : 'Save this as "' + target + '"') + when +
+                 '?\n\nNothing else you have saved is touched, and nothing goes ' +
+                 'on air until you press Load.')) {
+      return ioSay('nothing changed');
     }
-
-    const mine = (b.mine && typeof b.mine === 'object') ? b.mine : {};
-    // The capture half first: it is local, cannot fail, and capDraw reads it
-    // back out so an unknown or unsupported value lands on its default rather
-    // than sitting in localStorage unreachable.
-    if (mine.cap && typeof mine.cap === 'object') {
-      try { localStorage.setItem(CAP_KEY, JSON.stringify(mine.cap)); } catch (e) {}
-      capDraw(); capSave();
-    }
-    if (mine.voice && typeof mine.voice === 'object') {
-      const g = parseFloat(mine.voice.gain);
-      if (isFinite(g)) settings.gain = g;
-      if (typeof mine.voice.duck === 'boolean') settings.duck = mine.voice.duck;
-      const had = (mine.voice.eq && typeof mine.voice.eq === 'object') ? mine.voice.eq : {};
-      for (const band of BANDS) {
-        const x = parseFloat(had[band]);
-        if (isFinite(x)) settings.eq[band] = x;
-        $('eq' + band).value = settings.eq[band];
-        showBand(band);
-      }
-      $('gain').value = settings.gain;
-      showGain(); showDuck();
-      await saveSettings('settings restored from a file');
-    }
-    if (mine.presets && typeof mine.presets === 'object') {
-      try {
-        await fetch(PRESETS_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(mine.presets)
-        });
-        Object.assign(presets, mine.presets);   // the in-memory map the panel draws from
-        presDraw();
-      } catch (e) { ioSay('Presets did not restore: ' + e.message); }
-    }
-    ioSay('your settings are back' + when + '.');
-
-    // And only now, as its own question, the half that changes what everyone
-    // listening hears. Answering no leaves the station exactly as it was.
-    const st = (b.station && typeof b.station === 'object') ? b.station : {};
-    if (!st.desk && !st.narrator) return;
-    if (!confirm('Also apply the STATION settings in this file?\n\nThe mixing ' +
-                 'desk and the narrator are shared - this changes what every ' +
-                 'listener hears, right now, including mid-show.')) {
-      return ioSay('your settings are back. The station was left alone.');
-    }
-    if (st.desk && typeof st.desk === 'object') {
-      for (const k in KNOBS) {
-        const x = parseFloat(st.desk[k]);
-        if (!isFinite(x)) continue;
-        $(k).value = x; showKnob(k); setKnob(k);
-      }
-    }
-    if (st.narrator && typeof st.narrator === 'object') {
-      try {
-        await fetch(NARRATOR_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(st.narrator)
-        });
-        $('narrator').contentWindow.location.reload();
-      } catch (e) { ioSay('The narrator did not restore: ' + e.message); }
-    }
-    ioSay('everything restored' + when + '.');
+    // Read-modify-write on the map: one key changes, every other saved sound
+    // rides through untouched. presPut writes the whole object back.
+    presets[target] = one;
+    presDraw();
+    $('preslist').value = target;
+    await presPut('"' + target + '" saved from a file');
+    ioSay('"' + target + '" is saved' + when + '. Press Load to put it on air.');
   });
-
 
 })();
   // Basic auth never tells a page who is using it, so the server does: /whoami
