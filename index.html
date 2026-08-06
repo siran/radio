@@ -60,6 +60,23 @@
     display: grid; place-items: center; transition: transform .12s ease; }
   button.play:hover:not(:disabled) { transform: scale(1.05); }
   button.play:disabled { opacity: .28; cursor: not-allowed; }
+  /* The stream takes a moment to arrive however fast the server is - TLS, then
+     the first audio, then whatever the browser wants buffered before it makes a
+     sound. Pressing a button that sits there looking unpressed is the worst part
+     of that wait, so the ring starts turning on the press itself and stops when
+     sound actually begins. It is not a progress bar and does not pretend to be:
+     it says heard you, and still coming. */
+  button.play { position: relative; }
+  button.play.loading { cursor: progress; }
+  button.play.loading::after {
+    content: ''; position: absolute; inset: 7px; border-radius: 50%;
+    border: 2px solid currentColor; border-top-color: transparent;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    button.play.loading::after { animation-duration: 2.4s; }
+  }
   .vol { flex: 1; display: flex; align-items: center; gap: 9px; color: var(--dim); }
   input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
   .narrator { margin-top: 8px; font-size: .8rem; color: var(--dim); line-height: 1.45; }
@@ -252,12 +269,28 @@
     audio.load();
     return audio.play();
   }
+  // Three states, one place. 'loading' is set by the press itself and cleared
+  // only by sound actually arriving, or by giving up - never on a timer, because
+  // a timer would lie in whichever direction the network did not go.
+  const GLYPH_PLAY = '▶', GLYPH_PAUSE = '❚❚';
+  function setBtn(state) {
+    btn.classList.toggle('loading', state === 'loading');
+    btn.textContent = state === 'loading' ? '' :
+                      state === 'pause'   ? GLYPH_PAUSE : GLYPH_PLAY;
+    btn.setAttribute('aria-label', state === 'loading' ? 'Connecting to the stream' :
+                                   state === 'pause'   ? 'Pause' : 'Play');
+  }
   btn.addEventListener('click', () => {
-    if (audio.paused) start().catch(() => setLive(false, 'could not start'));
-    else { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+    if (audio.paused) {
+      setBtn('loading');          // before anything else, on the press itself
+      start().catch(() => { setBtn('play'); setLive(false, 'could not start'); });
+    } else {
+      audio.pause(); audio.removeAttribute('src'); audio.load(); setBtn('play');
+    }
   });
-  audio.addEventListener('playing', () => { btn.textContent = '❚❚'; });
-  audio.addEventListener('pause',   () => { btn.textContent = '▶'; });
+  audio.addEventListener('playing', () => setBtn('pause'));
+  audio.addEventListener('pause',   () => setBtn('play'));
+  audio.addEventListener('error',   () => { if (audio.paused) setBtn('play'); });
 
   function setLive(on, label) {
     $('live').className = 'live' + (on ? ' on' : '');

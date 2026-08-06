@@ -197,6 +197,7 @@ while ($true) {
 
             Rename-Item $pending (Split-Path $wav -Leaf)
             Remove-Item $f.FullName -Force
+            Remove-Item "$wav.err" -Force -ErrorAction SilentlyContinue
         }
         catch {
             # Leave evidence and stop retrying: a text file we cannot speak would
@@ -204,6 +205,14 @@ while ($true) {
             # is not an audio extension, so the pickup ignores it too.
             Remove-Item $pending -Force -ErrorAction SilentlyContinue
             Rename-Item $f.FullName "$($f.Name).failed" -Force -ErrorAction SilentlyContinue
+            # Say WHY, on disk, next to the line that could not be said. The
+            # narrator was silently dead for five and a half hours on
+            # 2026-08-05 - fifty ordinary sentences renamed to .failed and not
+            # one word about the cause. A .err file present always means a
+            # failure nobody has looked at yet; the successful path deletes it.
+            $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+            $why   = "$stamp  $($_.Exception.Message)"
+            [IO.File]::WriteAllText("$wav.err", $why, $utf8)
         }
         finally {
             # Both ways out leave the words sitting in an on-air folder, so this
