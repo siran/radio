@@ -118,6 +118,32 @@
 
   <h1>Wild n Loyal Radio &middot; Host</h1>
 
+  <details class="panel" id="musicpanel" open>
+    <summary>Now playing <span class="when">&mdash; what is on the air, and the controls that change it for everyone listening</span></summary>
+    <div class="np" id="npTitle">&mdash;</div>
+    <div class="path" id="npPath"></div>
+    <div class="btns">
+      <button class="tbtn" id="bPrev" title="play what finished last; press again to keep going back">Previous</button>
+      <button class="tbtn" id="bSkip">Skip</button>
+      <button class="tbtn" id="bAgain" title="play this track once more">Play again</button>
+      <button class="tbtn" id="bRepeat">Repeat</button>
+      <button class="tbtn" id="bMusic" title="off is silence">Music</button>
+      <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
+    </div>
+    <div class="status"><span class="when">Previous goes back to what finished last, again and again.
+      Skip drops this track and takes the next. Play again queues this same track once more.
+      Repeat keeps replaying it until you turn it off. Music off leaves silence under the voices.
+      Pause freezes the whole stream for everyone.</span></div>
+    <div id="qfind">
+      <label for="qsearch"><span class="band">Find a track</span> &mdash; searches title, artist and filename across the library; pick a result to queue it next</label>
+      <input id="qsearch" type="text" autocomplete="off" spellcheck="false"
+             placeholder="artist or title">
+      <div class="status" id="qnote"></div>
+      <ul id="qresults"></ul>
+    </div>
+    <div class="err" id="cerr"></div>
+  </details>
+
   <div class="panel">
     <button id="rec">Start talking</button>
     <div class="meter"><i id="vu"></i></div>
@@ -125,8 +151,13 @@
     <div class="err" id="err"></div>
   </div>
 
+  <details class="panel" id="setup" hidden>
+    <summary id="devlabel">Microphone</summary>
+    <select id="dev" aria-label="Microphone"><option value="">default</option></select>
+  </details>
+
   <details class="panel" id="eqwrap" open>
-    <summary>Your voice <span class="when">&mdash; how loud you are, and what shape. Applies to your notes only, on the radio, after they arrive.</span></summary>
+    <summary>Equalizer <span class="when">&mdash; how loud you are, and what shape. Applies to your notes only, on the radio, after they arrive.</span></summary>
       <div class="btns">
         <button class="tbtn" id="lockallvoice" title="every slider in this panel at once">Unlock all</button>
       </div>
@@ -176,9 +207,62 @@
       </div>
   </details>
 
-  <details class="panel" id="setup" hidden>
-    <summary id="devlabel">Microphone</summary>
-    <select id="dev" aria-label="Microphone"><option value="">default</option></select>
+  <details class="panel" id="narwrap">
+    <summary>The narrator <span class="when">&mdash; which voice announces the tracks, how fast, how often, and how it says a name it keeps getting wrong. One setting for the whole station.</span></summary>
+    <iframe id="narrator" title="narrator"></iframe>
+  </details>
+
+  <details class="panel" id="deskwrap">
+    <summary>Mixing desk <span class="when">&mdash; the station's own knobs, live for every listener. The compressor sits on the voice bus, so it shapes voice notes and the live mic together; the music never passes through it. Read when this fold is opened.</span></summary>
+    <div class="btns">
+      <button class="tbtn" id="lockalldesk" title="every slider in this panel at once">Unlock all</button>
+    </div>
+    <label for="mic_gain"><span class="band">Live mic</span> &mdash; volume of a microphone streaming straight into the station; this one alone never touches a voice note &mdash; <span id="mic_gainval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
+      <input id="mic_gain" type="range" disabled>
+    </div>
+    <label for="voice_gain" title="Only reaches the air for a speaker with no settings of their own. Your voice volume, above, overrides it for your own notes."><span class="band">Voice notes</span> &mdash; default for speakers with no volume of their own &mdash; <span id="voice_gainval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockvoice_gain" aria-pressed="true">&#128274;</button>
+      <input id="voice_gain" type="range" disabled>
+    </div>
+    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; removes rumble below this from the live mic only; on a note, use the 100 Hz band instead &mdash; <span id="hp_freqval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockhp_freq" aria-pressed="true">&#128274;</button>
+      <input id="hp_freq" type="range" disabled>
+    </div>
+    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level at which a voice starts being held back; lower evens out more. Applies to voice notes AND the live mic &mdash; <span id="comp_thrval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcomp_thr" aria-pressed="true">&#128274;</button>
+      <input id="comp_thr" type="range" disabled>
+    </div>
+    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; how hard it holds back once over that level; 1 is off, 4 is normal speech. Voice notes AND the live mic &mdash; <span id="comp_ratioval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcomp_ratio" aria-pressed="true">&#128274;</button>
+      <input id="comp_ratio" type="range" disabled>
+    </div>
+    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; loudness added back after the compressor; raise this if you are still too quiet. Voice notes AND the live mic &mdash; <span id="comp_gainval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
+      <input id="comp_gain" type="range" disabled>
+    </div>
+    <label for="duck_to"><span class="band">Music under a voice</span> &mdash; how loud the music stays while anyone is speaking; 1 is untouched, 0 is silent &mdash; <span id="duck_toval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockduck_to" aria-pressed="true">&#128274;</button>
+      <input id="duck_to" type="range" disabled>
+    </div>
+    <label for="hold"><span class="band">Music hold</span> &mdash; seconds of quiet before the music comes back up, so a pause does not lift it &mdash; <span id="holdval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockhold" aria-pressed="true">&#128274;</button>
+      <input id="hold" type="range" disabled>
+    </div>
+    <label for="glide"><span class="band">Fader speed</span> &mdash; how fast the music moves between those two levels; smaller is smoother &mdash; <span id="glideval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
+      <input id="glide" type="range" disabled>
+    </div>
+    <div class="err" id="derr"></div>
   </details>
 
   <!-- Every parameter that shapes the audio between the microphone and the
@@ -242,90 +326,6 @@
        so a preset saves both together or it is not the sound that was tuned.
        The file sits in the speaker's own folder beside settings.json, which is
        what makes it survive a cleared cache and arrive on a second phone. -->
-  <details class="panel" id="musicpanel" open>
-    <summary>Now playing <span class="when">&mdash; what is on the air, and the controls that change it for everyone listening</span></summary>
-    <div class="np" id="npTitle">&mdash;</div>
-    <div class="path" id="npPath"></div>
-    <div class="btns">
-      <button class="tbtn" id="bPrev" title="play what finished last; press again to keep going back">Previous</button>
-      <button class="tbtn" id="bSkip">Skip</button>
-      <button class="tbtn" id="bAgain" title="play this track once more">Play again</button>
-      <button class="tbtn" id="bRepeat">Repeat</button>
-      <button class="tbtn" id="bMusic" title="off is silence">Music</button>
-      <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
-    </div>
-    <div class="status"><span class="when">Previous goes back to what finished last, again and again.
-      Skip drops this track and takes the next. Play again queues this same track once more.
-      Repeat keeps replaying it until you turn it off. Music off leaves silence under the voices.
-      Pause freezes the whole stream for everyone.</span></div>
-    <div id="qfind">
-      <label for="qsearch"><span class="band">Find a track</span> &mdash; searches title, artist and filename across the library; pick a result to queue it next</label>
-      <input id="qsearch" type="text" autocomplete="off" spellcheck="false"
-             placeholder="artist or title">
-      <div class="status" id="qnote"></div>
-      <ul id="qresults"></ul>
-    </div>
-    <div class="err" id="cerr"></div>
-  </details>
-
-  <details class="panel" id="deskwrap">
-    <summary>Mixing desk <span class="when">&mdash; the station's own knobs, live for every listener. The compressor sits on the voice bus, so it shapes voice notes and the live mic together; the music never passes through it. Read when this fold is opened.</span></summary>
-    <div class="btns">
-      <button class="tbtn" id="lockalldesk" title="every slider in this panel at once">Unlock all</button>
-    </div>
-    <label for="mic_gain"><span class="band">Live mic</span> &mdash; volume of a microphone streaming straight into the station; this one alone never touches a voice note &mdash; <span id="mic_gainval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
-      <input id="mic_gain" type="range" disabled>
-    </div>
-    <label for="voice_gain" title="Only reaches the air for a speaker with no settings of their own. Your voice volume, above, overrides it for your own notes."><span class="band">Voice notes</span> &mdash; default for speakers with no volume of their own &mdash; <span id="voice_gainval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockvoice_gain" aria-pressed="true">&#128274;</button>
-      <input id="voice_gain" type="range" disabled>
-    </div>
-    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; removes rumble below this from the live mic only; on a note, use the 100 Hz band instead &mdash; <span id="hp_freqval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockhp_freq" aria-pressed="true">&#128274;</button>
-      <input id="hp_freq" type="range" disabled>
-    </div>
-    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level at which a voice starts being held back; lower evens out more. Applies to voice notes AND the live mic &mdash; <span id="comp_thrval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockcomp_thr" aria-pressed="true">&#128274;</button>
-      <input id="comp_thr" type="range" disabled>
-    </div>
-    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; how hard it holds back once over that level; 1 is off, 4 is normal speech. Voice notes AND the live mic &mdash; <span id="comp_ratioval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockcomp_ratio" aria-pressed="true">&#128274;</button>
-      <input id="comp_ratio" type="range" disabled>
-    </div>
-    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; loudness added back after the compressor; raise this if you are still too quiet. Voice notes AND the live mic &mdash; <span id="comp_gainval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
-      <input id="comp_gain" type="range" disabled>
-    </div>
-    <label for="duck_to"><span class="band">Music under a voice</span> &mdash; how loud the music stays while anyone is speaking; 1 is untouched, 0 is silent &mdash; <span id="duck_toval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockduck_to" aria-pressed="true">&#128274;</button>
-      <input id="duck_to" type="range" disabled>
-    </div>
-    <label for="hold"><span class="band">Music hold</span> &mdash; seconds of quiet before the music comes back up, so a pause does not lift it &mdash; <span id="holdval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockhold" aria-pressed="true">&#128274;</button>
-      <input id="hold" type="range" disabled>
-    </div>
-    <label for="glide"><span class="band">Fader speed</span> &mdash; how fast the music moves between those two levels; smaller is smoother &mdash; <span id="glideval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
-      <input id="glide" type="range" disabled>
-    </div>
-    <div class="err" id="derr"></div>
-  </details>
-
-  <details class="panel" id="narwrap">
-    <summary>The narrator <span class="when">&mdash; which voice announces the tracks, how fast, how often, and how it says a name it keeps getting wrong. One setting for the whole station.</span></summary>
-    <iframe id="narrator" title="narrator"></iframe>
-  </details>
-
   <details class="panel" id="preswrap" open>
     <summary>Presets <span class="when">&mdash; both halves of your sound, saved on the server under a name</span></summary>
     <div class="status" id="presnote">Your voice and your streaming settings together, saved in your

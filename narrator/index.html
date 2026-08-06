@@ -61,49 +61,65 @@
   <div class="sub">The voice between the tracks. One setting for the whole
     station, not a copy per host &mdash; last save wins.</div>
 
+  <!-- One panel. It was five, stacked, and every one of them cost a heading and
+       a border for two controls - on a phone the last of them was three screens
+       down. The order is what a host reaches for: is it speaking at all, how
+       loud, and say this. Everything below that line is set once and left. -->
   <div class="panel">
-    <label for="voice">Voice</label>
+
+    <label>Narrator &mdash; whether it speaks at all. Everything below stays as
+      it is while it is off, so turning it back on picks up where it was.</label>
+    <div class="btns">
+      <button class="tbtn" id="naron" type="button">Narrator</button>
+    </div>
+    <div class="hint"><b class="now">On air now</b>, and saved.</div>
+
+    <label for="gain">Volume &mdash; how loud it is against the music &mdash; <span id="gainval">12</span>&times;</label>
+    <input id="gain" type="range" min="0" max="12" step="0.5" value="12" disabled>
+    <div class="hint" id="gainnote"><b class="now">On air within a quarter second.</b>
+      The announcer is a speaker like any other - the same volume, in the same
+      settings.json, that every host has in their own folder.</div>
+
+    <label for="say">Words for it to say &mdash; typed here, spoken on the air, once</label>
+    <textarea id="say" rows="3" maxlength="500" spellcheck="true"></textarea>
+    <div class="btns">
+      <button id="saybtn" type="button">Say it</button>
+    </div>
+    <div class="hint">On air in about eight seconds. Piper reads the line
+      literally, so it is spoken exactly as typed. 500 characters at most.</div>
+
+    <label for="voice">Voice &mdash; which installed voice speaks, and therefore which language</label>
     <input id="voice" list="voicelist" spellcheck="false" autocapitalize="off" autocorrect="off">
     <datalist id="voicelist"></datalist>
     <div class="hint" id="voicenote">Installed voices, loading.</div>
-    <label for="speed">Speed &mdash; <span id="speedval">1.15</span> &middot; above 1.0 is slower</label>
-    <input id="speed" type="range" min="0.6" max="2" step="0.05" value="1.15">
-    <div class="hint" title="Piper has no pitch control of any kind, so the pace is the only thing about the voice itself that moves."><b class="now">On air within a few seconds.</b></div>
-  </div>
 
-  <div class="panel">
-    <label for="cadence">When it speaks</label>
-    <select id="cadence" title="The intro talks over the start of a track, the way an announcer does; the outro says what just played, as the track ends.">
-      <option value="off">Off</option>
+    <label for="speed">Speed &mdash; how fast it talks; above 1.0 is slower &mdash; <span id="speedval">1.15</span></label>
+    <input id="speed" type="range" min="0.6" max="2" step="0.05" value="1.15">
+    <div class="hint"><b class="now">On air within a few seconds.</b> Piper has no
+      pitch control of any kind, so the pace is the only thing about the voice
+      itself that moves.</div>
+
+    <label for="cadence">When it speaks &mdash; the intro talks over the start of a
+      track the way an announcer does; the outro says what just played, as it ends</label>
+    <select id="cadence">
       <option value="intro">At the beginning</option>
       <option value="outro">At the end</option>
       <option value="both">Both</option>
     </select>
-    <div class="hint" title="The mixing desk holds the two ends as separate switches; narrator.json holds one number that radio.liq reads as on or off and seeds both ends from. So a restart brings back on or off faithfully, and a one-ended choice comes back as both. Nothing is written to the file that nothing reads."><b class="now">On air now</b>, and saved. Across a restart, on or off only &mdash; not which end.</div>
-    <label for="hold">Hold &mdash; <span id="holdval">3</span> s of quiet before the music comes back up</label>
+    <div class="hint"><b class="now">On air now</b>, and saved &mdash; including
+      which end. A restart brings back exactly this.</div>
+
+    <label for="hold">Music hold &mdash; seconds of quiet before the music comes
+      back up, so a pause does not lift it &mdash; <span id="holdval">3</span> s</label>
     <input id="hold" type="range" min="0" max="30" step="0.5" value="3">
-    <div class="hint" title="Real seconds. The mixing desk is what you hear now; the file is what comes back after a restart, and saving does both."><b class="now">On air now</b>, and saved.</div>
-  </div>
+    <div class="hint"><b class="now">On air now</b>, and saved. Real seconds.</div>
 
-  <div class="panel">
-    <label for="gain">Volume &mdash; <span id="gainval">12</span>&times;</label>
-    <input id="gain" type="range" min="0" max="12" step="0.5" value="12" disabled>
-    <div class="hint" id="gainnote" title="The announcer is a speaker like any other: the same volume, in the same settings.json, that every host has in their own folder. Liquidsoap reads it as it queues each line, so nothing restarts."><b class="now">On air within a quarter second.</b></div>
-  </div>
-
-  <div class="panel">
-    <label for="say">Words for it to say</label>
-    <textarea id="say" rows="3" maxlength="500" spellcheck="true"></textarea>
-    <button id="saybtn" type="button">Say it</button>
-    <div class="hint" title="The words are dropped into the announcer's folder as a plain text file; the watcher renders them with piper and the pickup already in liquidsoap plays them over ducked music, at the volume above. Piper reads the line literally, so it is spoken exactly as typed. 500 characters at most.">On air in about eight seconds.</div>
-  </div>
-
-  <div class="panel">
-    <label for="ident">What it says about an untagged track</label>
+    <label for="ident">What it says about an untagged track &mdash; roughly one in
+      seven has no title, and saying nothing sounds like something broke</label>
     <input id="ident" type="text" maxlength="500">
-    <div class="hint" title="Roughly one track in seven has no title, and saying nothing sounds like something broke rather than like a radio."><b class="later">Next restart.</b></div>
-  </div>
+    <div class="hint" id="identnote"><b class="later">Next restart.</b></div>
 
+  </div>
 
   <div class="status" id="status">loading</div>
   <div class="err" id="err"></div>
@@ -225,11 +241,24 @@
         { credentials: 'same-origin', cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const k = Object.fromEntries(await res.json());
-      $('cadence').value = cadenceOf(k.announce_intro > 0, k.announce_outro > 0);
+      const i = k.announce_intro > 0, o = k.announce_outro > 0;
+      narOn = i || o;
+      // The list has no "off" any more, so when nothing is on it keeps the
+      // last end that was chosen - out of the file, which now remembers it.
+      const c = cadenceOf(i, o);
+      $('cadence').value = c === 'off'
+        ? (cadenceOf(cfg.announce_intro === true, cfg.announce_outro === true) || 'both')
+        : c;
+      if ($('cadence').selectedIndex === -1) $('cadence').value = 'both';
+      showNar();
     } catch (e) {
       // The file's own answer, which is on or off and nothing finer.
       const ev = parseFloat(cfg.announce_every);
-      $('cadence').value = isFinite(ev) && ev > 0 ? 'both' : 'off';
+      narOn = isFinite(ev) && ev > 0;
+      $('cadence').value = cadenceOf(cfg.announce_intro === true,
+                                     cfg.announce_outro === true);
+      if ($('cadence').selectedIndex === -1) $('cadence').value = 'both';
+      showNar();
       fail('The desk did not say which ends are on (' + e.message +
         ') - showing what was saved.');
     }
@@ -346,6 +375,41 @@
     save('speed saved: ' + cfg.speed + ' - on air in a few seconds');
   });
 
+  // Whether it speaks at all, as its own switch - the way Music dips is its own
+  // switch on the host page - instead of hiding inside the list of when. The
+  // list keeps its answer while the narrator is off, so turning it back on
+  // resumes where it was rather than at some default.
+  let narOn = true;
+  function showNar() {
+    $('naron').textContent = narOn ? 'Narrator on' : 'Narrator off';
+    $('naron').style.opacity = narOn ? '1' : '0.55';
+    $('naron').setAttribute('aria-pressed', String(narOn));
+  }
+  async function applyCadence(on) {
+    const c = on ? CADENCE[$('cadence').value] : CADENCE.off;
+    // radio.liq reads announce_intro and announce_outro out of this file and
+    // only falls back to announce_every when they are absent - so writing all
+    // three is what makes a restart come back on the right end. The page used
+    // to write announce_every alone and then apologise for it in a hint.
+    cfg.announce_every = on ? 1 : 0;
+    cfg.announce_intro = c.intro;
+    cfg.announce_outro = c.outro;
+    await save(on ? 'saved' : 'saved: narrator off');
+    await live('announce_intro', c.intro);
+    await live('announce_outro', c.outro);
+  }
+  $('naron').addEventListener('click', async () => {
+    narOn = !narOn;
+    showNar();
+    try {
+      await applyCadence(narOn);
+      setStatus(narOn ? 'narrator on - on air now, and saved'
+                      : 'narrator off - on air now, and saved');
+    } catch (e) {
+      fail('Saved to the file, but the desk did not take it (' + e.message + ').');
+    }
+  });
+
   $('cadence').addEventListener('change', async () => {
     const c = CADENCE[$('cadence').value];
     const said = $('cadence').selectedOptions[0].text.toLowerCase();
@@ -356,7 +420,12 @@
     // the magnitude stopped meaning anything when the count became two
     // switches. Writing announce_intro and announce_outro into the file would
     // be adding keys nothing reads.
-    cfg.announce_every = c.intro || c.outro ? 1 : 0;
+    // Choosing an end turns it on: it is the only reason to choose one.
+    narOn = true;
+    showNar();
+    cfg.announce_every = 1;
+    cfg.announce_intro = c.intro;
+    cfg.announce_outro = c.outro;
     await save('saved: ' + said);
     try {
       await live('announce_intro', c.intro);
