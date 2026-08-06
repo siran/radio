@@ -78,32 +78,32 @@ ncfg = narrator_cfg()
 # voice chain
 mic_gain   = interactive.float("mic_gain",
   description = "Live microphone volume. Raise if the mic sounds far away.",
-  unit = "x", min = 0.0, max = 4.0, step = 0.1, 3.5)
+  unit = "x", min = 0.0, max = 4.0, step = 0.1, 3.0)
 
 voice_gain = interactive.float("voice_gain",
   description = "Volume of uploaded voice notes. Phone recordings arrive quiet, so this sits high.",
-  unit = "x", min = 0.0, max = 12.0, step = 0.25, 12.0)
+  unit = "x", min = 0.0, max = 12.0, step = 0.25, 1.0)
 
 hp_freq    = interactive.float("hp_freq",
   description = "Cuts rumble below this. Handling noise and desk bumps live down here.",
-  unit = "Hz", min = 40.0, max = 300.0, step = 5.0, 295.0)
+  unit = "Hz", min = 40.0, max = 300.0, step = 5.0, 80.0)
 
 comp_thr   = interactive.float("comp_thr",
   description = "Compressor: the level above which your voice starts being held back. Lower = more evening out.",
-  unit = "dB", min = -40.0, max = 0.0, step = 1.0, -29.0)
+  unit = "dB", min = -40.0, max = 0.0, step = 1.0, -26.0)
 
 comp_ratio = interactive.float("comp_ratio",
   description = "Compressor: how hard it holds back. 1 = off, 4 = normal speech, 10+ = squashed.",
-  unit = ":1", min = 1.0, max = 20.0, step = 0.5, 3.5)
+  unit = ":1", min = 1.0, max = 20.0, step = 0.5, 6.0)
 
 comp_gain  = interactive.float("comp_gain",
   description = "Make-up volume, added AFTER the compressor. This is the one to raise if you are still too quiet.",
-  unit = "dB", min = 0.0, max = 24.0, step = 0.5, 17.5)
+  unit = "dB", min = 0.0, max = 24.0, step = 0.5, 12.0)
 
 # ducking
 duck_to    = interactive.float("duck_to",
   description = "How loud the music stays while someone talks. 1.0 = untouched, 0.0 = silent.",
-  unit = "x", min = 0.0, max = 1.0, step = 0.05, 0.45)
+  unit = "x", min = 0.0, max = 1.0, step = 0.05, 0.6)
 
 # Starting value from narrator.json; the dial is live, the file is what comes
 # back after a restart.
