@@ -111,6 +111,20 @@
   /* the tag on a capture label saying when a change actually lands - most of
      them cannot reach a microphone that is already open. */
   .when { text-transform:none; letter-spacing:0; color:#6a6a75; }
+  /* Every one of these buttons is a round trip to liquidsoap: press Skip and
+     the track changes when the server says so, not when the finger lifts. That
+     gap was silent, so a slow answer looked like a dead button and got pressed
+     again - which on Skip is two tracks gone, not one. It now says working, and
+     refuses the second press itself rather than trusting anyone not to make
+     it. */
+  .tbtn.busy { opacity:.55; cursor:progress; position:relative; }
+  .tbtn.busy::after {
+    content:''; position:absolute; right:5px; top:50%; width:9px; height:9px;
+    margin-top:-5px; border-radius:50%; border:1.5px solid currentColor;
+    border-top-color:transparent; animation:spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .tbtn.busy::after { animation-duration:2.2s; } }
 </style>
 </head>
 <body>
@@ -996,14 +1010,29 @@
   // what it did.
   let cur = { repeat: false, music: true, paused: false };
 
-  async function control(path, method) {
+  // Marked busy for as long as the request is actually in flight - not for a
+  // fixed pretend duration, which would lie in whichever direction the network
+  // did not go. A button already busy ignores a second press, so a slow Skip
+  // cannot become two skips.
+  function busy(el, on) {
+    if (!el) return;
+    el.classList.toggle('busy', on);
+    el.setAttribute('aria-busy', String(!!on));
+  }
+  async function control(path, method, el) {
+    if (el && el.classList.contains('busy')) return;
+    busy(el, true);
     try {
       const res = await fetch('/control/' + path,
         { method, credentials: 'same-origin', cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       draw(await res.json());
       $('cerr').textContent = '';
-    } catch (e) { $('cerr').textContent = 'Music controls: ' + e.message; }
+    } catch (e) {
+      $('cerr').textContent = 'Music controls: ' + e.message;
+    } finally {
+      busy(el, false);
+    }
   }
   const nowPlaying = () => control('now', 'GET');
 
@@ -1028,20 +1057,29 @@
     flag('bPause', !!s.paused, 'Pause');
   }
 
-  $('bSkip').addEventListener('click', async () => {
-    await control('skip', 'POST');
-    nowPlaying();     // skip answers with the state before it - the next track
-  });                 // is prepared a moment later, and the poll below catches it
+  // Busy stays on across BOTH calls, not just the first: skip answers with the
+  // state before it and the next track is prepared a moment later, so the
+  // button is honest only if it waits for the re-poll too.
+  $('bSkip').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.classList.contains('busy')) return;
+    busy(b, true);
+    try { await control('skip', 'POST'); await nowPlaying(); }
+    finally { busy(b, false); }
+  });
   // Like skip, this answers with the state as it was a moment ago - the new
   // track is prepared just after - so re-poll rather than trusting the reply.
-  $('bPrev').addEventListener('click', async () => {
-    await control('previous', 'POST');
-    nowPlaying();
+  $('bPrev').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.classList.contains('busy')) return;
+    busy(b, true);
+    try { await control('previous', 'POST'); await nowPlaying(); }
+    finally { busy(b, false); }
   });
-  $('bAgain').addEventListener('click', () => control('again', 'POST'));
-  $('bRepeat').addEventListener('click', () => control('repeat?on=' + !cur.repeat, 'POST'));
-  $('bMusic').addEventListener('click', () => control('music?on=' + !cur.music, 'POST'));
-  $('bPause').addEventListener('click', () => control('pause?on=' + !cur.paused, 'POST'));
+  $('bAgain').addEventListener('click', e => control('again', 'POST', e.currentTarget));
+  $('bRepeat').addEventListener('click', e => control('repeat?on=' + !cur.repeat, 'POST', e.currentTarget));
+  $('bMusic').addEventListener('click', e => control('music?on=' + !cur.music, 'POST', e.currentTarget));
+  $('bPause').addEventListener('click', e => control('pause?on=' + !cur.paused, 'POST', e.currentTarget));
 
   nowPlaying();
   setInterval(nowPlaying, 3000);   // the track changes on its own; so must the name
