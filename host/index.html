@@ -358,7 +358,7 @@
       <button class="tbtn" id="pressave" title="save both halves of your sound under the typed name">Save this sound</button>
     </div>
 
-    <label for="preslist"><span class="band">Saved</span> &mdash; sounds already stored in your folder; pick one, then Load</label>
+    <label for="preslist"><span class="band">Your saved sounds</span> &mdash; pick one, then Load</label>
     <select id="preslist" aria-label="Saved presets"></select>
     <div class="btns">
       <button class="tbtn" id="presload" title="apply both halves">Load</button>
@@ -1446,6 +1446,26 @@
     }
     return o;
   }
+  // Which panels are open belongs to this device the way the microphone and the
+  // Streaming settings do - a phone wants the talk button alone on the screen,
+  // a laptop can afford the desk unfolded - so it is remembered here as well as
+  // in a preset. Without this, a refresh fell back to the `open` attributes in
+  // the markup and every panel sprang open again, which read as the save having
+  // failed when the file had it right all along.
+  const PANEL_KEY = 'talk.panels';
+  function panelSave() {
+    try { localStorage.setItem(PANEL_KEY, JSON.stringify(panelState())); } catch (e) {}
+  }
+  function panelRestore() {
+    let o = null;
+    try { o = JSON.parse(localStorage.getItem(PANEL_KEY) || 'null'); } catch (e) {}
+    if (o) applyPanels(o);
+    // Bound after restoring, so restoring does not write back what it just read.
+    for (const d of document.querySelectorAll('details.panel')) {
+      d.addEventListener('toggle', panelSave);
+    }
+  }
+
   function applyPanels(o) {
     if (!o || typeof o !== 'object') return;
     for (const id in o) {
@@ -1552,6 +1572,7 @@
       showBand(b);
     }
     applyPanels(p.panels);
+    panelSave();          // so a refresh comes back to the preset, not the markup
     presErr('');
     saveSettings('preset "' + n + '" loaded');
     // Said every time, because half of it is not true yet. Liquidsoap polls
@@ -1580,7 +1601,7 @@
       return presErr('That is already ' + PRES_MAX + ' presets - delete one first.');
     const prev = presets[n];
     presets[n] = presCurrent();
-    if (await presPut('Saved "' + n + '" - your voice and your streaming settings, on the server.')) {
+    if (await presPut('Saved "' + n + '" — voice, EQ, streaming settings, the desk, and which panels were open.')) {
       presDraw();
       $('preslist').value = n;
     } else if (prev === undefined) { delete presets[n]; } else { presets[n] = prev; }
@@ -1736,6 +1757,8 @@
     await presPut('"' + target + '" saved from a file');
     ioSay('"' + target + '" is saved' + when + '. Press Load to put it on air.');
   });
+
+  panelRestore();
 
   $('qclear').addEventListener('click', clearSearch);
   // Escape is what a keyboard expects to do here, and costs one line.
