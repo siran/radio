@@ -242,31 +242,6 @@
        so a preset saves both together or it is not the sound that was tuned.
        The file sits in the speaker's own folder beside settings.json, which is
        what makes it survive a cleared cache and arrive on a second phone. -->
-  <details class="panel" id="preswrap" open>
-    <summary>Presets <span class="when">&mdash; both halves of your sound, saved on the server under a name</span></summary>
-    <div class="status" id="presnote">Your voice and your streaming settings together, saved in your
-      own folder on the server &mdash; not on this phone, so clearing your browser cannot lose them.
-      Loading one puts your voice on the air <span class="when">within a quarter second</span>;
-      bitrate and bitrate mode land on the <span class="when">next note</span>;
-      everything else on Streaming needs a <span class="when">mic reopen</span>.</div>
-
-    <label for="presname"><span class="band">Name</span> &mdash; what to call this sound; letters, digits, space, hyphen, underscore</label>
-    <input id="presname" type="text" maxlength="24" placeholder="dj" autocomplete="off"
-           autocapitalize="none" spellcheck="false" aria-label="Preset name">
-    <div class="btns">
-      <button class="tbtn" id="pressave" title="save both halves of your sound under the typed name">Save this sound</button>
-    </div>
-
-    <label for="preslist"><span class="band">Saved</span> &mdash; sounds already stored in your folder; pick one, then Load</label>
-    <select id="preslist" aria-label="Saved presets"></select>
-    <div class="btns">
-      <button class="tbtn" id="presload" title="apply both halves">Load</button>
-      <button class="tbtn" id="presdel" title="remove it from the server">Delete</button>
-    </div>
-    <div class="status" id="presmsg"></div>
-    <div class="err" id="preserr"></div>
-  </details>
-
   <details class="panel" id="musicpanel" open>
     <summary>Now playing <span class="when">&mdash; what is on the air, and the controls that change it for everyone listening</span></summary>
     <div class="np" id="npTitle">&mdash;</div>
@@ -349,6 +324,40 @@
   <details class="panel" id="narwrap">
     <summary>The narrator <span class="when">&mdash; which voice announces the tracks, how fast, how often, and how it says a name it keeps getting wrong. One setting for the whole station.</span></summary>
     <iframe id="narrator" title="narrator"></iframe>
+  </details>
+
+  <details class="panel" id="preswrap" open>
+    <summary>Presets <span class="when">&mdash; both halves of your sound, saved on the server under a name</span></summary>
+    <div class="status" id="presnote">Your voice and your streaming settings together, saved in your
+      own folder on the server &mdash; not on this phone, so clearing your browser cannot lose them.
+      Loading one puts your voice on the air <span class="when">within a quarter second</span>;
+      bitrate and bitrate mode land on the <span class="when">next note</span>;
+      everything else on Streaming needs a <span class="when">mic reopen</span>.</div>
+
+    <label for="presname"><span class="band">Name</span> &mdash; what to call this sound; letters, digits, space, hyphen, underscore</label>
+    <input id="presname" type="text" maxlength="24" placeholder="dj" autocomplete="off"
+           autocapitalize="none" spellcheck="false" aria-label="Preset name">
+    <div class="btns">
+      <button class="tbtn" id="pressave" title="save both halves of your sound under the typed name">Save this sound</button>
+    </div>
+
+    <label for="preslist"><span class="band">Saved</span> &mdash; sounds already stored in your folder; pick one, then Load</label>
+    <select id="preslist" aria-label="Saved presets"></select>
+    <div class="btns">
+      <button class="tbtn" id="presload" title="apply both halves">Load</button>
+      <button class="tbtn" id="presdel" title="remove it from the server">Delete</button>
+    </div>
+
+    <label><span class="band">Everything, as one file</span> &mdash; your voice, your presets, your streaming settings, and the station's desk and narrator. Keep it, mail it to a co-host, or put it back after a mistake.</label>
+    <div class="btns">
+      <button class="tbtn" id="dlall">Download</button>
+      <button class="tbtn" id="ulall">Upload</button>
+      <input id="ulfile" type="file" accept="application/json,.json" hidden>
+    </div>
+    <div class="status"><span class="when">Downloading is harmless. Uploading is not: the desk and the narrator belong to everyone listening, so those are asked for separately and left out unless you say yes.</span></div>
+    <div class="status" id="iomsg"></div>
+    <div class="status" id="presmsg"></div>
+    <div class="err" id="preserr"></div>
   </details>
 
 </div>
@@ -1576,7 +1585,147 @@
       const w = document.getElementById('whoamiwrap');
       if (w) w.hidden = false;
     } catch (e) { /* leave it hidden */ }
-  })();
+  
+  // ----- everything, as one file --------------------------------------------
+  // Five things decide how this station sounds and they live in five places:
+  // settings.json and presets.json in your own folder, the Streaming panel in
+  // THIS browser and nowhere else, and desk.json and narrator.json in config/.
+  // Clearing your browser data has always silently destroyed the third one.
+  // This is one file that holds all five.
+  //
+  // Two scopes, kept apart on purpose. `mine` is yours and applying it changes
+  // only what you sound like. `station` is the desk and the narrator, which
+  // every listener hears - so it is downloaded always and applied only when
+  // asked for, out loud, at the moment of asking.
+  const IO_VERSION = 1;
+  const NARRATOR_URL = '/narrator/config/narrator.json';
+  const ioSay = t => { $('iomsg').textContent = t; };
+
+  async function getJSON(url) {
+    try {
+      const r = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+      return r.ok ? await r.json() : null;
+    } catch (e) { return null; }
+  }
+
+  $('dlall').addEventListener('click', async () => {
+    ioSay('gathering');
+    const cap = {};
+    for (const id in CAP) cap[id] = $(id).value;
+    const bundle = {
+      version: IO_VERSION,
+      saved: new Date().toISOString(),
+      who: ($('whoami').textContent || '').trim(),
+      mine: {
+        voice:   settings,
+        cap:     cap,
+        presets: await getJSON(PRESETS_URL)
+      },
+      station: {
+        desk:     await getJSON(DESK_URL),
+        narrator: await getJSON(NARRATOR_URL)
+      }
+    };
+    // A name that sorts by when it was taken, so a folder of these reads as a
+    // history rather than as file, file (1), file (2).
+    const stamp = bundle.saved.replace(/[:.]/g, '-').slice(0, 19);
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'wildnloyal-' + (bundle.who || 'host') + '-' + stamp + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    ioSay('downloaded ' + a.download);
+  });
+
+  $('ulall').addEventListener('click', () => $('ulfile').click());
+  $('ulfile').addEventListener('change', async () => {
+    const f = $('ulfile').files && $('ulfile').files[0];
+    $('ulfile').value = '';          // so the same file can be picked twice
+    if (!f) return;
+    let b;
+    try { b = JSON.parse(await f.text()); }
+    catch (e) { return ioSay('That is not a settings file: ' + e.message); }
+    if (!b || typeof b !== 'object') return ioSay('That file has nothing in it.');
+    // Refuse a shape from the future rather than half-reading it.
+    if (b.version > IO_VERSION) {
+      return ioSay('That file was written by a newer version of this page (' +
+                   b.version + '). Not applying it.');
+    }
+    const when = b.saved ? (' from ' + b.saved.slice(0, 16).replace('T', ' ')) : '';
+    if (!confirm('Apply YOUR settings' + when + '?\n\nYour volume, EQ, streaming ' +
+                 'settings and saved presets. Nothing anyone else hears changes.')) {
+      return ioSay('nothing applied');
+    }
+
+    const mine = (b.mine && typeof b.mine === 'object') ? b.mine : {};
+    // The capture half first: it is local, cannot fail, and capDraw reads it
+    // back out so an unknown or unsupported value lands on its default rather
+    // than sitting in localStorage unreachable.
+    if (mine.cap && typeof mine.cap === 'object') {
+      try { localStorage.setItem(CAP_KEY, JSON.stringify(mine.cap)); } catch (e) {}
+      capDraw(); capSave();
+    }
+    if (mine.voice && typeof mine.voice === 'object') {
+      const g = parseFloat(mine.voice.gain);
+      if (isFinite(g)) settings.gain = g;
+      if (typeof mine.voice.duck === 'boolean') settings.duck = mine.voice.duck;
+      const had = (mine.voice.eq && typeof mine.voice.eq === 'object') ? mine.voice.eq : {};
+      for (const band of BANDS) {
+        const x = parseFloat(had[band]);
+        if (isFinite(x)) settings.eq[band] = x;
+        $('eq' + band).value = settings.eq[band];
+        showBand(band);
+      }
+      $('gain').value = settings.gain;
+      showGain(); showDuck();
+      await saveSettings('settings restored from a file');
+    }
+    if (mine.presets && typeof mine.presets === 'object') {
+      try {
+        await fetch(PRESETS_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(mine.presets)
+        });
+        Object.assign(presets, mine.presets);   // the in-memory map the panel draws from
+        presDraw();
+      } catch (e) { ioSay('Presets did not restore: ' + e.message); }
+    }
+    ioSay('your settings are back' + when + '.');
+
+    // And only now, as its own question, the half that changes what everyone
+    // listening hears. Answering no leaves the station exactly as it was.
+    const st = (b.station && typeof b.station === 'object') ? b.station : {};
+    if (!st.desk && !st.narrator) return;
+    if (!confirm('Also apply the STATION settings in this file?\n\nThe mixing ' +
+                 'desk and the narrator are shared - this changes what every ' +
+                 'listener hears, right now, including mid-show.')) {
+      return ioSay('your settings are back. The station was left alone.');
+    }
+    if (st.desk && typeof st.desk === 'object') {
+      for (const k in KNOBS) {
+        const x = parseFloat(st.desk[k]);
+        if (!isFinite(x)) continue;
+        $(k).value = x; showKnob(k); setKnob(k);
+      }
+    }
+    if (st.narrator && typeof st.narrator === 'object') {
+      try {
+        await fetch(NARRATOR_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(st.narrator)
+        });
+        $('narrator').contentWindow.location.reload();
+      } catch (e) { ioSay('The narrator did not restore: ' + e.message); }
+    }
+    ioSay('everything restored' + when + '.');
+  });
+
+})();
 </script>
 </body>
 </html>
