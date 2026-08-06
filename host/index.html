@@ -54,6 +54,17 @@
              background:linear-gradient(90deg, var(--on), #fbbf24 75%, var(--rec));
              transition:width .06s linear; }
   .status { font-size:13px; color:var(--dim); margin-top:10px; text-align:center; }
+  /* An answer nobody saw is not an answer. These lines were being overwritten
+     within the second by a poller that had nothing to say, so pressing Save
+     looked identical to pressing nothing. A message now holds the line for long
+     enough to read and lights up while it does, so the eye is taken to it. */
+  .status.said, .err.said { color:var(--fg); animation:said 3.5s ease-out; }
+  @keyframes said {
+    0%   { background:rgba(120,180,255,.22); }
+    18%  { background:rgba(120,180,255,.22); }
+    100% { background:transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) { .status.said, .err.said { animation:none; } }
   .err { color:var(--rec); font-size:13px; margin-top:10px; white-space:pre-wrap; }
 
   /* the music: what is on air, and the few things a host does to it */
@@ -412,7 +423,34 @@
   const MAX_BYTES = 15 * 1024 * 1024;
 
 
-  const setStatus = t => { $('status').textContent = t; };
+  // Two kinds of line share this element: things the page is DOING, written
+  // constantly by pollers and by the recorder, and things a host ASKED for and
+  // is waiting on. The second kind was losing to the first within a second,
+  // which is why pressing Save felt like pressing nothing.
+  //
+  // So an answer holds the line. For as long as the hold lasts, routine
+  // chatter is dropped rather than queued - it is chatter, and a stale "on
+  // air" arriving late is worse than none. Every answer in this page goes
+  // through say(), so none of them can be silently overwritten again.
+  const SAY_MS = 3500;
+  let sayUntil = 0;
+  function say(id, msg) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = msg;
+    sayUntil = Date.now() + SAY_MS;
+    // restart the highlight even when the same element is written twice
+    el.classList.remove('said');
+    void el.offsetWidth;
+    el.classList.add('said');
+    setTimeout(() => el.classList.remove('said'), SAY_MS);
+  }
+  const setStatus = t => {
+    if (Date.now() < sayUntil) return;      // an answer is still being read
+    $('status').textContent = t;
+  };
+  // What a host asked for, and therefore what must survive the chatter.
+  const answer = t => say('status', t);
 
   // The page is behind basic auth, so the browser already holds the credential
   // and normally sends it. Only if an upload comes back 401 do we ask.
@@ -556,7 +594,7 @@
     const o = {};
     for (const id in CAP) o[id] = $(id).value;
     try { localStorage.setItem(CAP_KEY, JSON.stringify(o)); } catch {}
-    setStatus(recording ? 'on air' : 'streaming settings saved on this device');
+    answer('streaming settings saved on this device');
   }
 
   capDraw();
@@ -786,7 +824,7 @@
     clearInterval(capTick);
     $('rec').textContent = 'Start talking';
     $('rec').classList.remove('recording');
-    setStatus('sending your note');
+    answer('sending your note');
     if (why) fail(why);
     try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
   }
@@ -809,7 +847,7 @@
     // there is nothing in the body to send, and caddy would file an empty note
     // for liquidsoap to open and fail on. It is counted on the Streaming panel
     // so even that is visible.
-    if (!blob.size) { dropped++; showDrop(); setStatus('nothing was recorded'); return; }
+    if (!blob.size) { dropped++; showDrop(); answer('nothing was recorded'); return; }
 
     // What the note actually weighed. This is the honest answer to a bitrate
     // change - the encoder's own idea of what it produced, in seconds and in
@@ -917,7 +955,7 @@
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       $('derr').textContent = '';
-      setStatus(recording ? 'on air' : k + ' set to ' + v);
+      answer(k + ' set to ' + v);
       saveDesk();          // live is not the same as kept
     } catch (e) { $('derr').textContent = 'Mixing desk: ' + e.message; }
   }
@@ -1416,7 +1454,7 @@
   let presets = {};
 
   const presErr = m => { $('preserr').textContent = m; };
-  const presSay = m => { $('presmsg').textContent = m; };
+  const presSay = m => say('presmsg', m);
 
   function presDraw() {
     const sel = $('preslist'), had = sel.value;
@@ -1601,7 +1639,7 @@
       return presErr('That is already ' + PRES_MAX + ' presets - delete one first.');
     const prev = presets[n];
     presets[n] = presCurrent();
-    if (await presPut('Saved "' + n + '" — voice, EQ, streaming settings, the desk, and which panels were open.')) {
+    if (await presPut('Saved "' + n + '" \u2014 voice, EQ, streaming settings, the desk, and which panels were open.')) {
       presDraw();
       $('preslist').value = n;
     } else if (prev === undefined) { delete presets[n]; } else { presets[n] = prev; }
@@ -1676,7 +1714,7 @@
   // So: the file holds exactly one, and putting it back touches exactly one
   // key in presets.json. Everything else a host has saved is left alone.
   const IO_VERSION = 2;
-  const ioSay = t => { $('iomsg').textContent = t; };
+  const ioSay = t => say('iomsg', t);
 
   // yyyymmddhhmm, local time - the clock on the wall of whoever took it.
   function stampNow() {
