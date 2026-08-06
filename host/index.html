@@ -328,21 +328,6 @@
       <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
       <input id="comp_gain" type="range" disabled>
     </div>
-    <label for="gate_thr"><span class="band">Gate threshold</span> &mdash; below this the room is shut out entirely. Set it above your room and under your quietest word &mdash; <span id="gate_thrval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockgate_thr" aria-pressed="true">&#128274;</button>
-      <input id="gate_thr" type="range" disabled>
-    </div>
-    <label for="gate_range"><span class="band">Gate depth</span> &mdash; how far down it shuts. 0 turns the gate off; -20 is a closed door, -60 is a vacuum and sounds like one &mdash; <span id="gate_rangeval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockgate_range" aria-pressed="true">&#128274;</button>
-      <input id="gate_range" type="range" disabled>
-    </div>
-    <label for="gate_release"><span class="band">Gate release</span> &mdash; how long it takes to close after you stop. Too fast chops the tail off words &mdash; <span id="gate_releaseval"></span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockgate_release" aria-pressed="true">&#128274;</button>
-      <input id="gate_release" type="range" disabled>
-    </div>
     <label for="duck_to"><span class="band">Music under a voice</span> &mdash; how loud the music stays while anyone is speaking; 1 is untouched, 0 is silent &mdash; <span id="duck_toval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockduck_to" aria-pressed="true">&#128274;</button>
@@ -873,9 +858,6 @@
     comp_thr:   { unit: ' dB',    min: -40,  max: 0,   step: 1,    val: -29  },
     comp_ratio: { unit: ':1',     min: 1,    max: 20,  step: 0.5,  val: 3.5  },
     comp_gain:  { unit: ' dB',    min: 0,    max: 24,  step: 0.5,  val: 17.5 },
-    gate_thr:     { unit: ' dB', min: -60, max: 0,    step: 1,  val: -34 },
-    gate_range:   { unit: ' dB', min: -60, max: 0,    step: 1,  val: -22 },
-    gate_release: { unit: ' ms', min: 20,  max: 3000, step: 10, val: 500 },
     duck_to:    { unit: '\u00d7', min: 0,    max: 1,   step: 0.05, val: 0.45 },
     hold:       { unit: ' s',     min: 0,    max: 30,  step: 0.5,  val: 3    },
     glide:      { unit: '',       min: 0.01, max: 0.5, step: 0.01, val: 0.01 }
