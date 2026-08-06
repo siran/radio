@@ -149,8 +149,15 @@ import admins.caddy
 					window 1m
 				}
 			}
+			# A note is now ONE recording uploaded once, however long it runs,
+			# so this has to hold a whole show and not a 1.5s fragment. Same
+			# measured trap as settings.json below: max_size TRUNCATES the
+			# body, it does not reject it - an oversized note would be written
+			# cut short, with nothing said to the speaker. That is why the host
+			# page stops itself at 15MB and says why: the ceiling is reached in
+			# the browser, where it can be explained, and never here.
 			request_body {
-				max_size 4MB
+				max_size 16MB
 			}
 			# The folder is whoever authenticated - never what the client says.
 			webdav {

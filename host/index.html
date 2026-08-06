@@ -126,11 +126,11 @@
   </div>
 
   <details class="panel" id="eqwrap" open>
-    <summary title="How loud you are, and what shape.">Your voice</summary>
+    <summary>Your voice <span class="when">&mdash; how loud you are, and what shape. Applies to your notes only, on the radio, after they arrive.</span></summary>
       <div class="btns">
         <button class="tbtn" id="lockallvoice" title="every slider in this panel at once">Unlock all</button>
       </div>
-      <label for="gain">Volume &mdash; <span id="gainval">1</span>&times;</label>
+      <label for="gain"><span class="band">Volume</span> &mdash; how loud your notes go out; yours, and it overrides the station default &mdash; <span id="gainval">1</span>&times;</label>
       <div class="ctl">
         <button class="lock" type="button" id="lockgain" aria-pressed="true">&#128274;</button>
         <input id="gain" type="range" min="0" max="12" step="0.5" value="1" disabled>
@@ -172,6 +172,7 @@
       </div>
       <div class="duckrow">
         <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
+        <span class="when">whether the music drops under your notes, or plays on behind them</span>
       </div>
   </details>
 
@@ -182,28 +183,22 @@
 
   <!-- Every parameter that shapes the audio between the microphone and the
        upload, one control each. The ranges and the choices are built in the
-       script from the CAP table, which is also what begin() and segment()
+       script from the CAP table, which is also what begin() reads
        read - so what this panel says is what is applied, and there is no
        second copy of a number anywhere. -->
   <details class="panel" id="capwrap">
-    <summary title="Everything the browser does to your voice before it is sent.">Streaming</summary>
+    <summary>Streaming <span class="when">&mdash; everything this phone does to your voice before it is sent</span></summary>
     <div class="status" id="capnote">Kept on this device, like the microphone above.
-      <span class="when">next slice</span> lands within a slice;
+      <span class="when">next note</span> lands on the next thing you record;
       <span class="when">mic reopen</span> needs Stop talking, then Start talking.</div>
 
-    <label for="cap_seg"><span class="band">Slice length</span> &mdash; recorded before anything is sent, and the largest part of the delay you hear &mdash; <span id="cap_segval">1.5</span> s <span class="when">next slice</span></label>
-    <div class="ctl">
-      <button class="lock" type="button" id="lockcap_seg" aria-pressed="true">&#128274;</button>
-      <input id="cap_seg" type="range" disabled>
-    </div>
-
-    <label for="cap_bitrate"><span class="band">Bitrate</span> &mdash; how much detail survives the encoder &mdash; <span id="cap_bitrateval">96000</span> bits/s <span class="when">next slice</span></label>
+    <label for="cap_bitrate"><span class="band">Bitrate</span> &mdash; how much detail survives the encoder; higher is a bigger file &mdash; <span id="cap_bitrateval">96000</span> bits/s <span class="when">next note</span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcap_bitrate" aria-pressed="true">&#128274;</button>
       <input id="cap_bitrate" type="range" disabled>
     </div>
 
-    <label for="cap_bitmode"><span class="band">Bitrate mode</span> &mdash; constant spends the same bits on silence as on speech <span class="when">next slice</span></label>
+    <label for="cap_bitmode"><span class="band">Bitrate mode</span> &mdash; constant spends the same bits on silence as on speech <span class="when">next note</span></label>
     <select id="cap_bitmode" aria-label="Bitrate mode"></select>
 
     <label for="cap_mime"><span class="band">Format</span> &mdash; container and codec; only what this browser admits to is listed <span class="when">mic reopen</span></label>
@@ -248,21 +243,21 @@
        The file sits in the speaker's own folder beside settings.json, which is
        what makes it survive a cleared cache and arrive on a second phone. -->
   <details class="panel" id="preswrap" open>
-    <summary title="Both halves of your sound, saved on the server under a name.">Presets</summary>
+    <summary>Presets <span class="when">&mdash; both halves of your sound, saved on the server under a name</span></summary>
     <div class="status" id="presnote">Your voice and your streaming settings together, saved in your
       own folder on the server &mdash; not on this phone, so clearing your browser cannot lose them.
       Loading one puts your voice on the air <span class="when">within a quarter second</span>;
-      slice length, bitrate and bitrate mode land on the <span class="when">next slice</span>;
+      bitrate and bitrate mode land on the <span class="when">next note</span>;
       everything else on Streaming needs a <span class="when">mic reopen</span>.</div>
 
-    <label for="presname">Name &mdash; letters, digits, space, hyphen, underscore</label>
+    <label for="presname"><span class="band">Name</span> &mdash; what to call this sound; letters, digits, space, hyphen, underscore</label>
     <input id="presname" type="text" maxlength="24" placeholder="dj" autocomplete="off"
            autocapitalize="none" spellcheck="false" aria-label="Preset name">
     <div class="btns">
       <button class="tbtn" id="pressave" title="save both halves of your sound under the typed name">Save this sound</button>
     </div>
 
-    <label for="preslist">Saved</label>
+    <label for="preslist"><span class="band">Saved</span> &mdash; sounds already stored in your folder; pick one, then Load</label>
     <select id="preslist" aria-label="Saved presets"></select>
     <div class="btns">
       <button class="tbtn" id="presload" title="apply both halves">Load</button>
@@ -273,7 +268,7 @@
   </details>
 
   <details class="panel" id="musicpanel" open>
-    <summary>Now playing</summary>
+    <summary>Now playing <span class="when">&mdash; what is on the air, and the controls that change it for everyone listening</span></summary>
     <div class="np" id="npTitle">&mdash;</div>
     <div class="path" id="npPath"></div>
     <div class="btns">
@@ -284,8 +279,12 @@
       <button class="tbtn" id="bMusic" title="off is silence">Music</button>
       <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
     </div>
+    <div class="status"><span class="when">Previous goes back to what finished last, again and again.
+      Skip drops this track and takes the next. Play again queues this same track once more.
+      Repeat keeps replaying it until you turn it off. Music off leaves silence under the voices.
+      Pause freezes the whole stream for everyone.</span></div>
     <div id="qfind">
-      <label for="qsearch">Find a track</label>
+      <label for="qsearch"><span class="band">Find a track</span> &mdash; searches title, artist and filename across the library; pick a result to queue it next</label>
       <input id="qsearch" type="text" autocomplete="off" spellcheck="false"
              placeholder="artist or title">
       <div class="status" id="qnote"></div>
@@ -295,11 +294,11 @@
   </details>
 
   <details class="panel" id="deskwrap">
-    <summary title="Liquidsoap's live knobs. Read when this fold is opened.">Mixing desk</summary>
+    <summary>Mixing desk <span class="when">&mdash; the station's own knobs, live for every listener. Read when this fold is opened.</span></summary>
     <div class="btns">
       <button class="tbtn" id="lockalldesk" title="every slider in this panel at once">Unlock all</button>
     </div>
-    <label for="mic_gain"><span class="band">Live mic</span> &mdash; <span id="mic_gainval"></span></label>
+    <label for="mic_gain"><span class="band">Live mic</span> &mdash; volume of a microphone streaming straight into the station; not your voice notes &mdash; <span id="mic_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
       <input id="mic_gain" type="range" disabled>
@@ -309,37 +308,37 @@
       <button class="lock" type="button" id="lockvoice_gain" aria-pressed="true">&#128274;</button>
       <input id="voice_gain" type="range" disabled>
     </div>
-    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; <span id="hp_freqval"></span></label>
+    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; removes rumble below this from the live mic; your notes are untouched &mdash; <span id="hp_freqval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockhp_freq" aria-pressed="true">&#128274;</button>
       <input id="hp_freq" type="range" disabled>
     </div>
-    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; <span id="comp_thrval"></span></label>
+    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level at which the live mic starts being held back; lower evens out more &mdash; <span id="comp_thrval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_thr" aria-pressed="true">&#128274;</button>
       <input id="comp_thr" type="range" disabled>
     </div>
-    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; <span id="comp_ratioval"></span></label>
+    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; how hard it holds back once over that level; 1 is off, 4 is normal speech &mdash; <span id="comp_ratioval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_ratio" aria-pressed="true">&#128274;</button>
       <input id="comp_ratio" type="range" disabled>
     </div>
-    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; <span id="comp_gainval"></span></label>
+    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; loudness added back after the compressor, live mic only &mdash; <span id="comp_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
       <input id="comp_gain" type="range" disabled>
     </div>
-    <label for="duck_to"><span class="band">Music under a voice</span> &mdash; <span id="duck_toval"></span></label>
+    <label for="duck_to"><span class="band">Music under a voice</span> &mdash; how loud the music stays while anyone is speaking; 1 is untouched, 0 is silent &mdash; <span id="duck_toval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockduck_to" aria-pressed="true">&#128274;</button>
       <input id="duck_to" type="range" disabled>
     </div>
-    <label for="hold"><span class="band">Music hold</span> &mdash; <span id="holdval"></span></label>
+    <label for="hold"><span class="band">Music hold</span> &mdash; seconds of quiet before the music comes back up, so a pause does not lift it &mdash; <span id="holdval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockhold" aria-pressed="true">&#128274;</button>
       <input id="hold" type="range" disabled>
     </div>
-    <label for="glide"><span class="band">Fader speed</span> &mdash; <span id="glideval"></span></label>
+    <label for="glide"><span class="band">Fader speed</span> &mdash; how fast the music moves between those two levels; smaller is smoother &mdash; <span id="glideval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
       <input id="glide" type="range" disabled>
@@ -348,7 +347,7 @@
   </details>
 
   <details class="panel" id="narwrap">
-    <summary title="Which voice speaks, how fast, how often, and how it says a name it keeps getting wrong. One setting for the whole station.">The narrator</summary>
+    <summary>The narrator <span class="when">&mdash; which voice announces the tracks, how fast, how often, and how it says a name it keeps getting wrong. One setting for the whole station.</span></summary>
     <iframe id="narrator" title="narrator"></iframe>
   </details>
 
@@ -365,16 +364,26 @@
   const $ = id => document.getElementById(id);
 
   let stream = null, rec = null, ac = null, analyser = null, raf = 0;
-  let parts = [], recording = false, startedAt = 0;
-  let seq = 0, segTimer = 0;
+  let parts = [], recording = false, startedAt = 0, bytes = 0;
+  let capTick = 0;
 
-  // Seconds per slice used to be a const here. It is the largest single piece
-  // of the delay you hear - nothing can be sent until the slice finishes - so
-  // it is the first thing anyone wants to try, and it now lives on the
-  // Streaming panel with everything else that shapes the sound. Shorter means
-  // sooner and more seams, which the ducking tail covers anyway. The floor of
-  // 0.5s in CAP below is not taste: caddy rate-limits this folder to 150 PUTs
-  // a minute, and 0.5s is 120.
+  // A note is ONE recording, from Start talking to Stop talking, uploaded as one
+  // file - the same thing the narrator drops into its folder, and the reason the
+  // narrator has never had a seam. The page used to stop the recorder every
+  // 1.5s and start another, so each piece was a whole file of its own; whatever
+  // was said between one stop and the next start was never captured by anything,
+  // and no setting on this page could reach it. That is gone. The recorder is
+  // built once and stopped once.
+  //
+  // start(CHUNK_MS) does NOT bring it back. A timeslice only asks the encoder to
+  // hand over what it has so far in pieces; the recording itself never stops, and
+  // the pieces are concatenated below into one file with one header. It is here
+  // only so the page can show the size climbing and stop before the ceiling.
+  const CHUNK_MS = 1000;
+  // Caddy refuses a body over 16MB. Being refused after speaking for ten minutes
+  // is the worst thing this page could do, so it stops itself before that and
+  // says why. The margin is for the container overhead the encoder adds.
+  const MAX_BYTES = 15 * 1024 * 1024;
 
 
   const setStatus = t => { $('status').textContent = t; };
@@ -457,7 +466,6 @@
                  ['22050', '22050'], ['24000', '24000'], ['32000', '32000'],
                  ['44100', '44100 - CD'], ['48000', '48000 - studio']];
   const CAP = {
-    cap_seg:     { kind: 'range', min: 0.5, max: 6, step: 0.1, def: 1.5 },
     cap_bitrate: { kind: 'range', min: 8000, max: 256000, step: 8000, def: 96000 },
     cap_bitmode: { kind: 'select', def: '', opts: [['', 'browser default'], ['variable', 'variable'], ['constant', 'constant']] },
     cap_mime:    { kind: 'select', def: '', opts: [] },
@@ -470,11 +478,11 @@
     cap_agc:     { kind: 'select', def: 'off', con: 'autoGainControl', opts: OFFON },
     cap_vi:      { kind: 'select', def: '', con: 'voiceIsolation', opts: OFFON }
   };
-  // Only the two sliders get a lock. A lock is there because a thumb brushing
+  // Only the slider gets a lock. A lock is there because a thumb brushing
   // the page can drag a slider; a select cannot be opened and chosen from by
   // accident, and eleven more padlocks would be eleven more taps in the pass
   // this panel exists to make quick.
-  const CAPLOCK = ['cap_seg', 'cap_bitrate'];
+  const CAPLOCK = ['cap_bitrate'];
 
   const capNum = id => parseFloat($(id).value);
   const capStr = id => $(id).value;
@@ -615,14 +623,13 @@
     if (track) row('device', '', track.label || 'unnamed');
   }
 
-  // Nothing is thrown away any more. A slice of zero bytes is the one thing
-  // still skipped, and skipping it discards no audio: it is an encoder that
-  // produced nothing, and putting it would file an empty note for liquidsoap to
-  // choke on. The count is on the panel so even that is not silent. What used
-  // to be here - under 200 bytes, or under 0.05s - could drop a real slice.
+  // Nothing is thrown away. A note of zero bytes is the one thing still
+  // skipped, and skipping it discards no audio: it is an encoder that produced
+  // nothing, and putting it would file an empty note for liquidsoap to choke
+  // on. The count is on the panel so even that is not silent.
   let dropped = 0, lastSlice = '';
   const showDrop = () => {
-    $('capdrop').textContent = 'Nothing is discarded. A slice of zero bytes is skipped, ' +
+    $('capdrop').textContent = 'Nothing is discarded. A note of zero bytes is skipped, ' +
       'because there is no audio in it: ' + dropped + ' so far.' + lastSlice;
   };
   showDrop();
@@ -685,11 +692,11 @@
     reported = false;
     capReport(null);
     listDevices();   // permission now exists, so the names are real
-    // Swapping the mic mid-slice would mean tearing down the stream, the
-    // recorder and the meter with a slice in flight - a dropped or doubled
-    // slice on air. Cheaper to say no, out loud, and let him stop first.
+    // Swapping the mic mid-note would mean tearing down the stream, the
+    // recorder and the meter with a recording in flight, which would lose the
+    // note. Cheaper to say no, out loud, and let him stop first.
     $('dev').disabled = true;
-    $('devlabel').textContent = 'Microphone \u2014 locked while you are on air';
+    $('devlabel').textContent = 'Microphone \u2014 which mic this phone records from; locked while recording';
 
     ac = new (window.AudioContext || window.webkitAudioContext)();
     analyser = ac.createAnalyser();
@@ -697,32 +704,15 @@
     ac.createMediaStreamSource(stream).connect(analyser);
     meter();
 
-    recording = true;
-    seq = 0;
-    $('rec').textContent = 'Stop talking';
-    $('rec').classList.add('recording');
-    setStatus('on air');
-    segment(mime);          // start the first slice
-  }
-
-  // A slice is a whole self-contained recording: start, run for the slice
-  // length on the panel, stop. Stopping is what produces a complete file with
-  // its own header, so each one plays on its own. Then immediately begin the
-  // next. Liquidsoap's 10s ducking tail spans the seams, so the music stays
-  // down between slices instead of jumping back in.
-  function segment(mime) {
-    if (!recording) return;
     parts = [];
+    bytes = 0;
     startedAt = Date.now();
-    // The recorder is built fresh for every slice, which is why the bitrate and
-    // the bitrate mode land on the next one and do not wait for the mic. A
-    // combination this browser will not take throws here rather than at the
-    // slider, so it is caught here: better one plain sentence than a button
-    // that has quietly stopped recording.
+    // The recorder is built once per note. A combination this browser will not
+    // take throws here rather than at the slider, so it is caught here: better
+    // one plain sentence than a button that has quietly stopped recording.
     try {
       rec = new MediaRecorder(stream, recorderOpts(mime));
     } catch (e) {
-      recording = false;
       $('rec').textContent = 'Start talking';
       $('rec').classList.remove('recording');
       fail('The recorder refused those Streaming settings: ' + e.name + ' - ' + e.message);
@@ -731,73 +721,86 @@
       return;
     }
     if (!reported) { reported = true; capReport(rec); }
-    rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+    rec.ondataavailable = e => {
+      if (e.data && e.data.size) { parts.push(e.data); bytes += e.data.size; }
+      // Reached the ceiling mid-note: end it cleanly and say so, rather than
+      // letting caddy reject the whole thing at the door.
+      if (bytes >= MAX_BYTES && recording) {
+        end('That note reached the size limit, so it was ended and sent. Press Start talking to carry on.');
+      }
+    };
     rec.onstop = () => {
       const secs = (Date.now() - startedAt) / 1000;
-      send(new Blob(parts, { type: mime.split(';')[0] }), mime, secs);
-      if (recording) segment(mime);   // seamless-ish: next slice starts at once
-      else teardown();
+      // One blob from every piece, in order: one file, one header, no seam.
+      const blob = new Blob(parts, { type: mime.split(';')[0] });
+      teardown(true);           // release the mic without touching the status
+      send(blob, mime, secs);   // which send() owns from here
     };
-    rec.start();
-    clearTimeout(segTimer);
-    // Read per slice, so moving the slider changes the very next one. isFinite
-    // because a setTimeout of NaN fires immediately, which here would be an
-    // unbroken loop of empty slices.
-    const seg = capNum('cap_seg');
-    segTimer = setTimeout(() => {
-      try { rec && rec.state === 'recording' && rec.stop(); } catch {}
-    }, (isFinite(seg) ? seg : 1.5) * 1000);
+    rec.start(CHUNK_MS);
+    recording = true;
+    $('rec').textContent = 'Stop talking';
+    $('rec').classList.add('recording');
+    tick();
+    capTick = setInterval(tick, 1000);
   }
 
-  function end() {
+  // What the note weighs so far, while it is still being spoken. Nothing is on
+  // the air yet - that happens when it is sent - so the status says recording.
+  function tick() {
+    if (!recording) return;
+    const s = Math.floor((Date.now() - startedAt) / 1000);
+    const mm = Math.floor(s / 60), ss = String(s % 60).padStart(2, '0');
+    setStatus('recording \u00b7 ' + mm + ':' + ss + ' \u00b7 ' +
+              (bytes / 1024).toFixed(0) + ' kB of ' + Math.round(MAX_BYTES / 1024) + ' kB');
+  }
+
+  function end(why) {
     if (!recording) return;
     recording = false;
-    clearTimeout(segTimer);
+    clearInterval(capTick);
     $('rec').textContent = 'Start talking';
     $('rec').classList.remove('recording');
-    setStatus('sending the last slice');
+    setStatus('sending your note');
+    if (why) fail(why);
     try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
   }
 
-  function teardown() {
+  function teardown(quiet) {
+    clearInterval(capTick);
     try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
     try { ac && ac.close(); } catch {}
     cancelAnimationFrame(raf); analyser = null; $('vu').style.width = '0%';
     $('dev').disabled = false;
-    $('devlabel').textContent = 'Microphone';
-    setStatus('ready');
+    $('devlabel').textContent = 'Microphone \u2014 which mic this phone records from';
+    if (!quiet) setStatus('ready');
   }
 
   // The whole point: an ordinary upload with a length, not a live stream.
   async function send(blob, mime, secs) {
-    // Nothing is discarded. Not a short slice, not a quiet one, not a header
-    // with no audio behind it - all of that is the performance, and the page is
-    // no longer the judge of what counts as speech. The single exception is a
-    // blob of zero bytes, which is not audio at all: there is nothing in the
-    // body to send, and caddy would file an empty note for liquidsoap to open
-    // and fail on. It is counted on the Streaming panel so even that is visible.
-    // This used to drop under 200 bytes or 0.05s, and before that under 1500
-    // bytes or 0.4s, which silently deleted every pause - the lead-in before you
-    // start talking, and the beat between sentences.
-    if (!blob.size) { dropped++; showDrop(); return; }
+    // Nothing is discarded. Not a short note, not a quiet one - all of that is
+    // the performance, and the page is not the judge of what counts as speech.
+    // The single exception is a blob of zero bytes, which is not audio at all:
+    // there is nothing in the body to send, and caddy would file an empty note
+    // for liquidsoap to open and fail on. It is counted on the Streaming panel
+    // so even that is visible.
+    if (!blob.size) { dropped++; showDrop(); setStatus('nothing was recorded'); return; }
 
-    // What the last slice actually weighed. This is the honest answer to a
-    // bitrate change - the encoder's own idea of what it produced, in seconds
-    // and in bytes - and it is how you tell a setting that did something from
-    // one the browser politely ignored.
+    // What the note actually weighed. This is the honest answer to a bitrate
+    // change - the encoder's own idea of what it produced, in seconds and in
+    // bytes - and it is how you tell a setting that did something from one the
+    // browser politely ignored.
     if (secs > 0) {
-      lastSlice = ' Last slice: ' + secs.toFixed(2) + ' s, ' + (blob.size / 1024).toFixed(1) +
+      lastSlice = ' Last note: ' + secs.toFixed(2) + ' s, ' + (blob.size / 1024).toFixed(1) +
                   ' kB, about ' + Math.round(blob.size * 8 / secs) + ' bits/s.';
       showDrop();
     }
 
-    // Name carries the order: liquidsoap lists the folder sorted, so slices
-    // play in the order they were spoken even if one arrives late.
-    const n = String(++seq).padStart(4, '0');
+    // The timestamp carries the order: liquidsoap lists the folder sorted, so
+    // notes play in the order they were spoken even if one arrives late.
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     // No speaker name here on purpose: caddy files the upload under whoever
     // logged in, so identity is enforced by the server rather than claimed.
-    const name = stamp + '-' + n + '-' +
+    const name = stamp + '-' +
                  Math.random().toString(36).slice(2, 6) + '.' + extFor(mime);
     const li = { lastChild: {} };   // nothing to display; kept so send() reads plainly
 
@@ -1406,7 +1409,7 @@
     // the folder four times a second, so the voice is already different; the
     // microphone is opened once and keeps the constraints it was opened with.
     presSay('Loaded "' + n + '". Your voice is on the air within a quarter second. ' +
-            'Slice length, bitrate and bitrate mode land on the next slice. ' +
+            'Bitrate and bitrate mode land on the next note. ' +
             'Format, sample rate, channels, sample size, latency, echo cancellation, ' +
             'noise suppression, auto gain and voice isolation need the microphone reopened' +
             (recording ? ' - tap Stop talking, then Start talking.' : '.'));
