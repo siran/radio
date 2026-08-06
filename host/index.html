@@ -1382,6 +1382,29 @@
   // What the two panels are holding at this moment. The capture half is read
   // off the controls rather than out of localStorage so that what is on screen
   // is what gets saved, which is also what capSave() has just written there.
+  // Which panels are open is part of a sound as much as any number in it: a
+  // preset for tuning wants the desk and Streaming unfolded, one for going on
+  // air wants them shut and the talk button alone on the screen. Read off the
+  // page rather than from a list, so a panel added later is carried without
+  // anyone remembering to add it here.
+  function panelState() {
+    const o = {};
+    for (const d of document.querySelectorAll('details.panel')) {
+      if (d.id) o[d.id] = d.open;
+    }
+    return o;
+  }
+  function applyPanels(o) {
+    if (!o || typeof o !== 'object') return;
+    for (const id in o) {
+      const d = $(id);
+      // Only a details element, and only one still on the page: an id from an
+      // older file that no longer exists is skipped rather than throwing and
+      // taking the rest of the preset down with it.
+      if (d && d.tagName === 'DETAILS' && typeof o[id] === 'boolean') d.open = o[id];
+    }
+  }
+
   function presCurrent() {
     const cap = {};
     for (const id in CAP) cap[id] = $(id).value;
@@ -1399,7 +1422,8 @@
     return {
       cap: cap,
       voice: { gain: settings.gain, duck: settings.duck, eq: eq },
-      desk: desk
+      desk: desk,
+      panels: panelState()
     };
   }
 
@@ -1475,6 +1499,7 @@
       $('eq' + b).value = settings.eq[b];
       showBand(b);
     }
+    applyPanels(p.panels);
     presErr('');
     saveSettings('preset "' + n + '" loaded');
     // Said every time, because half of it is not true yet. Liquidsoap polls
@@ -1570,22 +1595,6 @@
   window.addEventListener('beforeunload', e => {
     if (recording) { e.preventDefault(); e.returnValue = ''; }
   });
-})();
-  // Basic auth never tells a page who is using it, so the server does: /whoami
-  // answers with the same credential Caddy already uses to pick a host's own
-  // upload folder. Silent on failure - a footer is not worth an error.
-  (async () => {
-    try {
-      const r = await fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' });
-      if (!r.ok) return;
-      const who = (await r.text()).trim();
-      if (!who) return;
-      const el = document.getElementById('whoami');
-      if (el) el.textContent = who;
-      const w = document.getElementById('whoamiwrap');
-      if (w) w.hidden = false;
-    } catch (e) { /* leave it hidden */ }
-  
   // ----- everything, as one file --------------------------------------------
   // Five things decide how this station sounds and they live in five places:
   // settings.json and presets.json in your own folder, the Streaming panel in
@@ -1725,7 +1734,23 @@
     ioSay('everything restored' + when + '.');
   });
 
+
 })();
+  // Basic auth never tells a page who is using it, so the server does: /whoami
+  // answers with the same credential Caddy already uses to pick a host's own
+  // upload folder. Silent on failure - a footer is not worth an error.
+  (async () => {
+    try {
+      const r = await fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) return;
+      const who = (await r.text()).trim();
+      if (!who) return;
+      const el = document.getElementById('whoami');
+      if (el) el.textContent = who;
+      const w = document.getElementById('whoamiwrap');
+      if (w) w.hidden = false;
+    } catch (e) { /* leave it hidden */ }
+  })();
 </script>
 </body>
 </html>
