@@ -150,8 +150,11 @@
       Pause freezes the whole stream for everyone.</span></div>
     <div id="qfind">
       <label for="qsearch"><span class="band">Find a track</span> &mdash; searches title, artist and filename across the library; pick a result to queue it next</label>
+      <div class="ctl">
       <input id="qsearch" type="text" autocomplete="off" spellcheck="false"
              placeholder="artist or title">
+      <button class="tbtn" type="button" id="qclear" title="clear the search and the results" aria-label="Clear search">&#10005;</button>
+      </div>
       <div class="status" id="qnote"></div>
       <ul id="qresults"></ul>
     </div>
@@ -1036,6 +1039,17 @@
   }
   const nowPlaying = () => control('now', 'GET');
 
+  // One way out of a search. The results list sat there until the next search
+  // replaced it, so a query typed to check something stayed on the panel over
+  // the top of what is actually playing. Clears the box, the results and the
+  // note together - there is no state worth keeping half of.
+  function clearSearch() {
+    $('qsearch').value = '';
+    $('qresults').innerHTML = '';
+    $('qnote').textContent = '';
+    $('qsearch').focus();
+  }
+
   // A toggle says what it is, not only what colour it is.
   function flag(id, on, text) {
     const b = $(id);
@@ -1721,6 +1735,12 @@
     $('preslist').value = target;
     await presPut('"' + target + '" saved from a file');
     ioSay('"' + target + '" is saved' + when + '. Press Load to put it on air.');
+  });
+
+  $('qclear').addEventListener('click', clearSearch);
+  // Escape is what a keyboard expects to do here, and costs one line.
+  $('qsearch').addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); clearSearch(); }
   });
 
 })();
