@@ -294,11 +294,11 @@
   </details>
 
   <details class="panel" id="deskwrap">
-    <summary>Mixing desk <span class="when">&mdash; the station's own knobs, live for every listener. Read when this fold is opened.</span></summary>
+    <summary>Mixing desk <span class="when">&mdash; the station's own knobs, live for every listener. The compressor sits on the voice bus, so it shapes voice notes and the live mic together; the music never passes through it. Read when this fold is opened.</span></summary>
     <div class="btns">
       <button class="tbtn" id="lockalldesk" title="every slider in this panel at once">Unlock all</button>
     </div>
-    <label for="mic_gain"><span class="band">Live mic</span> &mdash; volume of a microphone streaming straight into the station; not your voice notes &mdash; <span id="mic_gainval"></span></label>
+    <label for="mic_gain"><span class="band">Live mic</span> &mdash; volume of a microphone streaming straight into the station; this one alone never touches a voice note &mdash; <span id="mic_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
       <input id="mic_gain" type="range" disabled>
@@ -308,22 +308,22 @@
       <button class="lock" type="button" id="lockvoice_gain" aria-pressed="true">&#128274;</button>
       <input id="voice_gain" type="range" disabled>
     </div>
-    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; removes rumble below this from the live mic; your notes are untouched &mdash; <span id="hp_freqval"></span></label>
+    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; removes rumble below this from the live mic only; on a note, use the 100 Hz band instead &mdash; <span id="hp_freqval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockhp_freq" aria-pressed="true">&#128274;</button>
       <input id="hp_freq" type="range" disabled>
     </div>
-    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level at which the live mic starts being held back; lower evens out more &mdash; <span id="comp_thrval"></span></label>
+    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level at which a voice starts being held back; lower evens out more. Applies to voice notes AND the live mic &mdash; <span id="comp_thrval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_thr" aria-pressed="true">&#128274;</button>
       <input id="comp_thr" type="range" disabled>
     </div>
-    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; how hard it holds back once over that level; 1 is off, 4 is normal speech &mdash; <span id="comp_ratioval"></span></label>
+    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; how hard it holds back once over that level; 1 is off, 4 is normal speech. Voice notes AND the live mic &mdash; <span id="comp_ratioval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_ratio" aria-pressed="true">&#128274;</button>
       <input id="comp_ratio" type="range" disabled>
     </div>
-    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; loudness added back after the compressor, live mic only &mdash; <span id="comp_gainval"></span></label>
+    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; loudness added back after the compressor; raise this if you are still too quiet. Voice notes AND the live mic &mdash; <span id="comp_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
       <input id="comp_gain" type="range" disabled>
