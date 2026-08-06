@@ -1611,17 +1611,19 @@
     return String(d.getFullYear()) + z(d.getMonth() + 1) + z(d.getDate()) +
            z(d.getHours()) + z(d.getMinutes());
   }
-  // Whatever is picked in the list, falling back to whatever is typed in the
-  // name box - so a sound can be exported straight after saving it.
+  // The list, and only the list. Both buttons used to read a different control
+  // - Download the list, Upload the name box - so they agreed only when the two
+  // happened to match, and disagreed silently when they did not. One control
+  // says "this one", and a target that is not selected is an error rather than
+  // a guess.
   function ioName() {
-    const sel = ($('preslist').value || '').trim();
-    return sel || ($('presname').value || '').trim();
+    return ($('preslist').value || '').trim();
   }
   const ioSafe = n => n.replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, '-') || 'preset';
 
   $('dlall').addEventListener('click', () => {
     const n = ioName();
-    if (!n) return ioSay('Pick a saved sound, or type a name, first.');
+    if (!n) return ioSay('Pick a saved sound in the list above first.');
     // From the file rather than from the screen: what gets exported is what is
     // actually saved under that name, not what the sliders happen to show.
     const one = presets[n];
@@ -1661,17 +1663,15 @@
     if (!one || typeof one !== 'object') {
       return ioSay('There is no preset in that file.');
     }
-    // The name in the box wins, so a sound can be brought in under a name of
-    // your choosing; the file's own name is only the default.
-    const target = (($('presname').value || '').trim() || (b.name || '').trim());
-    if (!target) return ioSay('Type a name for it first.');
-    if (!/^[A-Za-z0-9 _-]{1,24}$/.test(target)) {
-      return ioSay('A name is up to 24 letters, digits, spaces, hyphens or underscores.');
-    }
-    const had = Object.prototype.hasOwnProperty.call(presets, target);
+    // The list decides where it lands. The name inside the file is discarded -
+    // it is only shown, so that replacing "dj3" with a file called "dj" says
+    // both names out loud instead of leaving it to coincidence.
+    const target = ioName();
+    if (!target) return ioSay('Pick the saved sound to replace, in the list above.');
+    const from = (b.name || '').trim();
     const when = b.saved ? (' from ' + b.saved.slice(0, 16).replace('T', ' ')) : '';
-    if (!confirm((had ? 'Replace your saved sound "' + target + '"'
-                      : 'Save this as "' + target + '"') + when +
+    if (!confirm('Replace your saved sound "' + target + '"' +
+                 (from && from !== target ? ' with "' + from + '"' : '') + when +
                  '?\n\nNothing else you have saved is touched, and nothing goes ' +
                  'on air until you press Load.')) {
       return ioSay('nothing changed');
