@@ -54,6 +54,8 @@
              background:linear-gradient(90deg, var(--on), #fbbf24 75%, var(--rec));
              transition:width .06s linear; }
   .status { font-size:13px; color:var(--dim); margin-top:10px; text-align:center; }
+  #npage { font-size:11px; margin-top:6px; }
+  #npage.stale { color:var(--rec); }
   /* An answer nobody saw is not an answer. These lines were being overwritten
      within the second by a poller that had nothing to say, so pressing Save
      looked identical to pressing nothing. A message now holds the line for long
@@ -147,6 +149,9 @@
     <summary>Now playing <span class="when">&mdash; what is on the air, and the controls that change it for everyone listening</span></summary>
     <div class="np" id="npTitle">&mdash;</div>
     <div class="path" id="npPath"></div>
+    <!-- A panel showing a track cannot be told apart from a panel showing the
+         LAST track it heard about. This says which. -->
+    <div class="status" id="npage"></div>
     <div class="btns">
       <button class="tbtn" id="bPrev" title="play what finished last; press again to keep going back">Previous</button>
       <button class="tbtn" id="bSkip">Skip</button>
@@ -1083,6 +1088,8 @@
         { method, credentials: 'same-origin', cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       draw(await res.json());
+      lastOk = Date.now();
+      showAge();
       $('cerr').textContent = '';
     } catch (e) {
       $('cerr').textContent = 'Music controls: ' + e.message;
@@ -1091,6 +1098,27 @@
     }
   }
   const nowPlaying = () => control('now', 'GET');
+
+  // When liquidsoap last actually answered. A frozen panel and a working one
+  // look identical - both show a track, and the wrong one is wrong silently -
+  // so this is the difference between "the station is playing this" and "this
+  // is the last thing the station told me, some time ago". Written only on a
+  // successful reply, which is what makes it worth reading.
+  let lastOk = 0;
+  const STALE_S = 12;      // four missed polls at three seconds
+  function showAge() {
+    const el = $('npage');
+    if (!el) return;
+    if (!lastOk) { el.textContent = 'waiting for the station'; return; }
+    const age = Math.round((Date.now() - lastOk) / 1000);
+    const stale = age >= STALE_S;
+    el.classList.toggle('stale', stale);
+    el.textContent = stale
+      ? 'no answer from the station for ' + age + 's - what is above may be out of date'
+      : 'updated ' + age + 's ago';
+  }
+  setInterval(showAge, 1000);
+  showAge();
 
   // One way out of a search. The results list sat there until the next search
   // replaced it, so a query typed to check something stayed on the panel over
