@@ -11,8 +11,9 @@ Before implementing:
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
 
-A question is a question. "What do you think?" and "where does X come from?"
-ask for an answer, not an implementation.
+
+A question is a question. "What do you think?" and "where does X come from?" ask
+for an answer, not an implementation.
 
 
 ## 2. Simplicity First
@@ -24,6 +25,8 @@ ask for an answer, not an implementation.
 - No "flexibility" or "configurability" that wasn't requested.
 - No error handling for impossible scenarios.
 - If you write 200 lines and it could be 50, rewrite it.
+- Do not use fallbacks. Show errors instead of hiding them.
+
 
 Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes,
 simplify.
@@ -40,10 +43,12 @@ When editing existing code:
 - Match existing style, even if you'd do it differently.
 - If you notice unrelated dead code, mention it - don't delete it.
 
+
 When your changes create orphans:
 
 - Remove imports/variables/functions that YOUR changes made unused.
 - Don't remove pre-existing dead code unless asked.
+
 
 The test: Every changed line should trace directly to the user's request.
 
@@ -57,6 +62,7 @@ Transform tasks into verifiable goals:
 - "Add validation" -> "Write tests for invalid inputs, then make them pass"
 - "Fix the bug" -> "Reproduce it first, then make the reproduction pass"
 - "Refactor X" -> "Ensure it works before and after"
+
 
 For multi-step tasks, state a brief plan:
 
@@ -98,8 +104,9 @@ Every brief must:
    propose the smallest change to the shared path and STOP for a ruling. Never
    ship a private variant.
 
-"Find where this already happens and reconfigure it" - not "decide how to make
-X work". The first framing prevents the failure; the second invites it.
+
+"Find where this already happens and reconfigure it" - not "decide how to make X
+work". The first framing prevents the failure; the second invites it.
 
 An agent that reports "I can't do this without changing shared code, here's the
 line and why" has done the job, even though it shipped nothing.
@@ -116,6 +123,7 @@ Per chunk of work:
 4. **Verify yourself.** Never relay an agent's claim unverified.
 5. **Commit per chunk.** Name the paths; never `add -A`.
 6. **Update the handoff.**
+
 
 ---
 
