@@ -1,4 +1,4 @@
-# Handoff — 2026-08-05
+# Handoff — 2026-08-07
 
 Read `CLAUDE.md` in this repo first. It is the working agreement.
 
@@ -26,7 +26,7 @@ Four services, all as `svc-radio`, all automatic: `IcecastServer`,
 ## What it is
 
 A radio you can host from a phone, anywhere. Sign in at `/host/`, press one
-button, and your voice goes out over the music in 1.5-second slices. A narrator
+button, and your voice goes out over the music as one whole note. A narrator
 speaks between the tracks. Anyone listening can like a song. Everything is
 files on disk and something noticing them.
 
@@ -40,12 +40,21 @@ files on disk and something noticing them.
 /host/                       the console                        hosts
 /host/upload/*               voice slices land here             hosts
 /host/setting/settings.json  gain, duck, seven-band EQ          hosts
-/host/presets/presets.json   named presets                      hosts
+/host/presets/presets.json   named presets, and the desk        hosts
+/host/desk/desk.json         the mixing desk, so it survives    hosts
+                             a restart
+/host/restart/req|res/*      ask a watcher to restart the       hosts
+                             station; reaches a wedged one
+                             because it does not go through
+                             liquidsoap
+/narrator/history/*          every line the narrator has said   hosts
 /host/logout                 401 with a real page               hosts
 /whoami                      the server says who you are        hosts
 /control/*                   now, skip, previous, again,        hosts
                              repeat, music, pause, knobs,
                              search, enqueue
+/control/queue/*             the running order: add, remove,    hosts
+                             move, clear
 /interactive                 liquidsoap's own knobs             hosts
 /narrator/                   the narrator dashboard             hosts
 /narrator/config/*           its settings                       hosts
@@ -74,27 +83,28 @@ it did, for twenty minutes, from one stray backslash.
 
 ## Debts, largest first
 
-### 1. The capture path loses audio at every seam — the big one
+### Solved since 2026-08-05, so do not go looking for them
 
-`/host/` records by constructing a `MediaRecorder`, running it for the slice
-length, calling `stop()`, and then constructing a **new one**. Stopping is what
-produces a self-contained file that can be played on its own. But between
-`stop()` and the next `start()`, **nothing is recording**. That audio is gone —
-not smeared, not badly decoded. Gone, every 1.5 seconds. Each slice is also a
-fresh Opus session, so encoder priming restarts too.
+- **The capture path no longer loses audio.** `/host/` used to stop the
+  `MediaRecorder` every 1.5 seconds and construct a new one; whatever was said
+  between `stop()` and the next `start()` was never captured by anything. A note
+  is now ONE recording, uploaded as one file, exactly as the narrator has always
+  worked. A timeslice is still passed, but only so the page can watch the size
+  climb — the recording itself never stops. There is no seam left to hear,
+  and the AudioWorklet rebuild this section used to call for is unnecessary.
+- **The mixing desk survives a restart** (`config/desk.json`), and it saves what
+  liquidsoap reports rather than what the page's sliders show. That distinction
+  is the whole fix: a page open across a restart holds the startup defaults, and
+  writing those over the file destroyed the operator's tuning three times in one
+  day before it was understood.
+- **A wedged station can be restarted from a page**, on both `/host/` and
+  `/admin/`, through a watcher rather than through liquidsoap — which is the
+  only arrangement that works when liquidsoap is what is wedged.
+- **The narrator remembers what it said** (`config/history.json`) and no longer
+  fails silently: a failed render leaves a `.err` beside the audio, and a failed
+  ledger write leaves a `.ledger-err` carrying the words themselves.
 
-The operator hears this as choppiness and has been fighting it with EQ. No
-setting fixes it.
-
-**The fix**: an `AudioWorklet` taking continuous PCM off the stream, cut at exact
-sample boundaries, each cut wrapped in a WAV header. No stop/start, no lost
-samples, no priming. Liquidsoap decodes WAV happily — the narrator proves it.
-Cost is bandwidth: 48 kHz mono 16-bit is ~768 kbps against the current 96. At
-24 kHz it is ~384. That belongs on the Streaming panel like everything else.
-
-This is the difference between polishing a chopped signal and having a clean one.
-
-### 2. Port 8005 is shared, and it races
+### 1. Port 8005 is shared, and it races — now the largest
 
 `input.harbor` (where Cool Mic connects) and every `harbor.http.register` share
 port 8005. Which one ends up serving HTTP depends on initialisation order. On
@@ -111,12 +121,20 @@ the source protocol and move the HTTP surface to its own port**, repointing the
 `/control/*`, `/likes/*` and `/interactive` proxies in the Caddyfile. Then there
 is nothing to race. Not yet done.
 
-### 3. Caddy and liquidsoap share `svc-radio`
+### 2. Caddy and liquidsoap share `svc-radio`
 
 So granting Caddy write access to `config/` necessarily gave the *station* write
 access to its own settings. `live/` and `config/` are both writable by the
 account that also runs liquidsoap. Only a separate Caddy account fixes it, which
 is an argument for the `C:\services\` split below.
+
+### 3. A brand new host is inaudible
+
+`voice_gain` is the fallback for a speaker with no `settings.json`, and it is
+currently 1.0 — unity, on a phone note that arrives quiet. `roger` has no file
+and would go out barely audible, then reasonably conclude the radio is broken
+rather than that he needs to tune it. `mint-speaker.ps1` already creates the
+folder, so seeding a sane `settings.json` there is small and has not been done.
 
 ### 4. Smaller
 
@@ -164,6 +182,12 @@ radio-hosts radio, infused with an AI narrator*. Voice notes are not a
 workaround for failed streaming — they are the first-class way to host a show,
 and the same shape as everything else here.
 
+- **Playlists carried out of the station.** A playlist should download and
+  upload as one file the way a preset already does, so a running order can be
+  kept, mailed to a co-host, or restored. The store keeps `title` and `artist`
+  beside each `id` for exactly this reason: an id is `string.digest(path)` and
+  stops resolving if a file is ever moved, and a list that cannot say what it
+  contained is unrepairable. Nothing reads those two fields today.
 - **Skip tug of war.** 12 clicks per listener per song, both directions, net
   force against half the pool. Designed in full, not built. Held until likes
   prove themselves.
@@ -252,6 +276,36 @@ and the same shape as everything else here.
   for history rewrites; `--tree-filter` checks files out and normalises them.
 - **Caddy writes progress to stderr on success.** Read the exit code. Git does
   the same on push.
+- **`messages/voice/announcer/` is an INPUT, not a directory.** Anything ending
+  `.txt` or `.md` dropped there is spoken on the air. An archive file written
+  there was rendered by piper and broadcast as twenty-six megabytes of a
+  synthetic voice reading a failure log, and could not be deleted because
+  liquidsoap held it open — it took a restart to stop.
+- **`@(ConvertFrom-Json $raw)` is wrong for a JSON array.** PowerShell 5.1 writes
+  a top-level array to the pipeline as ONE object, so the subexpression collects
+  a single item — the array itself — and yields an array holding an array.
+  Assign to a variable first, then wrap. This nested the narrator's ledger one
+  level deeper per announcement.
+- **`request.resolve` returns TRUE for a file the account cannot read.** All it
+  checks is that the URI names a local file; the entry then vanishes during
+  decode, giving a success with an empty slot. `content_type = library` is what
+  makes it fail honestly.
+- **`playlist.set_queue` silently DROPS any request already in that queue**, and
+  it empties before it fills, resolving as it goes. A track ending inside that
+  window gets silence: measured, 3 blanks across 30 boundaries when `set_queue`
+  resolves, 0 when the requests are resolved first.
+- **`liquidsoap --check` and a clean startup prove almost nothing about a source
+  operator.** A `gate()` in the voice chain typechecked, started, played for an
+  hour, then killed the audio clock with a stack overflow inside
+  `Gate.gate#generate_frame`. Prefer a change that adds NO operator to the audio
+  path; the playlist queue was built that way deliberately.
+- **A binding added after the FIRST `})();` in a page's script is dead.** These
+  pages have a second, tiny `/whoami` closure after the main one, so code
+  appended at the end of the file lands in a scope with no `$`, no `CAP` and no
+  `settings`, throws a ReferenceError at load, and silently kills the feature.
+  `node --check` cannot catch it: the file parses either way. Assert the offset.
+- **In `radio.liq`, `e1` does not lex as an identifier** (it is a float exponent)
+  and `to` is reserved by the `for` range.
 
 ## How to work here
 
