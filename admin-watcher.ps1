@@ -85,6 +85,53 @@ function Remove-Speaker($name) {
     return @{ ok = $true; name = $clean }
 }
 
+# Restarting the station, asked for from a page.
+#
+# This is the one thing the console cannot do for itself: the console talks to
+# liquidsoap, so when liquidsoap is the thing that is wedged, the button and the
+# thing it must act on are the same casualty. This loop is reached through caddy
+# instead, which does not depend on liquidsoap at all - so it still works when
+# nothing else does, which is the only moment it matters.
+#
+# Rate limited hard. A stuck page, a double tap or a retry loop must not be able
+# to restart the station repeatedly: every restart is ten to fifteen seconds of
+# silence for every listener, and a loop of them is an outage rather than a fix.
+$restartStamp = "$repo\messages\admin\.last-restart"
+# Hosts ask here, and NOWHERE else. Writing into the admin request folder
+# would hand every host the actions that folder accepts - minting and
+# removing speakers - which is not what a restart button is for. This
+# folder takes one action and the body cannot change it.
+$rreq = "$repo\messages\restart\req"
+$rres = "$repo\messages\restart\res"
+$RESTART_MIN_S = 120
+
+function Restart-Station($what, $who) {
+    $ok = @('liquidsoap', 'icecast', 'all', 'watchers')
+    $w  = if ($what -and ($what -in $ok)) { $what } else { 'liquidsoap' }
+
+    if (Test-Path $restartStamp) {
+        $since = ((Get-Date) - (Get-Item $restartStamp).LastWriteTime).TotalSeconds
+        if ($since -lt $RESTART_MIN_S) {
+            return @{ ok = $false
+                      error = ("the station was restarted " + [int]$since +
+                               "s ago - wait " + [int]($RESTART_MIN_S - $since) + "s") }
+        }
+    }
+    [IO.File]::WriteAllText($restartStamp, (Get-Date).ToString('o'))
+
+    # Said out loud in the log, because a station that goes quiet mid-show
+    # should not leave anyone guessing why.
+    $asked = if ($who) { $who } else { 'unknown' }
+    Write-Output ("[{0}] restart '{1}' asked for by {2}" -f (Get-Date).ToString('HH:mm:ss'), $w, $asked)
+
+    try {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$repo\restart-radio.ps1" -What $w *> $null
+        return @{ ok = $true; what = $w; by = $asked }
+    } catch {
+        return @{ ok = $false; error = $_.Exception.Message }
+    }
+}
+
 while ($true) {
     foreach ($f in Get-ChildItem $req -Filter '*.json' -File -ErrorAction SilentlyContinue) {
         $id = [IO.Path]::GetFileNameWithoutExtension($f.Name)
@@ -93,7 +140,8 @@ while ($true) {
             switch ($body.action) {
                 'add'    { $r = Add-Speaker $body.name $body.password }
                 'remove' { $r = Remove-Speaker $body.name }
-                'list'   { $r = @{ ok = $true } }
+                'list'    { $r = @{ ok = $true } }
+                'restart' { $r = Restart-Station $body.what $body.who }
                 default  { $r = @{ ok = $false; error = 'unknown action' } }
             }
         }
@@ -103,6 +151,25 @@ while ($true) {
         Write-Result $id $r
         Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
     }
+
+    # The host-facing folder. Whatever the body says, the action is restart:
+    # the folder decides, not the caller.
+    foreach ($f in Get-ChildItem $rreq -Filter '*.json' -File -ErrorAction SilentlyContinue) {
+        $id = [IO.Path]::GetFileNameWithoutExtension($f.Name)
+        try {
+            $b = Get-Content $f.FullName -Raw | ConvertFrom-Json
+            $r = Restart-Station $b.what $b.who
+        }
+        catch { $r = @{ ok = $false; error = 'could not read the request' } }
+        $json = $r | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText((Join-Path $rres "$id.json"), $json,
+            (New-Object Text.UTF8Encoding($false)))
+        Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+    }
+
+    Get-ChildItem $rres -Filter '*.json' -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddMinutes(-10) } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 
     # results are short lived - they carry a password
     Get-ChildItem $res -Filter '*.json' -File -ErrorAction SilentlyContinue |

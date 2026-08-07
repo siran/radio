@@ -257,6 +257,54 @@ import admins.caddy
 		}
 	}
 
+	# Restart the station, asked for by a host. It reaches a watcher through
+	# caddy and never through liquidsoap, which is the whole point: when
+	# liquidsoap is the thing that is wedged, anything routed via /control/
+	# is as dead as the thing it is meant to revive.
+	#
+	# Its own folder, deliberately. The admin request folder accepts actions
+	# that mint and remove speakers, and pointing hosts at it would hand them
+	# those actions for free. Here the folder decides the action and the body
+	# cannot argue.
+	handle_path /host/restart/* {
+		import speakers
+		@put {
+			method PUT
+			path /req/*.json
+		}
+		handle @put {
+			# A restart is fifteen seconds of silence for everyone. Six in five
+			# minutes is already far more than anyone needs, and the watcher
+			# refuses any two closer than two minutes regardless.
+			rate_limit {
+				zone restart_writes {
+					key {remote_host}
+					events 6
+					window 5m
+				}
+			}
+			request_body {
+				max_size 1KB
+			}
+			webdav {
+				root C:/Users/an/src/radio/messages/restart
+			}
+		}
+		@res {
+			method GET
+			path /res/*.json
+		}
+		handle @res {
+			header Content-Type "application/json; charset=utf-8"
+			header Cache-Control "no-store"
+			root * C:/Users/an/src/radio/messages/restart
+			file_server
+		}
+		handle {
+			respond 404
+		}
+	}
+
 	handle /host/desk/* {
 		import speakers
 		@desk {
