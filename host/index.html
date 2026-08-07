@@ -88,16 +88,23 @@
   li:last-child { border-bottom:0; }
   li .ok { color:var(--on); }
   li .bad { color:var(--rec); }
-  /* Finding a track, in the panel that plays it. A row is the name on the
-     left and the two things you can do with it on the right; min-width:0 is
-     what lets a long title wrap instead of shoving the buttons off the edge. */
+  /* Finding a track, in the panel that plays it, and the two lists in the
+     panel under it. A row is the name on the left and the things you can do
+     with it on the right; min-width:0 is what lets a long title wrap instead
+     of shoving the buttons off the edge. One set of rules for all three lists
+     rather than three copies of it, because they are one shape: a track, and
+     what can be done to it. */
   #qfind { margin-top:14px; }
-  #qresults li { align-items:center; }
-  #qresults .who { min-width:0; }
-  #qresults .name { color:var(--fg); word-break:break-word; }
-  #qresults .why { font-size:11px; margin-top:2px; }
-  #qresults .acts { flex:0 0 auto; display:flex; gap:6px; }
-  #qresults .acts .tbtn { padding:7px 10px; font-size:12px; }
+  #qresults li, #pltracks li, #plqueue li { align-items:center; }
+  #qresults .who, #pltracks .who, #plqueue .who { min-width:0; }
+  #qresults .name, #pltracks .name, #plqueue .name { color:var(--fg); word-break:break-word; }
+  #qresults .why, #pltracks .why, #plqueue .why { font-size:11px; margin-top:2px; }
+  #qresults .acts, #pltracks .acts, #plqueue .acts { flex:0 0 auto; display:flex; gap:6px; }
+  #qresults .acts .tbtn, #pltracks .acts .tbtn, #plqueue .acts .tbtn { padding:7px 10px; font-size:12px; }
+  /* Up on the first row and Down on the last have nowhere to go. Shown and
+     disabled rather than left out, so a row does not change width as it moves
+     and the buttons stay under the same thumb. */
+  .tbtn[disabled] { opacity:.4; cursor:default; }
   .foot { text-align:center; font-size:12px; color:var(--dim); margin-top:18px; }
   a { color:var(--dim); }
 
@@ -189,9 +196,55 @@
       <button class="tbtn" type="button" id="qclear" title="clear the search and the results" aria-label="Clear search">&#10005;</button>
       </div>
       <div class="status" id="qnote"></div>
+      <label for="qdest"><span class="band">Add to</span> &mdash; where the Add button on a result puts the track. The queue plays it; a playlist only keeps it. Remembered on this device, like the microphone.</label>
+      <select id="qdest" aria-label="Where the Add button puts a track"></select>
       <ul id="qresults"></ul>
     </div>
     <div class="err" id="cerr"></div>
+  </details>
+
+  <!-- A running order, beside what is on the air, because that is where it is
+       read. The whole panel exists to keep two things apart that a console
+       makes very easy to confuse: a playlist is a list you keep, and the queue
+       is what is going to play. Nothing in a playlist reaches the air until it
+       is sent, and nothing sent to the queue is remembered once it has played.
+       They live in different places for the same reason: a playlist is a file
+       in this speaker's own folder and survives a cleared cache and a restart,
+       while the queue is inside liquidsoap and survives neither. -->
+  <details class="panel" id="plwrap">
+    <summary>Playlists <span class="when">&mdash; lists you keep, and the queue that is actually going to play</span></summary>
+    <div class="status" id="plnote">A <span class="when">playlist</span> is a list you keep, saved on the server
+      in your own folder. It does not play. The <span class="when">queue</span> lower down is what is going
+      to play, in that order, once what is on the air now finishes. Sending a playlist to the queue
+      copies the tracks across, so changing the playlist afterwards does not change what will play.</div>
+
+    <label for="pllist"><span class="band">Your playlists</span> &mdash; pick one to see and change what is in it; picking one plays nothing</label>
+    <select id="pllist" aria-label="Saved playlists"></select>
+    <div class="btns">
+      <button class="tbtn" id="plnew" title="asks for a name, then saves an empty playlist under it">New</button>
+      <button class="tbtn" id="pldel" title="asks first, then removes the whole playlist from the server; the queue is not touched">Delete</button>
+    </div>
+    <div class="status" id="plmsg"></div>
+
+    <label><span class="band">Tracks in this playlist</span> &mdash; in the order they would be sent.
+      <span class="when">Remove</span> takes one out of the list, <span class="when">Up</span> and
+      <span class="when">Down</span> move it earlier or later. None of this touches the air.</label>
+    <ul id="pltracks"></ul>
+    <div class="btns">
+      <button class="tbtn" id="plsend" title="copies every track in this playlist onto the end of the queue, in order">Send to the queue</button>
+    </div>
+
+    <label><span class="band">The queue</span> &mdash; what is actually going to play, the top one next.
+      <span class="when">Remove</span> drops one so it never plays, <span class="when">Up</span> and
+      <span class="when">Down</span> change the running order, <span class="when">Clear the queue</span>
+      empties it. What is on the air right now is not in this list and keeps playing whatever you do
+      here. If the same track is in the queue twice, Remove and the arrows take the first copy.</label>
+    <div class="status" id="plqnote"></div>
+    <ul id="plqueue"></ul>
+    <div class="btns">
+      <button class="tbtn" id="plclear" title="asks first, then empties the queue; what is on the air now finishes and then the station picks its own">Clear the queue</button>
+    </div>
+    <div class="err" id="plerr"></div>
   </details>
 
   <div class="panel">
@@ -473,7 +526,7 @@
   // stacked, the oldest first and no way to tell which one was just earned.
   // Writing one clears the others - the last thing asked for is the only thing
   // still worth reading.
-  const SAY_ELS = ['presmsg', 'iomsg', 'preserr'];
+  const SAY_ELS = ['presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr'];
   function say(id, msg) {
     const el = $(id);
     if (!el) return;
@@ -1412,6 +1465,12 @@
       'put it at the front of the queue - what is on air finishes first'));
     acts.appendChild(findBtn('Play now', r.id, true,
       'cut what is on air short and start this one instead'));
+    // And a third that does not reach the air at all. Where it goes is the one
+    // selector above the list rather than a dropdown on every row: twenty
+    // dropdowns is most of the width of a phone and repeats the same
+    // destination twenty times, when the destination is a mode the operator is
+    // in and not a property of any one track.
+    acts.appendChild(findAdd(r));
 
     li.appendChild(who);
     li.appendChild(acts);
@@ -1430,8 +1489,11 @@
     b.textContent = label;
     b.title = why;
     b.addEventListener('click', async () => {
+      // Through control() with the button, so busy() marks it for as long as
+      // the request is in flight and a second press while it is in flight is
+      // ignored rather than queueing the same track twice.
       await control('enqueue?id=' + encodeURIComponent(id) +
-                    (now ? '&now=true' : ''), 'POST');
+                    (now ? '&now=true' : ''), 'POST', b);
       // now=true skips, and a skip answers with the state as it was a moment
       // ago - the new track is prepared just after - so re-poll like Skip does.
       if (now) nowPlaying();
@@ -1667,6 +1729,22 @@
   // byte of the file, with nothing for JSON to escape and nothing outside
   // ascii, so the count above is a count and not an estimate.
   const PRES_NAME = /^[A-Za-z0-9 _-]{1,24}$/;
+  // The same test serves preset names and playlist names, because they are the
+  // same kind of key in the same kind of file in the same folder with the same
+  // reader on the other end of it. Answers with what is wrong, or null.
+  function nameProblem(map, name) {
+    if (!PRES_NAME.test(name))
+      return 'A name is 1 to 24 characters: letters, digits, space, hyphen, underscore.';
+    // Two keys differing only in case make the whole file unreadable to
+    // ConvertFrom-Json, and PowerShell is what maintains this station - so a
+    // second spelling of a name is refused at the keyboard rather than written
+    // and discovered later. Saving over the SAME spelling is ordinary.
+    const clash = Object.keys(map).find(k => k !== name && k.toLowerCase() === name.toLowerCase());
+    if (clash)
+      return '"' + clash + '" already exists, and two names differing only in case ' +
+             'cannot both be saved. Use that spelling, or delete it first.';
+    return null;
+  }
   let presets = {};
 
   const presErr = m => say('preserr', m);
@@ -1846,16 +1924,8 @@
 
   $('pressave').addEventListener('click', async () => {
     const n = $('presname').value.trim();
-    if (!PRES_NAME.test(n))
-      return presErr('A name is 1 to 24 characters: letters, digits, space, hyphen, underscore.');
-    // Two keys differing only in case make the whole file unreadable to
-    // ConvertFrom-Json, and PowerShell is what maintains this station - so a
-    // second spelling of a name is refused at the keyboard rather than written
-    // and discovered later. Saving over the SAME spelling is ordinary.
-    const clash = Object.keys(presets).find(k => k !== n && k.toLowerCase() === n.toLowerCase());
-    if (clash)
-      return presErr('"' + clash + '" already exists, and two names differing only in case ' +
-                     'cannot both be saved. Use that spelling, or delete it first.');
+    const wrong = nameProblem(presets, n);
+    if (wrong) return presErr(wrong);
     if (!(n in presets) && Object.keys(presets).length >= PRES_MAX)
       return presErr('That is already ' + PRES_MAX + ' presets - delete one first.');
     const prev = presets[n];
@@ -2039,6 +2109,519 @@
   $('qsearch').addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); clearSearch(); }
   });
+
+  // ----- playlists, and the queue they are sent to -------------------------
+  // Two different things, kept apart here as carefully as they are kept apart
+  // on the page. A playlist is a list this speaker keeps in a file of their
+  // own, it does nothing until it is sent, and it outlives a restart. The
+  // queue is inside liquidsoap, it is what actually plays next, and it does
+  // not. Nothing below writes to both in one action, so there is never a
+  // moment where the operator cannot say which of the two they just changed.
+  const PLAY_URL = '/host/playlists/playlists.json';
+  // Counted in the Caddyfile route beside the cap this has to stay under: 20
+  // playlists of 200 entries, each entry 64 bytes of punctuation and digest
+  // plus a title and an artist of up to 120 characters at six bytes each,
+  // comes to 6020581 bytes. The route allows 8MB and TRUNCATES rather than
+  // refusing anything past it, and webdav writes the truncated bytes, so the
+  // page has to refuse first: a cut playlists.json is not one lost track, it
+  // is a file no JSON parser will read and every list gone at once.
+  const PLAY_MAX = 20, PLAY_TRACKS = 200, PLAY_BYTES = 6 * 1024 * 1024;
+  // What Add uses when the destination is the queue rather than a playlist.
+  // It cannot collide with a playlist name because nameProblem() forbids the
+  // full stop in one.
+  const DEST_QUEUE = 'the.queue';
+  // Which of the two you are filling belongs to this device the way the
+  // microphone and the streaming settings do: it is a fact about the session
+  // in front of you, not about the speaker.
+  const DEST_KEY = 'talk.dest';
+  let playlists = {};
+
+  const plErr = m => say('plerr', m);
+  const plSay = m => say('plmsg', m);
+
+  // The playlist being edited, read off the selector rather than held in a
+  // variable, so a list deleted or re-drawn under a stale name cannot be
+  // written back over the top of whatever took its place.
+  const plName = () => $('pllist').value;
+
+  // Every write is the whole file, for the same reason presets.json is: there
+  // is no DELETE on that route and no need for one, since removing a playlist
+  // is writing the map back without it.
+  async function plPut(msg) {
+    const body = JSON.stringify(playlists);
+    // Measured as bytes and not as string length, which is where this differs
+    // from presPut() above and has to. A preset name is [A-Za-z0-9 _-] so its
+    // characters and its bytes are the same count; a title is a tag off a disk
+    // and one character of it can be six bytes once encoded, so counting
+    // characters would let a body through that the route then cuts.
+    if (new TextEncoder().encode(body).length > PLAY_BYTES) {
+      plErr('Too much to save - shorten a playlist or delete one first.');
+      return false;
+    }
+    try {
+      const res = await fetch(PLAY_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: body
+      });
+      if (!(res.ok || res.status === 201 || res.status === 204))
+        throw new Error(res.status === 401
+          ? 'your sign-in expired, reload the page' : 'HTTP ' + res.status);
+      plErr('');
+      plSay(msg);
+      return true;
+    } catch (e) {
+      plErr('Could not save your playlists: ' + e.message);
+      return false;
+    }
+  }
+
+  // Add, remove and reorder all follow the shape presdel established: change
+  // the copy in memory, write the whole file, and put the copy back exactly as
+  // it was if the write did not land. Without that last step the panel would
+  // go on showing a running order the server never accepted, and the next
+  // reload would silently undo what the operator watched happen.
+  async function plAdd(name, track) {
+    const list = playlists[name];
+    if (!Array.isArray(list)) { plErr('There is no playlist called "' + name + '".'); return false; }
+    if (list.length >= PLAY_TRACKS) {
+      plErr('"' + name + '" already holds ' + PLAY_TRACKS + ' tracks - remove one first.');
+      return false;
+    }
+    // The title and the artist are written into the file beside the id on
+    // purpose. An id is a digest of the path, so a file that gets moved stops
+    // resolving, and a list that had only kept ids would be unreadable exactly
+    // when it most needed reading. Nothing here tries to repair such a row -
+    // it only keeps enough for a person to.
+    list.push({ id: track.id, title: track.title || '', artist: track.artist || '' });
+    if (await plPut('Added to "' + name + '". That is a list you keep - nothing plays until you send it to the queue.')) {
+      plRows();
+      return true;
+    }
+    list.pop();
+    return false;
+  }
+
+  async function plRemove(name, i) {
+    const list = playlists[name];
+    if (!Array.isArray(list) || i < 0 || i >= list.length)
+      return plErr('That track is no longer in "' + name + '".');
+    const gone = list.splice(i, 1)[0];
+    if (await plPut('Took ' + trackName(gone) + ' out of "' + name + '". Nothing that is playing changed.')) plRows();
+    else list.splice(i, 0, gone);
+  }
+
+  async function plMove(name, i, to) {
+    const list = playlists[name];
+    if (!Array.isArray(list) || i < 0 || i >= list.length)
+      return plErr('That track is no longer in "' + name + '".');
+    if (to < 0 || to >= list.length)
+      return plErr('That track is already at the ' + (to < 0 ? 'top' : 'bottom') + ' of "' + name + '".');
+    const moved = list.splice(i, 1)[0];
+    list.splice(to, 0, moved);
+    if (await plPut('Moved ' + trackName(moved) + ' to number ' + (to + 1) + ' in "' + name + '".')) plRows();
+    else { list.splice(to, 1); list.splice(i, 0, moved); }
+  }
+
+  // What to call a track in a sentence. Liquidsoap falls back to the file name
+  // for a file with no tags so an empty title is not expected, but a playlist
+  // is written by this page and read back much later, so say something rather
+  // than leave a gap in the middle of a message.
+  const trackName = t => t.title || t.artist || 'that track';
+
+  // Built element by element with textContent for the same reason findRow() is:
+  // every one of these strings began as a tag on a file on a disk, and this
+  // library has quotes, brackets and ampersands in its titles.
+  function plRow(t, i, last) {
+    const li = document.createElement('li');
+    const who = document.createElement('div');
+    who.className = 'who';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = (i + 1) + '. ' + (t.title || t.artist || 'Untitled - this file had no tags');
+    who.appendChild(name);
+    const why = document.createElement('div');
+    why.className = 'why';
+    // Shown out of the playlist file rather than looked up again, which is the
+    // whole reason the file carries it.
+    why.textContent = (t.title && t.artist) ? t.artist : '';
+    who.appendChild(why);
+    const acts = document.createElement('div');
+    acts.className = 'acts';
+    const n = plName();
+    acts.appendChild(plBtn('Up', 'move it one place earlier in this list', i > 0,
+      () => plMove(n, i, i - 1)));
+    acts.appendChild(plBtn('Down', 'move it one place later in this list', !last,
+      () => plMove(n, i, i + 1)));
+    acts.appendChild(plBtn('Remove', 'take it out of this list; the queue is not touched', true,
+      () => plRemove(n, i)));
+    li.appendChild(who);
+    li.appendChild(acts);
+    return li;
+  }
+
+  // One button maker for both lists, because a playlist row and a queue row do
+  // the same three things to different places. busy() marks it for as long as
+  // the work is actually in flight and a busy button ignores a second press,
+  // which is what stops a double tap on Up from moving a track two places.
+  function plBtn(label, why, on, run) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tbtn';
+    b.textContent = label;
+    b.title = why;
+    b.disabled = !on;
+    b.addEventListener('click', async () => {
+      if (b.classList.contains('busy')) return;
+      busy(b, true);
+      try { await run(); } finally { busy(b, false); }
+    });
+    return b;
+  }
+
+  function plRows() {
+    const ul = $('pltracks');
+    ul.innerHTML = '';          // only rows this page built are ever in here
+    const name = plName();
+    const list = playlists[name];
+    if (!name) { $('pltracks').innerHTML = ''; return; }
+    if (!Array.isArray(list) || !list.length) {
+      const li = document.createElement('li');
+      li.textContent = '"' + name + '" is empty. Find a track above, set Add to to this playlist, and press Add.';
+      ul.appendChild(li);
+      return;
+    }
+    list.forEach((t, i) => ul.appendChild(plRow(t, i, i === list.length - 1)));
+  }
+
+  // Drawing the selector re-draws everything that hangs off it, because every
+  // one of them is a view of whichever playlist is picked. The argument is for
+  // the callers that have just made one and know which it should land on;
+  // without it the selection stays where it was, or falls to the first.
+  function plDraw(pick) {
+    const sel = $('pllist'), had = sel.value;
+    const names = Object.keys(playlists).sort();
+    sel.innerHTML = '';
+    for (const nm of (names.length ? names : [''])) {
+      const o = document.createElement('option');
+      o.value = nm;
+      o.textContent = nm || 'nothing saved yet';
+      sel.appendChild(o);
+    }
+    sel.value = (pick && names.indexOf(pick) !== -1) ? pick
+              : (names.indexOf(had) !== -1 ? had : (names[0] || ''));
+    qdestDraw();
+    plRows();
+  }
+
+  $('pllist').addEventListener('change', plRows);
+
+  // The one destination selector the result rows share. The queue is always
+  // first because it is the destination with consequences, and each option
+  // says which of the two kinds of thing it is rather than trusting the
+  // operator to remember which names are playlists.
+  function qdestDraw() {
+    const sel = $('qdest');
+    const want = sel.value || destRemembered();
+    sel.innerHTML = '';
+    const q = document.createElement('option');
+    q.value = DEST_QUEUE;
+    q.textContent = 'the queue \u2014 it will play';
+    sel.appendChild(q);
+    const names = Object.keys(playlists).sort();
+    for (const nm of names) {
+      const o = document.createElement('option');
+      o.value = nm;
+      o.textContent = nm + ' \u2014 a list you keep';
+      sel.appendChild(o);
+    }
+    // A playlist deleted here or on another device leaves this device
+    // remembering a destination that no longer exists. Falling back to the
+    // queue in silence is the dangerous direction - the next Add would put a
+    // track on the air that was meant for a list - so it falls back and says
+    // so, once, at the moment it happens.
+    if (want !== DEST_QUEUE && names.indexOf(want) === -1) {
+      sel.value = DEST_QUEUE;
+      destRemember();
+      plErr('The playlist "' + want + '" this device was adding to is not saved any more, ' +
+            'so Add now puts tracks in the queue, which plays them. Pick a playlist above to change that.');
+      return;
+    }
+    sel.value = want;
+  }
+
+  const destRemembered = () => {
+    try { return localStorage.getItem(DEST_KEY) || DEST_QUEUE; } catch (e) { return DEST_QUEUE; }
+  };
+  function destRemember() {
+    try { localStorage.setItem(DEST_KEY, $('qdest').value); } catch (e) {}
+  }
+  $('qdest').addEventListener('change', destRemember);
+
+  // The third thing a result row can do, and the only one of the three that
+  // does not reach the air. Which of the two it means is read at the moment of
+  // the press rather than when the row was drawn, so changing the selector
+  // takes effect on the list already on screen.
+  function findAdd(r) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tbtn';
+    b.textContent = 'Add';
+    b.title = 'put it wherever the Add to box above says - the queue plays it, a playlist only keeps it';
+    b.addEventListener('click', async () => {
+      if (b.classList.contains('busy')) return;
+      const dest = $('qdest').value;
+      busy(b, true);
+      try {
+        if (dest === DEST_QUEUE) {
+          // The queue belongs to liquidsoap, so this goes down /control/ like
+          // everything else that changes what is going to play, and the panel
+          // below re-reads it rather than assuming what it now holds.
+          await qPost('queue/add?id=' + encodeURIComponent(r.id));
+          $('cerr').textContent = '';
+          qnote('Added to the end of the queue \u2014 it will play.');
+          await qLoad();
+        } else if (await plAdd(dest, r)) {
+          qnote('Added to "' + dest + '" \u2014 a list you keep. Nothing plays until you send it.');
+        }
+      } catch (e) {
+        $('cerr').textContent = 'Add: ' + e.message;
+      } finally {
+        busy(b, false);
+      }
+    });
+    return b;
+  }
+
+  // The queue, read from liquidsoap and never from anything this page kept. It
+  // empties itself as tracks start, so a remembered copy is wrong within a
+  // song; there is deliberately no cached version of this anywhere.
+  let queue = [];
+
+  // The read reports an error in an "error" field rather than in the status,
+  // so the writes are read the same way: a 200 carrying a message is still a
+  // refusal and must not come out looking like success. Parsed leniently
+  // because an empty body is a valid answer too - what is never allowed is
+  // treating an error field as though it were not there.
+  async function qPost(path) {
+    const res = await fetch('/control/' + path,
+      { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const txt = await res.text();
+    let d = null;
+    try { d = JSON.parse(txt); } catch (e) { d = null; }
+    if (d && d.error) throw new Error(d.error);
+    return d;
+  }
+
+  // Its own status line, written with textContent and not through say(),
+  // because this is a poll: say() restarts a highlight every time it is
+  // called, and a line that flashes every four seconds is a line nobody reads.
+  // The same reason npage above has one of its own.
+  function qNote(msg) { $('plqnote').textContent = msg; }
+
+  async function qLoad() {
+    try {
+      const res = await fetch('/control/queue', { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      queue = Array.isArray(d.queue) ? d.queue : [];
+      qRows(typeof d.total === 'number' ? d.total : queue.length);
+    } catch (e) {
+      // The rows are left alone rather than cleared. An empty list and a list
+      // that could not be read look identical, and the difference matters more
+      // here than anywhere else on this page, so the line says which.
+      qNote('Could not read the queue: ' + e.message + ' - what is listed below may be out of date');
+    }
+  }
+
+  function qRows(total) {
+    const ul = $('plqueue');
+    ul.innerHTML = '';
+    if (!queue.length) {
+      qNote('Nothing is waiting. When what is on the air finishes, the station picks the next track itself.');
+      return;
+    }
+    // The server caps its list at its own limit; total is the true count, and
+    // showing only the capped number would read as "that is all there is".
+    qNote((queue.length === 1 ? '1 track' : queue.length + ' tracks') +
+          ' waiting, the top one next' +
+          (queue.length < total ? ' \u2014 showing ' + queue.length + ' of ' + total : ''));
+    queue.forEach((t, i) => ul.appendChild(qRow(t, i, i === queue.length - 1)));
+  }
+
+  // A queue row is a playlist row that reaches the air. Everything it does
+  // goes to /control/ and is followed by a re-read rather than by adjusting
+  // what is on screen: the queue moves on its own as tracks start, and a list
+  // edited locally would drift from the one that is going to play, which is
+  // the single mistake this panel exists to prevent.
+  function qRow(t, i, last) {
+    const li = document.createElement('li');
+    const who = document.createElement('div');
+    who.className = 'who';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = (i + 1) + '. ' + (t.title || t.artist || 'Untitled - this file has no tags');
+    who.appendChild(name);
+    const why = document.createElement('div');
+    why.className = 'why';
+    why.textContent = (t.title && t.artist) ? t.artist : '';
+    who.appendChild(why);
+    const acts = document.createElement('div');
+    acts.className = 'acts';
+    const id = encodeURIComponent(t.id);
+    acts.appendChild(plBtn('Up', 'play it one place sooner', i > 0,
+      () => qCmd('queue/move?id=' + id + '&to=' + (i - 1))));
+    acts.appendChild(plBtn('Down', 'play it one place later', !last,
+      () => qCmd('queue/move?id=' + id + '&to=' + (i + 1))));
+    acts.appendChild(plBtn('Remove', 'take it out of the queue so it does not play', true,
+      () => qCmd('queue/remove?id=' + id)));
+    li.appendChild(who);
+    li.appendChild(acts);
+    return li;
+  }
+
+  async function qCmd(path) {
+    try {
+      await qPost(path);
+      plErr('');
+    } catch (e) {
+      plErr('The queue did not change: ' + e.message);
+    }
+    // Re-read either way. A refusal is exactly when the copy on screen is most
+    // likely to be wrong about what is going to play.
+    await qLoad();
+  }
+
+  $('plnew').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.classList.contains('busy')) return;
+    const asked = prompt('What should this playlist be called?');
+    if (asked === null) return;             // the operator changed their mind
+    const nm = asked.trim();
+    const wrong = nameProblem(playlists, nm);
+    if (wrong) return plErr(wrong);
+    if (nm in playlists) return plErr('There is already a playlist called "' + nm + '".');
+    if (Object.keys(playlists).length >= PLAY_MAX)
+      return plErr('That is already ' + PLAY_MAX + ' playlists - delete one first.');
+    busy(b, true);
+    playlists[nm] = [];
+    try {
+      if (await plPut('Made "' + nm + '" \u2014 an empty list. Find tracks above and Add them to it.')) plDraw(nm);
+      else delete playlists[nm];
+    } finally { busy(b, false); }
+  });
+
+  $('pldel').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.classList.contains('busy')) return;
+    const nm = plName();
+    if (!nm) return plErr('There is no playlist to delete.');
+    // The name goes in the question. A box that only asks whether you are sure
+    // is answered by the hand rather than by the eye.
+    const list = playlists[nm];
+    if (!confirm('Delete the playlist "' + nm + '" and the ' +
+                 (Array.isArray(list) ? list.length : 0) + ' tracks in it? ' +
+                 'The queue is not touched and nothing stops playing.')) return;
+    busy(b, true);
+    const gone = playlists[nm];
+    delete playlists[nm];
+    try {
+      if (await plPut('Deleted "' + nm + '". Nothing that was playing changed.')) plDraw();
+      else playlists[nm] = gone;
+    } finally { busy(b, false); }
+  });
+
+  // One request per track, in order, stopping at the first refusal. The add
+  // endpoint takes one id and there is no way to send a list atomically, so
+  // carrying on past a failure would leave a running order with a hole in it
+  // that nobody was told about. What did land is said out loud instead.
+  $('plsend').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.classList.contains('busy')) return;
+    const nm = plName();
+    const list = playlists[nm];
+    if (!Array.isArray(list) || !list.length)
+      return plErr('There is nothing in "' + nm + '" to send.');
+    busy(b, true);
+    let sent = 0;
+    try {
+      for (const t of list) {
+        await qPost('queue/add?id=' + encodeURIComponent(t.id));
+        sent++;
+      }
+      plErr('');
+      plSay('Sent all ' + sent + ' from "' + nm + '" to the queue. They play in that order once ' +
+            'what is on the air now finishes. "' + nm + '" itself is unchanged.');
+    } catch (err) {
+      plErr('Sent ' + sent + ' of ' + list.length + ' from "' + nm + '", then stopped: ' +
+            err.message + '. The queue is holding the ' + sent + ' that went.');
+    } finally {
+      busy(b, false);
+      await qLoad();
+    }
+  });
+
+  $('plclear').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    if (b.classList.contains('busy')) return;
+    if (!confirm('Empty the queue? ' +
+                 (queue.length === 1 ? '1 track is' : queue.length + ' tracks are') +
+                 ' waiting. Your playlists are not touched, and what is on the air now finishes.')) return;
+    busy(b, true);
+    try { await qCmd('queue/clear'); } finally { busy(b, false); }
+  });
+
+  // Polled only while the fold is open, the way the desk reloads its knobs on
+  // open: the queue changes on its own as tracks start, so a panel somebody is
+  // looking at has to keep up, and a panel nobody has open has no business
+  // asking liquidsoap anything every four seconds. Run once at the end of this
+  // block as well as on toggle, because panelRestore() above may already have
+  // opened this fold from what the device remembers.
+  const QUEUE_WAIT = 4000;
+  let qTimer = 0;
+  function qWatch() {
+    clearInterval(qTimer);
+    qTimer = 0;
+    if (!$('plwrap').open) return;
+    qLoad();
+    qTimer = setInterval(qLoad, QUEUE_WAIT);
+  }
+  $('plwrap').addEventListener('toggle', qWatch);
+
+  async function loadPlaylists() {
+    try {
+      const res = await fetch(PLAY_URL, { credentials: 'same-origin', cache: 'no-store' });
+      // No file yet is a speaker who has never made a playlist, not a failure.
+      // Nothing is written to claim the name the way presets.json is seeded,
+      // because there is no state here worth saving before something clears
+      // it: an empty map says exactly what no file says.
+      if (res.status === 404) { playlists = {}; plDraw(); return; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const got = await res.json();
+      playlists = (got && typeof got === 'object' && !Array.isArray(got)) ? got : {};
+      // A file written by hand, or by an older page, can hold anything. A name
+      // whose value is not a list of tracks is dropped here rather than left to
+      // throw somewhere further in, and the operator is told which and what
+      // that costs - quietly showing fewer playlists than the file holds is
+      // the one outcome worth going out of the way to avoid.
+      const bad = [];
+      for (const nm in playlists) {
+        if (!Array.isArray(playlists[nm])) { bad.push('"' + nm + '"'); delete playlists[nm]; }
+      }
+      plDraw();
+      if (bad.length)
+        plErr('Ignored ' + bad.join(', ') + ' in your playlists file: not a list of tracks. ' +
+              'They are not shown here, and the next save will write the file without them.');
+    } catch (e) {
+      plErr('Could not read your playlists: ' + e.message);
+    }
+  }
+
+  loadPlaylists();
+  qWatch();
 
 })();
   // Basic auth never tells a page who is using it, so the server does: /whoami

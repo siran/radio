@@ -377,6 +377,66 @@ import admins.caddy
 			respond 403
 		}
 	}
+	# Saved playlists, beside presets.json in the same folder and behind the
+	# same credential. A playlist is a running order the host keeps: tracks
+	# chosen now to be sent to the queue later. It is not the queue and it does
+	# not play - liquidsoap never reads this file any more than it reads
+	# presets.json, and the queue it does play from lives in the process and is
+	# reached through /control/. This is the page's own memory, nothing more.
+	# Every entry carries the track's title and artist beside its id even though
+	# only the id is ever sent to /control/. An id is a digest of the path, so a
+	# file that gets moved stops resolving; keeping the words means the list is
+	# still readable and can be rebuilt by hand rather than becoming two hundred
+	# rows of dead hex. Nothing here tries to repair such a row - it only keeps
+	# enough for a person to.
+	handle /host/playlists/* {
+		import speakers
+		@playlists {
+			method GET PUT
+			path /host/playlists/playlists.json
+		}
+		handle @playlists {
+			# The same measured trap as presets.json above, with the same ending:
+			# max_size TRUNCATES the body rather than refusing it and webdav then
+			# writes the truncated bytes, so a cap set too low does not lose the
+			# last track of the last playlist - it leaves a file no JSON parser
+			# will read, and every saved running order is gone at once.
+			# Counted, not guessed. One entry is
+			#   {"id":"<32 hex>","title":"...","artist":"..."}
+			# which is 64 bytes of punctuation and digest before either string.
+			# Unlike a preset name, a title or an artist is a tag off a disk rather
+			# than something the page controls, so it does grow under encoding: six
+			# bytes per character is the worst case, which is a control character
+			# written as \u00XX and also covers the four UTF-8 bytes an astral
+			# character takes. At 120 characters for each of the two:
+			#   64 + 120*6 + 120*6      = 1504 bytes an entry
+			# and at 200 tracks a playlist, a name of 24 characters of
+			# [A-Za-z0-9 _-] which never grows under escaping, and 20 names:
+			#   2 + 200*1504 + 199      = 301001 bytes of tracks
+			#   1 + 24 + 1 + 1 + 301001 = 301028 bytes a named playlist
+			#   2 + 20*301028 + 19      = 6020581 bytes, just under 6MB.
+			# A real file is nothing like that - twenty full playlists of ordinary
+			# tags come to about 516KB - but the worst case is what a cap has to
+			# clear. The page measures the encoded body, not its length in
+			# characters, and refuses to PUT past 6MB, so it cannot produce a body
+			# this route would cut. 8MB leaves headroom for a field added to an
+			# entry later without anyone having to come back and re-derive this,
+			# and is still half of what the voice uploads into this same folder are
+			# allowed, so it is not a new way of putting anything large anywhere.
+			request_body {
+				max_size 8MB
+			}
+			# The folder is whoever authenticated - never what the client says.
+			webdav {
+				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+				prefix /host/playlists
+			}
+		}
+		# any other name, and any other method, is refused
+		handle {
+			respond 403
+		}
+	}
 	# Sign out. A 401 from a path that asks for no credential of its own is
 	# what makes a browser forget the one it cached for /host/ and prompt again.
 	# Who you are, straight from the credential you sent. Basic auth gives the
