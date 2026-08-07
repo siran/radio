@@ -1762,7 +1762,22 @@
   // characters the worst case is 7961 bytes (see the Caddyfile, where the same
   // count is written out); refusing at 8KB means this page cannot produce a
   // body that route would cut, and the route still has four times that.
-  const PRES_MAX = 20, PRES_BYTES = 8192;
+  // 8192 was counted for a preset holding a sound and nothing else. A preset now
+  // also carries the narrator's phrases, and the ledger they come from is capped
+  // at 200 rows - so one preset can hold 200 of them and twenty presets can hold
+  // the same 200 twenty times over. Counted rather than guessed: a {t,text} row
+  // of a typical announcement is about 80 bytes, so 200 rows is 16KB a preset and
+  // 320KB for a full twenty. 512KB leaves room and is still small enough that a
+  // runaway is refused rather than written.
+  //
+  // The refusal is the important part and it is unchanged: presPut() reports and
+  // writes nothing. It does not truncate, because caddy's max_size does, and a
+  // truncated presets.json does not lose one preset - it makes the whole map
+  // unparseable and every saved sound reads back as none.
+  //
+  // Pruning the history is what keeps a preset small, and that is what the
+  // delete button on the narrator page is for.
+  const PRES_MAX = 20, PRES_BYTES = 524288;
   // Also the reason the charset is this narrow: every byte of a name is one
   // byte of the file, with nothing for JSON to escape and nothing outside
   // ascii, so the count above is a count and not an estimate.
@@ -1847,6 +1862,70 @@
     }
   }
 
+  // What the narrator has said, and the reason a preset can carry phrases at
+  // all. The file is the station's, in config/ beside the desk, and every
+  // host's narrator appends to that same one.
+  const HISTORY_URL = '/narrator/history/history.json';
+
+  // Throws rather than answering with an empty list, for the same reason
+  // readDesk() throws: both callers below are about to write a whole file off
+  // the back of it, and "the read failed" and "nothing has been said" have to
+  // stay different answers, or a preset saves an empty ledger and later puts
+  // that emptiness back.
+  async function histRead() {
+    const res = await fetch(HISTORY_URL,
+      { credentials: 'same-origin', cache: 'no-store' });
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const got = await res.json();
+    if (!Array.isArray(got)) throw new Error('that file is not a list of lines');
+    return got;
+  }
+
+  // MERGED into what the station is holding, never written over it. The
+  // history belongs to the station and a preset belongs to one host, so
+  // loading a preset saved on Monday must not delete what another host's
+  // narrator said on Tuesday - and a straight write would do exactly that,
+  // silently, to a file nobody was looking at. The asymmetry that leaves is
+  // deliberate and is how this is meant to work: deleting a line takes it off
+  // the station at once, and it still rides in every preset saved before the
+  // delete, so saving the preset again is what finally lets go of it.
+  //
+  // The rule for combining them is the watcher's own, so what this writes is
+  // what the watcher would have written: newest first, one row per distinct
+  // text with the newer stamp winning, and 200 rows at most, because it is a
+  // list to pick from and not an archive. The stamps are yyyy-MM-ddTHH:mm:ss
+  // with no zone on them, which sorts by string exactly as it sorts by clock.
+  //
+  // Not awaited by presApply, which stays as it is: this says its own piece
+  // when it fails, through the same line every other failure there uses.
+  async function histMerge(phrases) {
+    try {
+      const rows = (await histRead()).concat(phrases)
+        .filter(r => r && typeof r.text === 'string' && r.text)
+        .sort((a, b) => String(b.t || '').localeCompare(String(a.t || '')));
+      const seen = new Set(), keep = [];
+      for (const r of rows) {
+        if (seen.has(r.text)) continue;
+        seen.add(r.text);
+        keep.push(r);
+      }
+      if (keep.length > 200) keep.length = 200;
+      const res = await fetch(HISTORY_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(keep)
+      });
+      if (!(res.ok || res.status === 201 || res.status === 204))
+        throw new Error(res.status === 401
+          ? 'your sign-in expired, reload the page' : 'HTTP ' + res.status);
+    } catch (e) {
+      presErr('The preset loaded, but the phrases it kept did not go back into ' +
+              "the narrator's list: " + e.message);
+    }
+  }
+
   // Asynchronous because of the desk below, and for no other reason.
   async function presCurrent() {
     const cap = {};
@@ -1866,10 +1945,18 @@
     // throws when it cannot answer, and both callers below let it: a preset
     // built from guesses is worse than no preset saved at all.
     const desk = await readDesk();
+    // The narrator's kept phrases, read here under the same rule as the desk
+    // above and for the same reason: a preset that saved them as missing would
+    // be a preset that empties the list every time it is loaded, so when the
+    // read cannot answer nothing at all is saved. Each phrase is stored as the
+    // ledger stores it, {t, text}, so the merge on the way back in has a
+    // timestamp to order by.
+    const phrases = await histRead();
     return {
       cap: cap,
       voice: { gain: settings.gain, duck: settings.duck, eq: eq },
       desk: desk,
+      phrases: phrases,
       panels: panelState()
     };
   }
@@ -1946,6 +2033,7 @@
       $('eq' + b).value = settings.eq[b];
       showBand(b);
     }
+    if (Array.isArray(p.phrases)) histMerge(p.phrases);
     applyPanels(p.panels);
     panelSave();          // so a refresh comes back to the preset, not the markup
     presErr('');
@@ -1953,7 +2041,9 @@
     // Said every time, because half of it is not true yet. Liquidsoap polls
     // the folder four times a second, so the voice is already different; the
     // microphone is opened once and keeps the constraints it was opened with.
-    presSay('Loaded "' + n + '". Your voice is on the air within a quarter second. ' +
+    presSay('Loaded "' + n + '". Its kept phrases are merged back into the narrator\'s ' +
+            'list, alongside anything said since. ' +
+            'Your voice is on the air within a quarter second. ' +
             'Bitrate and bitrate mode land on the next note. ' +
             'Format, sample rate, channels, sample size, latency, echo cancellation, ' +
             'noise suppression, auto gain and voice isolation need the microphone reopened' +
@@ -1970,10 +2060,11 @@
     try {
       presets[n] = await presCurrent();
     } catch (e) {
-      return presErr('Could not read the mixing desk, so nothing was saved: ' + e.message +
+      return presErr('Could not read the mixing desk or the narrator\'s phrases, so nothing ' +
+                     'was saved: ' + e.message +
                      '. Open the Mixing desk fold to see whether the station is answering.');
     }
-    if (await presPut('Saved "' + n + '" \u2014 voice, EQ, streaming settings, the desk, and which panels were open.')) {
+    if (await presPut('Saved "' + n + '" \u2014 voice, EQ, streaming settings, the desk, the phrases the narrator has kept, and which panels were open.')) {
       presDraw();
       $('preslist').value = n;
     } else if (prev === undefined) { delete presets[n]; } else { presets[n] = prev; }
@@ -2020,7 +2111,8 @@
           // the one write that becomes the seed every later preset is judged
           // against. Nothing is written, and the next load tries the read
           // afresh.
-          return presErr('Could not read the mixing desk, so "dj" was not saved: ' + e.message +
+          return presErr('Could not read the mixing desk or the narrator\'s phrases, so "dj" ' +
+                         'was not saved: ' + e.message +
                          '. Reload the page once the station is answering.');
         }
         presets = { dj: seed };

@@ -364,7 +364,15 @@ import admins.caddy
 			# field added to the CAP table later grows every preset without
 			# anyone having to remember this number.
 			request_body {
-				max_size 32KB
+				# Recounted when a preset began carrying the narrator's phrases as
+				# well as a sound. The ledger those come from is capped at 200
+				# rows, and a {t,text} row of a typical announcement is about 80
+				# bytes, so one preset can carry 16KB of them and a full twenty
+				# can carry 320KB. The page refuses at 512KB; this is the door
+				# that has to be wider than the page's own guard, or the page
+				# would allow a body that arrives here and gets TRUNCATED - which
+				# does not lose one preset, it makes the whole map unparseable.
+				max_size 1MB
 			}
 			# The folder is whoever authenticated - never what the client says.
 			webdav {

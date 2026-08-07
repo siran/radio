@@ -52,6 +52,15 @@
      words, because getting it wrong sounds like the page did nothing. */
   .now { color:var(--on); font-weight:600; }
   .later { color:#fbbf24; font-weight:600; }
+  /* A said line, when it was said, and its two buttons. Every other button on
+     this page is the only thing you do on its line and so runs the full width;
+     these come in pairs, one pair per line, and the words are what you read. */
+  .hrow { border-top:1px solid var(--line); padding:10px 0; }
+  .hrow:first-child { border-top:none; padding-top:2px; }
+  .htext { font-size:14px; overflow-wrap:anywhere; }
+  .hwhen { font-size:12px; color:var(--dim); margin-top:2px; }
+  .hbtns { display:flex; gap:8px; margin-top:7px; }
+  .hbtns button { width:auto; flex:1; margin-bottom:0; padding:8px; font-size:13px; }
 </style>
 </head>
 <body>
@@ -87,6 +96,16 @@
     </div>
     <div class="hint">On air in about eight seconds. Piper reads the line
       literally, so it is spoken exactly as typed. 500 characters at most.</div>
+
+    <label>What it has said &mdash; the lines already spoken, newest first and
+      each one only once, so one can go out again without typing it twice</label>
+    <div id="histlist"></div>
+    <div class="hint">Say it again reads the line afresh, with the voice and the
+      speed set below as they stand at the moment you press it &mdash; it is not
+      a recording of what went out, so a line first said in another voice comes
+      back in this one. Delete takes it off the list for good; it does not unsay
+      what has already been on the air. The list is read when this page opens,
+      so a line you send now joins it after a reload.</div>
 
     <label for="voice">Voice &mdash; which installed voice speaks, and therefore which language</label>
     <select id="voice"></select>
@@ -301,6 +320,7 @@
   async function load() {
     await loadVoices();
     await loadSettings();      // its own file - a broken narrator.json must not lock it
+    await histLoad();          // and nor is this one, so it is read before that read
     try {
       const res = await fetch(CONFIG_URL, { credentials: 'same-origin', cache: 'no-store' });
       if (res.status !== 404) {
@@ -489,23 +509,31 @@
     return 'say-' + st + '-' + r + '.txt';
   }
 
+  // The one path from this page to the station's voice, so Say it again below
+  // goes down it as well rather than growing a second one that could drift
+  // from this. It throws and says nothing itself: each caller has its own line
+  // to say about what it was sending.
+  async function sayIt(words) {
+    const res = await fetch(SAY_URL + sayName(), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      credentials: 'same-origin',
+      body: words + '\n'
+    });
+    if (!(res.ok || res.status === 201 || res.status === 204)) {
+      throw new Error(res.status === 401
+        ? 'your sign-in expired, reload the page'
+        : 'HTTP ' + res.status);
+    }
+  }
+
   $('saybtn').addEventListener('click', async () => {
     const words = $('say').value.trim();
     if (!words) return setStatus('nothing to say');
     $('saybtn').disabled = true;
     setStatus('sending');
     try {
-      const res = await fetch(SAY_URL + sayName(), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-        credentials: 'same-origin',
-        body: words + '\n'
-      });
-      if (!(res.ok || res.status === 201 || res.status === 204)) {
-        throw new Error(res.status === 401
-          ? 'your sign-in expired, reload the page'
-          : 'HTTP ' + res.status);
-      }
+      await sayIt(words);
       clear();
       $('say').value = '';
       setStatus('on air in about eight seconds');
@@ -515,6 +543,149 @@
     }
     $('saybtn').disabled = false;
   });
+
+  // What it has said. narrator-watcher.ps1 appends every line it renders to
+  // this one file as it speaks it: newest first, the same words kept only
+  // once, 200 rows at most - a list to pick from rather than an archive. It
+  // sits in config/ beside the desk because it belongs to the station and not
+  // to whoever is signed in, since everybody's narrator is the same narrator.
+  const HISTORY_URL = '/narrator/history/history.json';
+
+  // What the list is showing at this moment. Kept so a failed delete can put
+  // the screen back to exactly what it had, rather than leaving a row gone
+  // from the page and still on the station.
+  let ledger = [];
+
+  // Throws rather than answering with an empty list. A file that came back
+  // unreadable is not the same thing as a station that has never spoken, and
+  // showing the second when it is the first invites a delete that writes that
+  // emptiness back over a real ledger.
+  async function histRead() {
+    const res = await fetch(HISTORY_URL,
+      { credentials: 'same-origin', cache: 'no-store' });
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const got = await res.json();
+    if (!Array.isArray(got)) throw new Error('that file is not a list of lines');
+    return got;
+  }
+
+  // Built out of elements with textContent rather than a string of html,
+  // because the words are whatever somebody typed: a line with an ampersand or
+  // a less-than in it is shown as it was said instead of being read as markup.
+  // A row this page cannot show is skipped here and nowhere else - it still
+  // rides through a delete untouched, because repairing the ledger is the
+  // watcher's job and not this list's.
+  function histDraw() {
+    const box = $('histlist');
+    box.innerHTML = '';
+    const rows = ledger.filter(r => r && typeof r.text === 'string');
+    if (!rows.length) {
+      const none = document.createElement('div');
+      none.className = 'hint';
+      none.textContent = 'Nothing said yet.';
+      box.appendChild(none);
+      return;
+    }
+    for (const row of rows) {
+      const line = document.createElement('div');
+      line.className = 'hrow';
+      const words = document.createElement('div');
+      words.className = 'htext';
+      words.textContent = row.text;
+      // The watcher stamps the local clock with no zone on it, so it is shown
+      // as it was written rather than reinterpreted into a timezone nobody
+      // here is standing in. Only the T has to go, and a space reads better.
+      const when = document.createElement('div');
+      when.className = 'hwhen';
+      when.textContent = String(row.t || '').replace('T', ' ');
+      const btns = document.createElement('div');
+      btns.className = 'hbtns';
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.textContent = 'Say it again';
+      again.addEventListener('click', () => histAgain(row.text, again));
+      const drop = document.createElement('button');
+      drop.type = 'button';
+      drop.textContent = 'Delete';
+      drop.addEventListener('click', () => histDelete(row.text, drop));
+      btns.appendChild(again);
+      btns.appendChild(drop);
+      line.appendChild(words);
+      line.appendChild(when);
+      line.appendChild(btns);
+      box.appendChild(line);
+    }
+  }
+
+  // Sent as a new line, and not replayed: there is no wav left to replay,
+  // because the watcher deletes each one as soon as the pickup has taken it.
+  // Piper renders the words again with whatever voice and speed the config
+  // holds at that moment, which is what makes an old line come back in a new
+  // voice - and is the reason the panel says so above.
+  async function histAgain(text, btn) {
+    btn.disabled = true;
+    setStatus('sending');
+    try {
+      await sayIt(text);
+      clear();
+      setStatus('on air in about eight seconds');
+    } catch (e) {
+      setStatus('not sent');
+      fail('Could not say that line again: ' + e.message);
+    }
+    btn.disabled = false;
+  }
+
+  // Read, modify, write, the same shape as every other save on this page. The
+  // file is read AGAIN first rather than taken from what this page loaded,
+  // because the watcher appends to it every time the station speaks and
+  // writing back the copy from page load would take out every line said
+  // since. The row is found by its words, which is the identity the watcher
+  // itself dedupes on, so there is exactly one to drop and no position that
+  // could have gone stale. The body can only be smaller than the one already
+  // on disk, so nothing here can reach the route's cap.
+  async function histDelete(text, btn) {
+    const had = ledger;
+    btn.disabled = true;
+    setStatus('deleting');
+    try {
+      const rows = await histRead();
+      const keep = rows.filter(r => !(r && r.text === text));
+      const res = await fetch(HISTORY_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(keep)
+      });
+      if (!(res.ok || res.status === 201 || res.status === 204)) {
+        throw new Error(res.status === 401
+          ? 'your sign-in expired, reload the page'
+          : 'HTTP ' + res.status);
+      }
+      ledger = keep;
+      histDraw();
+      clear();
+      setStatus('deleted');
+    } catch (e) {
+      // Back to exactly what the screen was showing. A row gone from the page
+      // while the file still holds it is the one way this could lie.
+      ledger = had;
+      histDraw();
+      setStatus('not deleted');
+      fail('Could not delete that line: ' + e.message);
+    }
+    btn.disabled = false;
+  }
+
+  async function histLoad() {
+    try {
+      ledger = await histRead();
+      histDraw();
+    } catch (e) {
+      fail('Could not read what it has said (' + e.message + ').');
+    }
+  }
 
   // change rather than input on the text fields: it fires when the field is
   // left, so a save is one per edit rather than one per keystroke.
