@@ -63,6 +63,11 @@
     <ul id="list"><li><span>loading…</span></li></ul>
   </div>
 
+  <div class="panel">
+    <label>The station</label>
+    <button class="ghost" id="restart">restart the radio</button>
+  </div>
+
   <div class="foot"><a href="/host/">the console &rarr;</a><span id="whoamiwrap" hidden> &middot; <span id="whoami"></span> &middot; <a href="/host/logout">log out</a></span></div>
 </div>
 
@@ -158,6 +163,23 @@
   });
 
   $('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('add').click(); });
+
+  // Everyone listening hears this one, so it says what it costs before it asks
+  // the watcher for it. The watcher may also refuse - it is allowed to say the
+  // radio was restarted too recently - so its own words are what get shown.
+  $('restart').addEventListener('click', async () => {
+    if (!confirm('Restart the radio? The station goes off the air for roughly ten to fifteen ' +
+                 'seconds for every listener, and any host recording a voice note has it interrupted.')) return;
+    $('restart').disabled = true;
+    setStatus('restarting the radio…');
+    try {
+      const r = await ask({ action: 'restart', what: 'liquidsoap', who: 'admin' });
+      setStatus(r.ok ? 'the radio was restarted' : '');
+      if (!r.ok) fail(r.error || 'could not restart');
+    } catch (e) { fail(e.message); }
+    $('restart').disabled = false;
+  });
+
   refresh();
 })();
   // Basic auth never tells a page who is using it, so the server does: /whoami
