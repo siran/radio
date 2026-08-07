@@ -60,6 +60,14 @@
   .htext { font-size:14px; overflow-wrap:anywhere; }
   .hwhen { font-size:12px; color:var(--dim); margin-top:2px; }
   .hbtns { display:flex; gap:8px; margin-top:7px; }
+  /* Buttons in this page run the full width, which is right for one button and
+     wrong for two that are alternatives to each other: Say it and Add to the
+     list do different things with the same words, and stacked they read as a
+     sequence rather than a choice. Only the layout is borrowed from .hbtns
+     above, not its sizing - those are small buttons on a list row and these are
+     the two the page is for. */
+  .btns { display:flex; gap:8px; }
+  .btns button { width:auto; flex:1; }
   .hbtns button { width:auto; flex:1; margin-bottom:0; padding:8px; font-size:13px; }
 </style>
 </head>
