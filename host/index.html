@@ -88,12 +88,13 @@
   li:last-child { border-bottom:0; }
   li .ok { color:var(--on); }
   li .bad { color:var(--rec); }
-  /* Finding a track, in the panel that plays it, and the two lists in the
-     panel under it. A row is the name on the left and the things you can do
-     with it on the right; min-width:0 is what lets a long title wrap instead
-     of shoving the buttons off the edge. One set of rules for all three lists
-     rather than three copies of it, because they are one shape: a track, and
-     what can be done to it. */
+  /* The three lists that hold tracks, each now in a panel of its own: the
+     search results, the queue, and the tracks in a playlist. A row is the
+     name on the left and the things you can do with it on the right;
+     min-width:0 is what lets a long title wrap instead of shoving the
+     buttons off the edge. One set of rules for all three lists rather than
+     three copies of it, because they are one shape: a track, and what can
+     be done to it. */
   #qfind { margin-top:14px; }
   #qresults li, #pltracks li, #plqueue li { align-items:center; }
   #qresults .who, #pltracks .who, #plqueue .who { min-width:0; }
@@ -169,6 +170,13 @@
 
   <h1>Wild n Loyal Radio &middot; Host</h1>
 
+  <div class="panel">
+    <button id="rec">Start talking</button>
+    <div class="meter"><i id="vu"></i></div>
+    <div class="status" id="status">ready</div>
+    <div class="err" id="err"></div>
+  </div>
+
   <details class="panel" id="musicpanel" open>
     <summary>Now playing <span class="when">&mdash; what is on the air, and the controls that change it for everyone listening</span></summary>
     <div class="np" id="npTitle">&mdash;</div>
@@ -184,10 +192,56 @@
       <button class="tbtn" id="bMusic" title="off is silence">Music</button>
       <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
     </div>
-    <div class="status"><span class="when">Previous goes back to what finished last, again and again.
-      Skip drops this track and takes the next. Play again queues this same track once more.
-      Repeat keeps replaying it until you turn it off. Music off leaves silence under the voices.
-      Pause freezes the whole stream for everyone.</span></div>
+    <div class="err" id="cerr"></div>
+  </details>
+
+  <!-- The running order, in a panel of its own and directly under what is
+       on the air, because those two answer the same question a minute
+       apart. It used to share a panel with the playlists, which put the
+       one list that reaches the air and the one list that does not under a
+       single heading - and the difference between them is the whole thing
+       this station asks an operator to keep straight. A playlist is a list
+       you keep; the queue is what is going to play. Nothing in a playlist
+       reaches the air until it is sent, and nothing sent to the queue is
+       remembered once it has played. They live in different places for the
+       same reason: a playlist is a file in this speaker's own folder and
+       survives a cleared cache and a restart, while the queue is inside
+       liquidsoap and survives neither. -->
+  <details class="panel" id="queuewrap">
+    <summary>The queue <span class="when">&mdash; what is going to play, in order, once the track on the air finishes</span></summary>
+    <div class="status">The <span class="when">queue</span> is what actually plays next. It lives inside
+      liquidsoap and not in a file, so it does not survive a restart, and a track leaves it the moment
+      it starts playing. A <span class="when">playlist</span>, in the panel below, is a list you keep and
+      plays nothing until you send it here.</div>
+
+    <label>In order, the top one next.
+      <span class="when">Remove</span> drops one so it never plays, <span class="when">Up</span> and
+      <span class="when">Down</span> change the running order, <span class="when">Clear the queue</span>
+      empties it. What is on the air right now is not in this list and keeps playing whatever you do
+      here. If the same track is in the queue twice, Remove and the arrows take the first copy.</label>
+    <div class="status" id="plqnote"></div>
+    <ul id="plqueue"></ul>
+    <div class="btns">
+      <button class="tbtn" id="plclear" title="asks first, then empties the queue; what is on the air now finishes and then the station picks its own">Clear the queue</button>
+    </div>
+    <!-- The queue's own error line. It used to report into the playlists panel
+         below, which is shut by default, so a refused Up or Remove could be
+         written somewhere nobody was looking - which is the same as not
+         reporting it. -->
+    <div class="err" id="qerr"></div>
+  </details>
+
+  <!-- Searching the library is not "now playing", and it sat inside that
+       panel only because that is where the first Add button was needed.
+       It is its own step: it reads the whole library, and what it finds
+       goes wherever the Add to box says - the queue, which plays it, or a
+       playlist, which only keeps it. It sits between the two panels it
+       feeds, so the box and both of its destinations are on one screen. -->
+  <details class="panel" id="findwrap" open>
+    <summary>Find a track <span class="when">&mdash; search the library, then put what you find in the queue or in a playlist</span></summary>
+    <div class="status">Searching by itself changes nothing and reaches nobody. A result goes where the
+      <span class="when">Add to</span> box says: the <span class="when">queue</span> plays it, a
+      <span class="when">playlist</span> only keeps it.</div>
     <div id="qfind">
       <label for="qsearch"><span class="band">Find a track</span> &mdash; searches title, artist and filename across the library; pick a result to queue it next</label>
       <div class="ctl">
@@ -200,22 +254,15 @@
       <select id="qdest" aria-label="Where the Add button puts a track"></select>
       <ul id="qresults"></ul>
     </div>
-    <div class="err" id="cerr"></div>
   </details>
 
-  <!-- A running order, beside what is on the air, because that is where it is
-       read. The whole panel exists to keep two things apart that a console
-       makes very easy to confuse: a playlist is a list you keep, and the queue
-       is what is going to play. Nothing in a playlist reaches the air until it
-       is sent, and nothing sent to the queue is remembered once it has played.
-       They live in different places for the same reason: a playlist is a file
-       in this speaker's own folder and survives a cleared cache and a restart,
-       while the queue is inside liquidsoap and survives neither. -->
+  <!-- What is left of the panel the queue moved out of: the lists this
+       speaker keeps, in a file of their own that outlives a restart. -->
   <details class="panel" id="plwrap">
-    <summary>Playlists <span class="when">&mdash; lists you keep, and the queue that is actually going to play</span></summary>
+    <summary>Playlists <span class="when">&mdash; lists you keep, saved on the server under a name</span></summary>
     <div class="status" id="plnote">A <span class="when">playlist</span> is a list you keep, saved on the server
-      in your own folder. It does not play. The <span class="when">queue</span> lower down is what is going
-      to play, in that order, once what is on the air now finishes. Sending a playlist to the queue
+      in your own folder. It does not play. The <span class="when">queue</span>, in its own panel above, is what
+      is going to play, in that order, once what is on the air now finishes. Sending a playlist to the queue
       copies the tracks across, so changing the playlist afterwards does not change what will play.</div>
 
     <label for="pllist"><span class="band">Your playlists</span> &mdash; pick one to see and change what is in it; picking one plays nothing</label>
@@ -234,29 +281,15 @@
       <button class="tbtn" id="plsend" title="copies every track in this playlist onto the end of the queue, in order">Send to the queue</button>
     </div>
 
-    <label><span class="band">The queue</span> &mdash; what is actually going to play, the top one next.
-      <span class="when">Remove</span> drops one so it never plays, <span class="when">Up</span> and
-      <span class="when">Down</span> change the running order, <span class="when">Clear the queue</span>
-      empties it. What is on the air right now is not in this list and keeps playing whatever you do
-      here. If the same track is in the queue twice, Remove and the arrows take the first copy.</label>
-    <div class="status" id="plqnote"></div>
-    <ul id="plqueue"></ul>
+    <label><span class="band">This playlist, as one file</span> &mdash; the playlist picked above and the tracks
+      in it, in the order they would be sent. Keep it, mail it to a co-host, or put it back after a mistake.</label>
     <div class="btns">
-      <button class="tbtn" id="plclear" title="asks first, then empties the queue; what is on the air now finishes and then the station picks its own">Clear the queue</button>
+      <button class="tbtn" id="pldl">Download</button>
+      <button class="tbtn" id="plul">Upload</button>
+      <input id="plulfile" type="file" accept="application/json,.json" hidden>
     </div>
+    <div class="status"><span class="when">Downloading takes the playlist selected above. Uploading writes the tracks in the file into the playlist selected above, replacing what was in it &mdash; the name inside the file is ignored, no other playlist changes, and nothing reaches the air until you press Send to the queue.</span></div>
     <div class="err" id="plerr"></div>
-  </details>
-
-  <div class="panel">
-    <button id="rec">Start talking</button>
-    <div class="meter"><i id="vu"></i></div>
-    <div class="status" id="status">ready</div>
-    <div class="err" id="err"></div>
-  </div>
-
-  <details class="panel" id="setup" hidden>
-    <summary id="devlabel">Microphone</summary>
-    <select id="dev" aria-label="Microphone"><option value="">default</option></select>
   </details>
 
   <details class="panel" id="eqwrap" open>
@@ -432,6 +465,11 @@
     <div class="status" id="capdrop"></div>
   </details>
 
+  <details class="panel" id="setup" hidden>
+    <summary id="devlabel">Microphone</summary>
+    <select id="dev" aria-label="Microphone"><option value="">default</option></select>
+  </details>
+
   <!-- A sound is both panels at once - the streaming settings above, which
        live on this device, and the voice settings, which live on the server -
        so a preset saves both together or it is not the sound that was tuned.
@@ -526,7 +564,7 @@
   // stacked, the oldest first and no way to tell which one was just earned.
   // Writing one clears the others - the last thing asked for is the only thing
   // still worth reading.
-  const SAY_ELS = ['presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr'];
+  const SAY_ELS = ['presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr'];
   function say(id, msg) {
     const el = $(id);
     if (!el) return;
@@ -2486,9 +2524,9 @@
   async function qCmd(path) {
     try {
       await qPost(path);
-      plErr('');
+      say('qerr', '');
     } catch (e) {
-      plErr('The queue did not change: ' + e.message);
+      say('qerr', 'The queue did not change: ' + e.message);
     }
     // Re-read either way. A refusal is exactly when the copy on screen is most
     // likely to be wrong about what is going to play.
@@ -2564,6 +2602,112 @@
     }
   });
 
+  // ----- one playlist, as one file ----------------------------------------
+  // The same bargain the preset export above makes, for the other kind of
+  // thing this page keeps: the file holds exactly one playlist, and putting
+  // it back touches exactly one key in playlists.json. It is deliberately a
+  // second export rather than a shared one - a preset is settings and a
+  // playlist is tracks, the two will want to change version independently,
+  // and all they actually have in common is the stamp on the filename, which
+  // is why stampNow() and ioSafe() are borrowed from up there and nothing
+  // else is.
+  //
+  // Nothing here reaches the air. An upload writes the playlist file and
+  // stops; the tracks play when somebody presses Send to the queue.
+  const PLIO_VERSION = 1;
+
+  $('pldl').addEventListener('click', () => {
+    // The list says which one, and nothing picked is an error rather than a
+    // guess at the first: the same rule the preset download follows, and for
+    // the same reason - a download of the wrong list is discovered weeks
+    // later by whoever tries to restore from it.
+    const nm = plName();
+    if (!nm) return plErr('Pick a playlist in the list above first.');
+    // From the file rather than from the screen, so what is exported is what
+    // is actually saved under that name.
+    const list = playlists[nm];
+    if (!Array.isArray(list))
+      return plErr('There is no playlist called "' + nm + '".');
+    const bundle = {
+      version: PLIO_VERSION,
+      kind: 'wildnloyal-host-playlist',
+      saved: new Date().toISOString(),
+      who: ($('whoami').textContent || '').trim(),
+      name: nm,
+      // As stored: id, title and artist. The numbering on screen is drawn
+      // from the order and is not part of a row.
+      tracks: list
+    };
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'wildnloyal-radio-host-playlist-' + ioSafe(nm) + '-' + stampNow() + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    plSay('downloaded ' + a.download);
+  });
+
+  $('plul').addEventListener('click', () => $('plulfile').click());
+  $('plulfile').addEventListener('change', async () => {
+    const f = $('plulfile').files && $('plulfile').files[0];
+    $('plulfile').value = '';       // so the same file can be picked twice
+    if (!f) return;
+    let b;
+    try { b = JSON.parse(await f.text()); }
+    catch (e) { return plErr('That is not a playlist file: ' + e.message); }
+    if (!b || typeof b !== 'object') return plErr('That file has nothing in it.');
+    // Refuse a shape from the future rather than half-reading it.
+    if (b.version > PLIO_VERSION) {
+      return plErr('That file was written by a newer version of this page (' +
+                   b.version + '). Not applying it.');
+    }
+    if (!Array.isArray(b.tracks)) return plErr('There are no tracks in that file.');
+    if (b.tracks.length > PLAY_TRACKS) {
+      return plErr('That file holds ' + b.tracks.length + ' tracks and a playlist takes ' +
+                   PLAY_TRACKS + '. Not applying it.');
+    }
+    // Every row is checked before any of them is kept. A file written by hand
+    // or by another tool can carry a row with no id, and the id is the only
+    // part of a row that can find the file again - so a bad row is refused by
+    // number here, rather than written and discovered when the list is sent
+    // and one track in the middle of it silently does not play.
+    const rows = [];
+    for (let i = 0; i < b.tracks.length; i++) {
+      const t = b.tracks[i];
+      if (!t || typeof t !== 'object' || typeof t.id !== 'string' || !t.id)
+        return plErr('Track number ' + (i + 1) + ' in that file has no id. Not applying it.');
+      rows.push({ id: t.id, title: t.title || '', artist: t.artist || '' });
+    }
+    // The list decides where it lands. The name inside the file is discarded -
+    // it is only shown, so that replacing "friday set" with a file called
+    // "dj warmup" says both names out loud instead of leaving it to coincidence.
+    const target = plName();
+    if (!target) return plErr('Pick the playlist to replace, in the list above.');
+    const from = (b.name || '').trim();
+    const when = b.saved ? (' from ' + String(b.saved).slice(0, 16).replace('T', ' ')) : '';
+    const had = playlists[target];
+    if (!confirm('Replace the playlist "' + target + '" and the ' +
+                 (Array.isArray(had) ? had.length : 0) + ' tracks in it with the ' +
+                 rows.length + ' in this file' +
+                 (from && from !== target ? ', saved as "' + from + '"' : '') + when +
+                 '?\n\nNo other playlist changes, the queue is not touched, and nothing ' +
+                 'reaches the air until you press Send to the queue.')) {
+      return plSay('nothing changed');
+    }
+    const btn = $('plul');
+    busy(btn, true);
+    // Read-modify-write on the map: one key changes and every other playlist
+    // rides through untouched. The copy goes back exactly as it was if the
+    // write did not land, which is the shape plnew and pldel above use.
+    playlists[target] = rows;
+    try {
+      if (await plPut('"' + target + '" replaced from a file' + when + ' \u2014 ' +
+                      rows.length + ' tracks. Nothing is playing yet; press Send to the queue.'))
+        plDraw(target);
+      else playlists[target] = had;
+    } finally { busy(btn, false); }
+  });
+
   $('plclear').addEventListener('click', async e => {
     const b = e.currentTarget;
     if (b.classList.contains('busy')) return;
@@ -2585,11 +2729,11 @@
   function qWatch() {
     clearInterval(qTimer);
     qTimer = 0;
-    if (!$('plwrap').open) return;
+    if (!$('queuewrap').open) return;
     qLoad();
     qTimer = setInterval(qLoad, QUEUE_WAIT);
   }
-  $('plwrap').addEventListener('toggle', qWatch);
+  $('queuewrap').addEventListener('toggle', qWatch);
 
   async function loadPlaylists() {
     try {
