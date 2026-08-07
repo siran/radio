@@ -1095,11 +1095,30 @@ end
 # over the likes. Derived rather than kept in a counter of its own on purpose:
 # a running total is one more thing that can drift out of step with the map,
 # and there is nothing to gain, since bump() already walks the same list.
+# `elapsed` and `duration` ride along here because this is the one endpoint the
+# public page is allowed to ask. Everything under /control/ sits behind the
+# speaker password, and the listener page has no credential at all - so without
+# this it could only guess the position, by timing from when it happened to
+# notice the title change. That guess is right for someone who was already
+# listening and too small for everyone who arrived mid-song, which is the half
+# of the audience most likely to wonder.
+#
+# Cheap: both read the position of the frame being played, not the file. They
+# are estimates by their own documentation and by their nature - a variable
+# bitrate file does not know its own length precisely - so the page should say
+# roughly and not to the second.
+#
+# Negative means unknown, which is what a source with no length answers, and it
+# is passed through as it comes rather than turned into a zero. A zero would be
+# a duration this station was confident about and wrong, where a negative is
+# the source saying it does not know.
 def likes_state() =
   p = current_file()
-  { id    = if p == "" then "" else string.digest(p) end,
-    likes = like_count(p),
-    total = list.fold(fun (n, kv) -> n + snd(kv), 0, likes()) }
+  { id       = if p == "" then "" else string.digest(p) end,
+    likes    = like_count(p),
+    total    = list.fold(fun (n, kv) -> n + snd(kv), 0, likes()),
+    elapsed  = source.elapsed(library),
+    duration = source.duration(library) }
 end
 
 def like_endpoint(act) =
