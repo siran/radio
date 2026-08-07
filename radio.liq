@@ -1554,9 +1554,21 @@ narrator_file = "C:/Users/an/src/radio/live/narrator.json"
 # What to say when the station has no idea what it is playing. About one track
 # in seven of this library is untagged, and saying nothing sounds like
 # something broke rather than like a radio.
-# `ident` in narrator.json. Read at startup like the two knobs above, but
-# unlike them there is no dial for it: this one only changes on a restart.
-mystery = ncfg.ident ?? "this mystery song is yet to be tagged... we hope you enjoyed..."
+# `ident` in narrator.json. Read FRESH each time it is needed rather than once
+# at startup, so saving it on the narrator page changes what the next untagged
+# track is called instead of waiting for a restart. It is the only narrator
+# setting with no dial of its own, so a restart was the only way to apply it.
+#
+# Cheap enough to do this way: it reads one small file, and only on a track
+# whose title is empty - about one in seven - rather than on every frame. And
+# safe enough: narrator_cfg() is already wrapped, so a missing or half-written
+# file falls through to the sentence below rather than throwing. That matters
+# more here than it looks, because this is reached from a metadata callback,
+# and a throw inside one of those kills it silently and titles stop reaching
+# icecast while the music plays on.
+def mystery() =
+  narrator_cfg().ident ?? "this mystery song is yet to be tagged... we hope you enjoyed..."
+end
 
 # And what the STREAM says it is playing when the file has no title. Sending
 # nothing is not neutral: icecast keeps displaying whatever it was last told,
@@ -1608,7 +1620,7 @@ pending_outro = ref("")
 # moments; a name fits both, which is what makes one setting enough.
 def spoken_name(m) =
   t = string.trim(m["title"])
-  if t == "" then mystery else t end
+  if t == "" then mystery() else t end
 end
 
 def intro_words(m) =
