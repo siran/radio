@@ -214,16 +214,56 @@ while ($true) {
                 $rows = @()
                 if (Test-Path $hist) {
                     $raw = Get-Content $hist -Raw
-                    if ($raw -and $raw.Trim()) { $rows = @(ConvertFrom-Json $raw) }
+                    if ($raw -and $raw.Trim()) {
+                        # Land the parse in a variable before wrapping it. PowerShell
+                        # 5.1's ConvertFrom-Json writes a top-level JSON array to the
+                        # pipeline as ONE object rather than a row at a time, so
+                        # @(ConvertFrom-Json $raw) collects a single item - the array
+                        # itself - and yields an array holding an array. Measured on
+                        # this machine: for a two-row file @(ConvertFrom-Json $raw)
+                        # has Count 1 and its element is an Object[], while assigning
+                        # first and then @($parsed) has Count 2 of PSCustomObject.
+                        # Reading it the wrong way is what put each previous ledger in
+                        # at position 1 of the new one, which ConvertTo-Json renders
+                        # as {"value":[...],"Count":n} - a wrapper deeper per
+                        # announcement. The -Depth 4 below was never the problem; a
+                        # flat ledger is only two levels and serialises the same at
+                        # any depth from 2 up.
+                        $parsed = ConvertFrom-Json $raw
+                        $rows   = @($parsed)
+                    }
                 }
                 $row  = [pscustomobject]@{
                     t    = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
                     text = $text
                 }
-                $rows = @($row) + @($rows | Where-Object { $_ -and $_.text -ne $text })
+                # Dedupe on the words, and drop anything with no text while we are
+                # here. Empty text never gets this far - it is binned up at the top of
+                # the loop - so a row without text can only be one of the
+                # {"value":...,"Count":...} wrappers the bug above already wrote, and
+                # the /narrator page cannot show those anyway. That makes the next
+                # announcement flatten the file that is on disk now, with no separate
+                # repair step.
+                $rows = @($row) + @($rows | Where-Object { $_ -and $_.text -and $_.text -ne $text })
                 if ($rows.Count -gt 200) { $rows = $rows[0..199] }
                 [IO.File]::WriteAllText($hist, (ConvertTo-Json @($rows) -Depth 4), $utf8)
-            } catch { }
+            }
+            catch {
+                # Say WHY, the same way the render failure below does: a stamped line
+                # in a file beside the wav. ".ledger-err" is not an audio extension
+                # and not a text one either, so neither the pickup nor this loop looks
+                # at it. It carries the words as well as the message, because the .txt
+                # is deleted a few lines down and the ledger was the only other copy.
+                #
+                # What it deliberately does not do is rethrow. The wav is rendered and
+                # renamed by now - it is already on the air - and the outer catch would
+                # rename the source to .failed as though nothing had been said. An
+                # unwritten ledger is a lost line; a rethrow here would be a lost
+                # broadcast, which is worse. The file is the alarm.
+                $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                $why   = "$stamp  history.json not written: $($_.Exception.Message)`r`n$text"
+                [IO.File]::WriteAllText("$wav.ledger-err", $why, $utf8)
+            }
 
             Remove-Item $f.FullName -Force
             Remove-Item "$wav.err" -Force -ErrorAction SilentlyContinue
