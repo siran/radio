@@ -368,6 +368,11 @@
     <div class="btns">
       <button class="tbtn" id="pressave" title="save both halves of your sound under the typed name">Save this sound</button>
     </div>
+    <!-- Directly under the button that causes it. It used to sit at the foot of
+         the panel, past the list, the Load and Delete buttons and the whole
+         import and export row - so the answer to a press appeared somewhere the
+         eye was not, and reported success to nobody. -->
+    <div class="status" id="presmsg"></div>
 
     <label for="preslist"><span class="band">Your saved sounds</span> &mdash; pick one, then Load</label>
     <select id="preslist" aria-label="Saved presets"></select>
@@ -384,7 +389,6 @@
     </div>
     <div class="status"><span class="when">Downloading takes the sound selected above. Uploading saves the one in the file under the name in the box, replacing only that one &mdash; nothing else you have saved changes, and nothing reaches the air until you press Load.</span></div>
     <div class="status" id="iomsg"></div>
-    <div class="status" id="presmsg"></div>
     <div class="err" id="preserr"></div>
   </details>
 
@@ -434,9 +438,20 @@
   // through say(), so none of them can be silently overwritten again.
   const SAY_MS = 3500;
   let sayUntil = 0;
+  // The panel has three lines that can hold an answer, and they were
+  // accumulating: a save, then an upload, then a delete left three sentences
+  // stacked, the oldest first and no way to tell which one was just earned.
+  // Writing one clears the others - the last thing asked for is the only thing
+  // still worth reading.
+  const SAY_ELS = ['presmsg', 'iomsg', 'preserr'];
   function say(id, msg) {
     const el = $(id);
     if (!el) return;
+    for (const other of SAY_ELS) {
+      if (other === id) continue;
+      const e = $(other);
+      if (e) { e.textContent = ''; e.classList.remove('said'); }
+    }
     el.textContent = msg;
     sayUntil = Date.now() + SAY_MS;
     // restart the highlight even when the same element is written twice
@@ -1453,7 +1468,7 @@
   const PRES_NAME = /^[A-Za-z0-9 _-]{1,24}$/;
   let presets = {};
 
-  const presErr = m => { $('preserr').textContent = m; };
+  const presErr = m => say('preserr', m);
   const presSay = m => say('presmsg', m);
 
   function presDraw() {
