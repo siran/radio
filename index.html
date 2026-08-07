@@ -74,42 +74,89 @@
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* The button is the record. A dark disc of grooves, a light label in the
-     middle for the glyph to stand on, and one bright glint across the vinyl.
-     The glint is the only asymmetric mark on the disc and therefore the only
-     reason the turning is visible at all, because concentric grooves in motion
-     look exactly like concentric grooves at rest. It takes four and a half
-     seconds to come round, far slower than a real record, because at 62px
-     anything near the real speed stops reading as a record and starts reading
-     as the loading ring above, which means something else entirely and can
-     follow it within the same press. The disc has to paint under the glyph and
-     over the button background, which is what the stacking context is for. */
+  /* The button is the record, and this station plays dub and psychedelia rather
+     than notification sounds, so the disc is a picture disc pressed on coloured
+     vinyl instead of a plain black one. It is five background layers, listed in
+     the order the background property wants them, topmost first, which is the
+     reverse of the order anyone would describe them in.
+
+     The label in the middle is opaque cream with a hot pink rim, and it is the
+     only part of this that is not allowed to be interesting: the glyph is a
+     fixed dark colour in both themes and it stands on this and nothing else, so
+     whatever happens to the rest of the disc the middle of it stays pale. Then
+     the glint, one soft streak of white that fades up and back down again
+     rather than starting at full brightness, because a hard edge on a wedge of
+     white reads as a bite taken out of the disc rather than light landing on
+     it. Then the grooves, a ring of near-black just over a pixel wide followed
+     by the same again of barely-there white, repeating every 2.6px, which is
+     about a dozen grooves across a 62px face and the finest that survives being
+     that small. Then the layer that decides where the light falls at all: a
+     wheel of near-black that thins almost to nothing twice, so the colour comes
+     up in two lobes on opposite sides and the rest of the face stays vinyl.
+     That is what keeps the disc dark enough for a white loading ring to land on
+     it and still be the brightest thing there, and it is also the asymmetry
+     that makes the turning legible, because grooves in motion look exactly like
+     grooves at rest. Underneath all of it is the colour itself, one turn of
+     saturated hue, started sixty degrees off the glint so the brightest part of
+     the sweep is not permanently parked on the same hue.
+
+     It comes round in four and a half seconds, which is far slower than a real
+     record and is left exactly as it was: at 62px anything near the real speed
+     stops reading as a record and starts reading as the loading ring above,
+     which means something else entirely and can follow it within the same
+     press. The hue drift is twenty-one seconds, which is not a multiple of the
+     spin, so the two only come back into step once every sixty-three seconds
+     and the disc is rarely quite where it was last looked at. Both are a
+     transform and a filter on one 62px pseudo-element, so neither costs a
+     layout and the repaint is the size of a thumbnail. The disc has to paint
+     under the glyph and over the button background, which is what the stacking
+     context is for. */
   button.play { isolation: isolate; }
   button.play::before {
     content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: -1;
     background:
-      radial-gradient(circle closest-side, #edece9 0 46%, transparent 46%),
-      conic-gradient(from 212deg, rgba(255,255,255,.22) 0deg,
-                     rgba(255,255,255,0) 36deg, rgba(255,255,255,0) 360deg),
-      repeating-radial-gradient(circle closest-side, #23232b 0 1px, #0d0d11 1px 4px);
+      radial-gradient(circle closest-side, #f2efe4 0 40%, #ded7c4 40% 43.5%,
+                      #ff2f87 43.5% 46%, transparent 46%),
+      conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.42) 16deg,
+                     rgba(255,255,255,.10) 30deg, rgba(255,255,255,0) 46deg,
+                     rgba(255,255,255,0) 360deg),
+      repeating-radial-gradient(circle closest-side, rgba(0,0,0,.58) 0 1.2px,
+                                rgba(255,255,255,.07) 1.2px 2.6px),
+      conic-gradient(from 24deg, rgba(9,9,14,.97) 0deg, rgba(9,9,14,.16) 58deg,
+                     rgba(9,9,14,.97) 132deg, rgba(9,9,14,.97) 198deg,
+                     rgba(9,9,14,.10) 248deg, rgba(9,9,14,.97) 322deg,
+                     rgba(9,9,14,.97) 360deg),
+      conic-gradient(from 190deg, #ff2f87, #ff8a2b, #f2e04a, #4cf07a,
+                     #22d3ee, #6d7bff, #c04dff, #ff2f87);
   }
-  button.play.spinning::before { animation: spin 4.5s linear infinite; }
+  button.play.spinning::before { animation: spin 4.5s linear infinite, drift 21s linear infinite; }
+  @keyframes drift { to { filter: hue-rotate(360deg); } }
   /* The ring is a two pixel arc and can afford to merely slow down. The record
-     is the whole face of the button turning, which is a great deal more motion,
-     so it stops outright. Neither is reached by the universal animation kill at
-     the foot of this sheet, because * does not match pseudo-elements. */
+     is the whole face of the button turning and its colour crawling underneath,
+     which is a great deal more motion, so both stop outright - one animation
+     shorthand set to none takes the spin and the drift together. Neither is
+     reached by the universal animation kill at the foot of this sheet, because
+     * does not match pseudo-elements. */
   @media (prefers-reduced-motion: reduce) {
     button.play.loading::after { animation-duration: 2.4s; }
     button.play.spinning::before { animation: none; }
   }
-  /* The counter goes under the button rather than beside it so the row keeps
-     its shape on a phone: the deck is a column no wider than the 62px button,
-     and while nothing is playing the counter is absent rather than sitting
-     there at zero, so the row is exactly the height it has always been. */
+  /* The counters go under the button rather than beside it so the row keeps its
+     shape on a phone: the deck is a narrow column and the slider takes whatever
+     is left of the row, and while nothing is playing both counters are absent
+     rather than sitting there at zero. The track label is the widest thing in
+     the column and therefore the thing that sets its width, so it is held to
+     one line: wrapped over two it stops reading as a caption under a button and
+     starts reading as a sentence someone expects you to stop and read. An
+     element hidden by the hidden attribute needs its display saying twice,
+     because the rule that lays it out is an author rule and beats the display
+     none the browser applies for the attribute. */
   .deck { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; }
   .clocks { font-size: .68rem; color: var(--dim); text-align: center; }
   .clocks b { display: block; color: var(--fg); font-weight: 550; font-size: .82rem;
               font-variant-numeric: tabular-nums; }
+  .clocks .ontrack { display: block; margin-top: 5px; white-space: nowrap; }
+  .clocks .ontrack[hidden] { display: none; }
   /* Pinned to the height of the button rather than centred in the row, so
      that the slider stays level with the record whether or not the counter
      underneath it is there. Centring would drop it half the height of the
@@ -225,7 +272,7 @@
       <div class="controls">
         <div class="deck">
           <button class="play" id="btn" disabled aria-label="Play or pause">▶</button>
-          <div class="clocks" id="clocks" hidden>listening<b id="listened">0:00</b></div>
+          <div class="clocks" id="clocks" hidden>listening<b id="listened">0:00</b><span class="ontrack" id="ontrack" hidden>this track<b id="intotrack">0:00</b></span></div>
         </div>
         <div class="vol">
           <span aria-hidden="true">🔉</span>
@@ -318,10 +365,42 @@
   // on a number that has stopped being true. This is the only clock this page
   // can honestly keep. It knows nothing about where the track on the air began,
   // only when this browser started hearing it.
+  //
+  // The second counter is the track, and it is a floor rather than a
+  // measurement. titleSince is the moment this browser first saw the title
+  // change, which for someone who was already here is the moment the track
+  // started and for someone who arrived mid-song is the moment they arrived, so
+  // the figure is the track's elapsed time in the first case and something
+  // smaller in the second. The label says at least for exactly that reason: the
+  // song has been on this long and possibly longer is true either way round,
+  // and it is the most this page can claim without asking the server a question
+  // it has no credential to ask. It is also why the counter says nothing at all
+  // until a title has actually arrived - titleSince is set at page load, and
+  // before the first poll answers it would be timing the wait for the stream
+  // and calling it music.
   let listenSince = null;
+  // What the station last said about the track, and when it said it.
+  let trackElapsed = 0, trackTotal = 0, trackAt = null;
   function tick() {
     if (listenSince === null) { $('clocks').hidden = true; return; }
     $('listened').textContent = mmss((Date.now() - listenSince) / 1000);
+    // The station's own position, not this page's guess at it. /likes/now
+    // answers with elapsed and duration off the frame being played, so this is
+    // right for someone who arrived mid-song too - the guess from when this
+    // browser first saw the title change never could be. Carried forward
+    // between polls by the wall clock so the seconds move every second rather
+    // than in jumps.
+    if (trackAt === null) { $('ontrack').hidden = true; }
+    else {
+      const on = trackElapsed + (Date.now() - trackAt) / 1000;
+      // A negative duration is the source saying it does not know the length,
+      // which is what a live input answers. Then there is a position and no
+      // total, and showing one without the other is the honest half.
+      $('intotrack').textContent = trackTotal > 0
+        ? mmss(on) + ' of ' + mmss(trackTotal)
+        : mmss(on);
+      $('ontrack').hidden = false;
+    }
     $('clocks').hidden = false;
   }
 
@@ -826,11 +905,24 @@
     $('likeHeart').textContent = mine ? '\u2665' : '\u2661';
     $('likeBtn').disabled = mine;
     $('likerow').hidden = false;
+    // Same response, same track: the position rides along with the likes
+    // because this is the one endpoint a page with no password may ask.
+    if (typeof j.elapsed === 'number') {
+      trackElapsed = j.elapsed;
+      trackTotal = typeof j.duration === 'number' ? j.duration : 0;
+      trackAt = Date.now();
+    }
   }
 
   async function pollLikes() {
     try { showLikes(await (await fetch('/likes/now', { cache: 'no-store' })).json()); }
-    catch { $('likerow').hidden = true; }
+    catch {
+      $('likerow').hidden = true;
+      // Stop rather than keep counting from the last thing it was told. A
+      // position that goes on climbing after the station stopped answering is
+      // a number this page has no right to.
+      trackAt = null;
+    }
   }
 
   $('likeBtn').addEventListener('click', async () => {
