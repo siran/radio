@@ -319,14 +319,106 @@ def now_playing() =
   }
 end
 
+# --- the playlist queue ----------------------------------------------------
+# A list of tracks the operator builds up, which plays through to the end
+# before the shuffle comes back. It is not a source of its own. It lives
+# inside the playlist's OWN queue - the same queue again() and previous() just
+# below have always written to - so a queued track is a library track in every
+# way that matters: skip, previous, repeat, the likes button, the intro and the
+# outro all hang off `library`, and every one of them keeps working without
+# knowing this exists. The obvious alternative, a request.queue of its own put
+# in front of the shuffle with a fallback, was rejected for exactly that. It
+# would have put a second source on the air that library.current(),
+# library.skip() and the two library.on_position hooks cannot see, so /control/
+# now, /likes/now, the skip button, the previous button and the outro would
+# each have needed to ask which of the two sources is playing, and this build
+# offers no way to ask a fallback that.
+#
+# Every request put in that queue on the operator's behalf carries an
+# annotation, and that is what tells his list apart from the ONE request the
+# playlist keeps prefetched in the same queue. Measured on this build:
+# prefetch is 1, that prefetched request really is in queue(), and the playlist
+# tops the queue back up only once the last of ours has left it - so the list
+# plays through in the order it was built, and the shuffle resumes behind it
+# with nothing spliced in and with no gap, because it is the same source that
+# was playing all along.
+#
+# The annotation rides in the URI and never in the filename. Measured rather
+# than assumed: a request made from "annotate:queued=...:D:/Music/x.mp3"
+# reports the plain path as its filename, so history, the likes digest,
+# track_name and the announcer all see exactly what they saw before.
+queue_mark = "annotate:queued=\"1\":"
+
+def queued_uri(p) =
+  queue_mark ^ p
+end
+
+def is_queued(r) =
+  string.index(substring = queue_mark, request.uri(r)) == 0
+end
+
+# The list as it stands, read back out of the queue rather than held beside it.
+# There is nothing here that can drift: the playlist takes an entry out of the
+# queue at the moment it starts playing it, so what is left IS what is still to
+# come.
+def pending_paths() =
+  list.map(request.filename, list.filter(is_queued, library.queue()))
+end
+
+# Replace the playlist's queue. It cannot be edited in place, and that was
+# measured rather than assumed: set_queue re-resolves every request it is
+# handed, a request that is already in that queue fails to re-resolve, and one
+# that fails is dropped without a word - three appends in a row, each one
+# handing back the requests already there, left one entry and not three. So
+# every entry has to be made fresh from its path each time the list changes,
+# which is why this takes uris rather than requests. Everything that was in the
+# queue is orphaned by that and is destroyed here, and that is also the leak
+# the three callers below have always had: each hands set_queue the playlist's
+# own prefetched request, which has been silently dropped and never destroyed
+# ever since.
+#
+# The resolving happens HERE, before set_queue, and that is the difference
+# between this being safe on the air and not. set_queue empties the queue
+# before it fills it and it resolves as it fills, so a track ending inside that
+# window finds the playlist with nothing ready and mksafe covers the hole with
+# silence. Measured on this build, rewriting a five-deep queue every 0.4s for
+# ninety seconds across thirty track boundaries: three switches to safe_blank
+# when set_queue does the resolving, and not one when it is done first, because
+# by then set_queue has nothing left to do but swap a list. An entry that fails
+# to resolve is dropped by set_queue and so simply is not in the list that
+# comes back, which is why the only caller that can add an unheard-of path
+# checks it first.
+#
+# The queue is read for destroying AFTER the resolving and not before, which
+# looks like a detail and is not. Resolving lets go of the runtime lock, so a
+# track can end while it runs; a request read before that and destroyed after
+# could by then be the one on the air, and a destroyed request is one
+# current_file() reports as "" - the operator would watch "now playing" go
+# blank for the rest of a song that is audibly still playing. Read this late,
+# the only gap left is the set_queue call itself, which by now has nothing to
+# do but swap a list.
+def requeue(uris) =
+  fresh = list.map(request.create, uris)
+  list.iter(fun (r) -> ignore(request.resolve(content_type = library, r)), fresh)
+  old = library.queue()
+  library.set_queue(fresh)
+  list.iter(request.destroy, old)
+end
+
 # Play the current track once more: a fresh request for the same file, put at
 # the FRONT of the playlist's queue. `library.add` is the obvious call and it
 # is the wrong one - it appends BEHIND whatever the playlist has already
 # prefetched, so the repeat would land a track late.
+#
+# The pending list is rebuilt behind it rather than left alone, because
+# set_queue would otherwise drop the lot: repeat re-queues once per track, so
+# without this a queue the operator had built would be gone within one song of
+# the repeat button going on. The repeated file is NOT annotated, so it plays
+# before the list without appearing in it - it is not something he put there.
 def again() =
   f = current_file()
   if f != "" then
-    library.set_queue(list.add(request.create(f), library.queue()))
+    requeue(list.add(f, list.map(queued_uri, pending_paths())))
     log.important(label = "control", "playing again: #{f}")
   end
 end
@@ -362,7 +454,10 @@ end
 # Play what finished last, immediately. Same front-of-queue trick as again()
 # above - and the same reason for it: library.add appends BEHIND whatever the
 # playlist has already prefetched, so the track would arrive one late. The skip
-# is what makes it now rather than after the current song.
+# is what makes it now rather than after the current song. It rebuilds the
+# pending list behind itself for the reason recorded at again(), and like
+# again() the file it puts in front is not annotated, so walking backwards does
+# not write itself into the operator's list.
 #
 # The entry is consumed, so pressing previous repeatedly walks backwards
 # instead of bouncing between two tracks. A replayed track goes back on the
@@ -375,7 +470,7 @@ def previous() =
     history := list.tl(h)
     if f != "" then
       rewinding := true
-      library.set_queue(list.add(request.create(f), library.queue()))
+      requeue(list.add(f, list.map(queued_uri, pending_paths())))
       library.skip()
       log.important(label = "control", "previous: #{f}")
     end
@@ -663,13 +758,141 @@ end
 # searched before a rescan dropped the file, and answering 500 to that would
 # take a page down over nothing: it does nothing at all and reports the state
 # as it stands.
+#
+# This is the same list /control/queue below hands back, entered at the front
+# rather than at the end, and that is on purpose: "play this next" and "put
+# this at the end of the list" are two positions in one queue, not two queues.
+# The track is annotated like any other entry, so a console that slips one in
+# next sees it appear at the head of the pending list rather than watching a
+# track it cannot account for arrive out of nowhere.
 def enqueue(tid, jump) =
   p = path_of_id(tid)
   if p != "" then
-    library.set_queue(list.add(request.create(p), library.queue()))
+    requeue(list.map(queued_uri, list.add(p, pending_paths())))
     if jump then library.skip() end
     how = if jump then "playing now" else "queued next" end
     log.important(label = "control", "#{how}: #{p}")
+  end
+end
+
+# One pending entry as a console shows it. Exactly the shape a /control/search
+# row has, minus the `match` that only a query gives meaning to, so a page can
+# draw a search hit and a queue entry with the same code. The path does not go
+# out, for the reason recorded at the index above; `id` is the same digest
+# search and /likes/now already use, so a page can tell that the third thing in
+# the queue is the track it just added.
+def queue_row(r) =
+  p = request.filename(r)
+  m = request.metadata(r)
+  n = track_name(m["title"], m["artist"], p)
+  { id = string.digest(p), title = n.title, artist = n.artist }
+end
+
+# What all five of these answer with, so a page can act and redraw from one
+# response - the same idea as endpoint() and like_endpoint() above. `error` is
+# empty on success and is the whole reason this is not endpoint(): a queue is a
+# list the operator is building and reading back, so an entry that silently
+# fails to appear is a list that is quietly wrong, and it says so in the body
+# as well as in the status code.
+def queue_state(err) =
+  q = list.filter(is_queued, library.queue())
+  { error = err, total = list.length(q), queue = list.map(queue_row, q) }
+end
+
+# Append by id, and NOT by path: a client that could name a file could ask for
+# any file on the disk liquidsoap can read, which is the reason recorded at the
+# index above that the path never leaves this process. The id comes from
+# /control/search, which is where a list gets built in the first place.
+#
+# request.resolve is what makes "cannot play" a fact rather than a guess, and
+# it only tells the truth when it is given a content_type. Measured on this
+# build against a file the account cannot open: plain request.resolve returns
+# TRUE for it, because all it asks is whether the uri names a local file, and
+# the entry then vanishes when set_queue comes to decode it - a 200 and an
+# empty slot, which is exactly the silent nothing this must not do. With
+# content_type = library it returns false, the same false it returns for a path
+# the rescan has not caught up with, and the library logs which of the two it
+# was. It costs one content check, on a harbor thread, and reads of that kind
+# were measured further up to cost the streaming thread nothing because ffmpeg
+# lets go of the runtime lock while it waits on the disk. It is only a probe:
+# the entry it proves is then made again by requeue, because the list is held
+# as paths and rebuilt whole every time it changes.
+def queue_add(tid) =
+  p = path_of_id(tid)
+  if p == "" then
+    "no track with id #{tid}"
+  else
+    r = request.create(queued_uri(p))
+    ok = request.resolve(content_type = library, r)
+    request.destroy(r)
+    if ok then
+      requeue(list.map(queued_uri, list.append(pending_paths(), [p])))
+      log.important(label = "control", "queued last: #{p}")
+      ""
+    else
+      log.important(label = "control", "cannot queue: #{p}")
+      "cannot play the track behind #{tid}"
+    end
+  end
+end
+
+# The first entry with that id, because the same track queued twice is two
+# entries the operator cannot tell apart anyway and either one leaves him with
+# the one copy he asked for. Keyed by id and not by position, so a track
+# starting between drawing the list and clicking on it cannot silently shift
+# the click onto its neighbour: the entry is either still there or the answer
+# says it is not.
+def queue_remove(tid) =
+  ps = pending_paths()
+  i  = list.index(fun (p) -> string.digest(p) == tid, ps)
+  if i >= list.length(ps) then
+    "nothing in the queue with id #{tid}"
+  else
+    requeue(list.map(queued_uri,
+      list.append(list.slice(length = i, ps), list.slice(offset = i + 1, ps))))
+    log.important(label = "control", "unqueued: #{list.nth(ps, i)}")
+    ""
+  end
+end
+
+def queue_clear() =
+  requeue([])
+  log.important(label = "control", "queue cleared")
+  ""
+end
+
+# Reordering, which costs almost nothing once the list is held as paths: every
+# other call here already rebuilds the whole queue from them, so moving one is
+# the same rebuild in a different order. `pos` is the position it should end up
+# at, counted from zero within the pending list itself and not within the
+# playlist's queue, which also holds the one prefetched shuffle track and
+# whatever the repeat button has just put in front. It is not called `to`,
+# which reads better and does not parse - that word is taken by the range in a
+# for loop.
+def queue_move(tid, pos) =
+  ps = pending_paths()
+  n  = list.length(ps)
+  i  = list.index(fun (p) -> string.digest(p) == tid, ps)
+  if i >= n then
+    "nothing in the queue with id #{tid}"
+  elsif pos < 0 or pos >= n then
+    "#{pos} is not a position in a queue of #{n}"
+  else
+    rest = list.append(list.slice(length = i, ps), list.slice(offset = i + 1, ps))
+    requeue(list.map(queued_uri, list.insert(pos, list.nth(ps, i), rest)))
+    log.important(label = "control", "moved to #{pos}: #{list.nth(ps, i)}")
+    ""
+  end
+end
+
+def queue_endpoint(act) =
+  fun (req, response) -> begin
+    err = act(req)
+    if err != "" then
+      response.status_code(400)
+      log.important(label = "control", "queue: #{err}")
+    end
+    response.json(queue_state(err))
   end
 end
 
@@ -760,6 +983,18 @@ harbor.http.register(port = 8005, method = "GET", "/control/search",
   fun (req, response) -> response.json(search(req.query["q"])))
 harbor.http.register(port = 8005, method = "POST", "/control/enqueue",
   endpoint(fun (r) -> enqueue(r.query["id"], r.query["now"] == "true")))
+
+harbor.http.register(port = 8005, method = "GET", "/control/queue",
+  queue_endpoint(fun (_) -> ""))
+harbor.http.register(port = 8005, method = "POST", "/control/queue/add",
+  queue_endpoint(fun (r) -> queue_add(r.query["id"])))
+harbor.http.register(port = 8005, method = "POST", "/control/queue/remove",
+  queue_endpoint(fun (r) -> queue_remove(r.query["id"])))
+harbor.http.register(port = 8005, method = "POST", "/control/queue/clear",
+  queue_endpoint(fun (_) -> queue_clear()))
+harbor.http.register(port = 8005, method = "POST", "/control/queue/move",
+  queue_endpoint(fun (r) ->
+    queue_move(r.query["id"], int_of_string(default = -1, r.query["to"]))))
 
 # --- likes -----------------------------------------------------------------
 # Public, and deliberately with no notion of who is listening: a like is one
