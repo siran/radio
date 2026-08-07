@@ -129,15 +129,32 @@
      gap was silent, so a slow answer looked like a dead button and got pressed
      again - which on Skip is two tracks gone, not one. It now says working, and
      refuses the second press itself rather than trusting anyone not to make
-     it. */
-  .tbtn.busy { opacity:.55; cursor:progress; position:relative; }
-  .tbtn.busy::after {
+     it.
+
+     The talk button wears the same ring while a note is uploading and means
+     something different by it: it is not refusing anything, it is only saying
+     the note is still going out. That is why the selector is widened here
+     rather than a second ring being drawn - one ring, two meanings, and the
+     one in send() is written out where it is set. cursor:progress is the
+     honest half of the pair, since progress is busy and still usable where
+     wait is busy and not.
+
+     :not(.recording) is how the two states settle each other without either
+     one having to know the other exists. An upload still in flight when the
+     next note starts would otherwise dim and spin a button that is recording,
+     which is the one thing that button must always look like it is doing; and
+     when that note ends, the ring returns on its own if the upload is still
+     going. Neither begin() nor send() has to be told about the other. */
+  .tbtn.busy, #rec.busy:not(.recording) { opacity:.55; cursor:progress; position:relative; }
+  .tbtn.busy::after, #rec.busy:not(.recording)::after {
     content:''; position:absolute; right:5px; top:50%; width:9px; height:9px;
     margin-top:-5px; border-radius:50%; border:1.5px solid currentColor;
     border-top-color:transparent; animation:spin .7s linear infinite;
   }
   @keyframes spin { to { transform:rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .tbtn.busy::after { animation-duration:2.2s; } }
+  @media (prefers-reduced-motion: reduce) {
+    .tbtn.busy::after, #rec.busy:not(.recording)::after { animation-duration:2.2s; }
+  }
 </style>
 </head>
 <body>
@@ -846,13 +863,26 @@
               (bytes / 1024).toFixed(0) + ' kB of ' + Math.round(MAX_BYTES / 1024) + ' kB');
   }
 
+  // Nothing is said here on the way out, and that is deliberate. "sending your
+  // note" went through answer(), which holds the status line for three and a
+  // half seconds - long enough to cover the beginning of the NEXT note, since
+  // recording another one while this one uploads has always been allowed. So
+  // the timer for the note being spoken now was being replaced by a sentence
+  // about the note before it, and the line that had something to say lost to
+  // the line that did not. The button carries that news instead, in send(),
+  // which is where the upload actually is.
   function end(why) {
     if (!recording) return;
     recording = false;
     clearInterval(capTick);
     $('rec').textContent = 'Start talking';
     $('rec').classList.remove('recording');
-    answer('sending your note');
+    // Clear the line rather than write to it. tick() left "recording - 0:04"
+    // there and the microphone is now shut, so leaving it says something that
+    // is no longer true for as long as the upload takes. A message in its
+    // place would be the thing that was just removed; the ring on the button
+    // is the indicator, and an empty line is the honest amount to say.
+    setStatus('');
     if (why) fail(why);
     try { rec && rec.state !== 'inactive' && rec.stop(); } catch {}
   }
@@ -866,6 +896,12 @@
     $('devlabel').textContent = 'Microphone \u2014 which mic this phone records from';
     if (!quiet) setStatus('ready');
   }
+
+  // How many notes are on their way up. Counted rather than kept as a flag
+  // because two can be in flight at once - which is the entire point of the
+  // paragraph above end() - and the first one to settle would otherwise stop a
+  // ring the second has still earned.
+  let sending = 0;
 
   // The whole point: an ordinary upload with a length, not a live stream.
   async function send(blob, mime, secs) {
@@ -896,6 +932,15 @@
                  Math.random().toString(36).slice(2, 6) + '.' + extFor(mime);
     const li = { lastChild: {} };   // nothing to display; kept so send() reads plainly
 
+    // The button says the note is still going out. This is the same busy()
+    // the transport buttons use and it does NOT mean the same thing here: on
+    // Skip the class also refuses a second press, and refusing is most of why
+    // it is there. Here it guards nothing whatsoever. Recording the next note
+    // while this one uploads is what the operator asked for, end() has already
+    // handed the button back and its click handler never consults this class,
+    // so a press is taken the instant it arrives. The ring is news, not a door.
+    sending++;
+    busy($('rec'), true);
     try {
       const res = await fetch('/host/upload/' + name, {
         method: 'PUT',
@@ -920,6 +965,11 @@
       li.lastChild.textContent = 'failed';
       fail('Upload failed: ' + e.message);
       setStatus('not sent');
+    } finally {
+      // Both ways out, and only when the last note up is down: a rejection is
+      // as finished as an acceptance, and a button left spinning after either
+      // one would be the same lie in the other direction.
+      if (!--sending) busy($('rec'), false);
     }
   }
 
