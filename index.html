@@ -103,23 +103,42 @@
 
      The background layers are listed in the order the background property wants
      them, topmost first, which is the reverse of the order anyone would describe
-     them in. The glint is one soft streak of white that fades up and back down
-     again, because a hard edge on a wedge of white reads as a bite taken out of
-     the disc rather than light landing on it. On a black record the glint is
-     also most of what makes the turning legible, since grooves in motion look
-     exactly like grooves at rest. Then the run-out, the smooth dark band every
-     pressing has between the last groove and the paper. Its inner edge is
-     written as sixty-one per cent, which is the same number as the label's share
-     of the diameter, and that is not a coincidence to be tidied away: a
-     percentage in this gradient is a fraction of the disc's radius, and the
-     label's edge lies at exactly the label's fraction of it. Move one number
-     without the other and the smooth band stops meeting the paper. Then the
-     grooves, a ring of near-black just over a pixel wide followed by the same
-     again of barely-there white, repeating every 2.6px, which is the finest
-     pitch that survives at this size. Thirteen pixels of playing area are left
-     once the label has taken three fifths of the face and the run-out its band,
-     so there are five rings where there were ten. Five still reads as a series
-     of rings rather than as a texture, and it is the fewest that does.
+     them in. The glint used to be the first of them and is not here any more; it
+     is an element of its own now, below, because light from a lamp in the room
+     does not turn with the turntable. What makes the turning legible without it
+     is the label, which carries a word and a symbol and is unmistakably going
+     round; grooves in motion do look exactly like grooves at rest, but they were
+     never the only evidence.
+
+     So the first layer is the run-out, the smooth dark band every pressing has
+     between the last groove and the paper. Its inner edge is written as
+     sixty-one per cent, which is the same number as the label's share of the
+     diameter, and that is not a coincidence to be tidied away: a percentage in
+     this gradient is a fraction of the disc's radius, and the label's edge lies
+     at exactly the label's fraction of it. Move one number without the other and
+     the smooth band stops meeting the paper.
+
+     Then the grooves, and they are a ramp rather than a step. Thirteen pixels of
+     playing area are left once the label has taken three fifths of the face and
+     the run-out its band, and the ink used to step from near-black to a
+     barely-there white and back every 2.6px, which put five rings in those
+     thirteen. Simply tightening that step to fit seven did not produce seven
+     rings. A step edge carries a great deal of energy above its own pitch, and
+     once the pitch is down near the width of a pixel that energy folds back and
+     the ring field breaks into a speckled hatch, which was rendered at true size
+     and is not a subtle failure: it is worse than having no grooves. Written as a
+     ramp instead, from near-black up to the light of the groove at the halfway
+     point and back down, seven rings survive, because a ramp has almost nothing
+     above its own pitch left to fold. The white is carried heavier than it was to
+     recover the contrast a ramp gives away against a step, and the pitch and that
+     weight together hold the average brightness of the band within a couple of
+     levels out of two hundred and fifty-five of what the five ring pressing had,
+     which is what keeps the margin reading as black vinyl rather than as grey
+     card. This pitch is in pixels and not a fraction of --lp on purpose, unlike
+     everything else here: it was chosen against the raster the browser draws it
+     on, and a pitch that scaled with the record would land somewhere else on that
+     raster at every size and alias differently at each.
+
      Underneath is the vinyl, a shade lighter at the centre than at the rim so
      the face reads as a moulded object rather than a hole cut in the page.
 
@@ -139,17 +158,54 @@
     position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     background:
-      conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.34) 15deg,
-                     rgba(255,255,255,.08) 29deg, rgba(255,255,255,0) 44deg,
-                     rgba(255,255,255,0) 360deg),
       radial-gradient(circle closest-side, transparent 0 61%, #0f0f14 61% 69%, transparent 69%),
-      repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0 1.2px,
-                                rgba(255,255,255,.085) 1.2px 2.6px),
+      repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0,
+                                rgba(255,255,255,.12) .93px, rgba(0,0,0,.86) 1.86px),
       radial-gradient(circle closest-side, #26262f 0 26%, #16161c 60%, #08080b 100%);
     animation: spin 4.5s linear infinite;
     animation-play-state: paused;
   }
   button.play.spinning .lp-disc { animation-play-state: running; }
+  /* The highlight is light landing on the record, not something printed on it. A
+     specular reflection comes from a lamp somewhere in the room and a lamp does
+     not go round with the turntable, so the streak has to stay where it is while
+     the vinyl passes underneath. That is the whole of this element's job, and it
+     is why the glint is no longer one of the disc's own background layers, where
+     the same transform that turned the grooves turned the light as well and made
+     the spin read as a texture rotating rather than as a record catching the
+     light. Nothing here animates, so there is nothing here to freeze: the
+     highlight is in the same place at every angle, in every state, and while the
+     record is stopped, which is what a lamp that is not moving does.
+
+     It is a span rather than a pseudo-element because both of the button's are
+     effectively spoken for. ::after carries the loading ring. ::before is painted
+     before the element's children rather than after them, so a glint put there
+     would sit underneath the disc instead of on it and would need a z-index to
+     climb out, which would then have to be answered by a second z-index on the
+     ring to keep the ring on top of the light. One element written after the disc
+     lands above the disc and below the ring by tree order alone and needs
+     neither. It takes no pointer events, because the control is the whole button
+     and not any part of it, and it is hidden from the accessibility tree for the
+     same reason the disc is.
+
+     The mask keeps the light off the paper. A label is matte and takes no
+     specular sheen, and the shape of this particular highlight settles the
+     argument on its own: it is a conic wedge, so it narrows as it approaches the
+     middle, and any of it allowed over the label reads as a beam aimed at the
+     spindle hole rather than as a sheen across paper. A version at a third of the
+     strength was rendered and it still draws that line. Sixty-one per cent is the
+     label's share of the diameter once more, so the light stops exactly where the
+     paper starts. The mask is declared twice because Safari wanted the prefix
+     until 15.4 and this page is public; a browser that honours neither gets the
+     highlight across the label, which is wrong but is not broken. */
+  .lp-glint {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.34) 15deg,
+                               rgba(255,255,255,.08) 29deg, rgba(255,255,255,0) 44deg,
+                               rgba(255,255,255,0) 360deg);
+    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 61%, #000 62%);
+    mask-image: radial-gradient(circle closest-side, transparent 0 61%, #000 62%);
+  }
   /* The paper label. It is the only part of the record that is allowed to be a
      flat bright colour, because it is the only part that has to carry words: a
      word on grooves is unreadable at any size this button will ever be. PAUSE is
@@ -347,7 +403,7 @@
       </div>
       <div class="controls">
         <div class="deck">
-          <button class="play" id="btn" disabled aria-label="Play or pause"><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-word" id="btnword">PLAY</span><span class="lp-hole"></span><span class="lp-sym" id="btnsym">▶</span></span></span></button>
+          <button class="play" id="btn" disabled aria-label="Play or pause"><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-word" id="btnword">PLAY</span><span class="lp-hole"></span><span class="lp-sym" id="btnsym">▶</span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
           <div class="clocks" id="intotrack">--:-- / --:--</div>
         </div>
         <div class="vol">
