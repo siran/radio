@@ -57,6 +57,24 @@ else {
 
     New-Item -ItemType Directory -Force -Path (Join-Path $voice $clean) | Out-Null
     & icacls (Join-Path $voice $clean) /grant 'svc-radio:(OI)(CI)M' /Q | Out-Null
+
+    # Land flat: unity gain and every band at zero. A new host configures for
+    # their own equipment, so the station has no business guessing a curve for
+    # them - but it should not leave them on whatever `voice_gain` happens to
+    # be either. That knob is the fallback for a speaker with no file of their
+    # own, it is shared, and it has been anywhere from 1.0 to 12.0 in a single
+    # day; a host inheriting 12.0 arrives distorted and one inheriting 1.0
+    # arrives inaudible, and in both cases they would reasonably conclude the
+    # radio is broken rather than that they have a slider to move.
+    #
+    # Written with WriteAllText and a BOM-less encoder because liquidsoap reads
+    # this file raw and a BOM is not JSON, and created IN the folder so it
+    # inherits the ACL just granted rather than carrying one in.
+    $seed = Join-Path (Join-Path $voice $clean) 'settings.json'
+    if (-not (Test-Path $seed)) {
+        $flat = '{"gain":1,"duck":true,"eq":{"f100":0,"f200":0,"f400":0,"f800":0,"f1600":0,"f3150":0,"f6300":0}}'
+        [IO.File]::WriteAllText($seed, $flat, (New-Object Text.UTF8Encoding($false)))
+    }
 }
 
 # caddy writes its progress to stderr, which powershell turns into a

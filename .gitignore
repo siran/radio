@@ -44,6 +44,7 @@ messages/restart/
 # live station state, written by the desk and the narrator watcher. Not
 # source: it is whatever someone last tuned, and it changes hourly.
 config/desk.json
+config/narrator.json
 config/history.json
 config/limits.json
 
