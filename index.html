@@ -56,7 +56,7 @@
 
   .controls { display: flex; align-items: center; gap: 16px; }
   button.play { flex: none; width: 62px; height: 62px; border-radius: 50%; cursor: pointer;
-    border: none; background: var(--fg); color: var(--bg); font-size: 1.4rem;
+    border: none; background: #0d0d11; color: #16161b; font-size: 1.4rem;
     display: grid; place-items: center; transition: transform .12s ease; }
   button.play:hover:not(:disabled) { transform: scale(1.05); }
   button.play:disabled { opacity: .28; cursor: not-allowed; }
@@ -70,14 +70,52 @@
   button.play.loading { cursor: progress; }
   button.play.loading::after {
     content: ''; position: absolute; inset: 7px; border-radius: 50%;
-    border: 2px solid currentColor; border-top-color: transparent;
+    border: 2px solid #edece9; border-top-color: transparent;
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  /* The button is the record. A dark disc of grooves, a light label in the
+     middle for the glyph to stand on, and one bright glint across the vinyl.
+     The glint is the only asymmetric mark on the disc and therefore the only
+     reason the turning is visible at all, because concentric grooves in motion
+     look exactly like concentric grooves at rest. It takes four and a half
+     seconds to come round, far slower than a real record, because at 62px
+     anything near the real speed stops reading as a record and starts reading
+     as the loading ring above, which means something else entirely and can
+     follow it within the same press. The disc has to paint under the glyph and
+     over the button background, which is what the stacking context is for. */
+  button.play { isolation: isolate; }
+  button.play::before {
+    content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: -1;
+    background:
+      radial-gradient(circle closest-side, #edece9 0 46%, transparent 46%),
+      conic-gradient(from 212deg, rgba(255,255,255,.22) 0deg,
+                     rgba(255,255,255,0) 36deg, rgba(255,255,255,0) 360deg),
+      repeating-radial-gradient(circle closest-side, #23232b 0 1px, #0d0d11 1px 4px);
+  }
+  button.play.spinning::before { animation: spin 4.5s linear infinite; }
+  /* The ring is a two pixel arc and can afford to merely slow down. The record
+     is the whole face of the button turning, which is a great deal more motion,
+     so it stops outright. Neither is reached by the universal animation kill at
+     the foot of this sheet, because * does not match pseudo-elements. */
   @media (prefers-reduced-motion: reduce) {
     button.play.loading::after { animation-duration: 2.4s; }
+    button.play.spinning::before { animation: none; }
   }
-  .vol { flex: 1; display: flex; align-items: center; gap: 9px; color: var(--dim); }
+  /* The counter goes under the button rather than beside it so the row keeps
+     its shape on a phone: the deck is a column no wider than the 62px button,
+     and while nothing is playing the counter is absent rather than sitting
+     there at zero, so the row is exactly the height it has always been. */
+  .deck { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .clocks { font-size: .68rem; color: var(--dim); text-align: center; }
+  .clocks b { display: block; color: var(--fg); font-weight: 550; font-size: .82rem;
+              font-variant-numeric: tabular-nums; }
+  /* Pinned to the height of the button rather than centred in the row, so
+     that the slider stays level with the record whether or not the counter
+     underneath it is there. Centring would drop it half the height of the
+     counter every time playback started. */
+  .vol { flex: 1; align-self: flex-start; height: 62px;
+         display: flex; align-items: center; gap: 9px; color: var(--dim); }
   input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
   .narrator { margin-top: 8px; font-size: .8rem; color: var(--dim); line-height: 1.45; }
 
@@ -185,7 +223,10 @@
         <button type="button" class="vote" id="likeBtn" title="like this song" aria-label="like this song"><span id="likeHeart">&#9825;</span> <span id="likeCount">0</span></button>
       </div>
       <div class="controls">
-        <button class="play" id="btn" disabled aria-label="Play or pause">▶</button>
+        <div class="deck">
+          <button class="play" id="btn" disabled aria-label="Play or pause">▶</button>
+          <div class="clocks" id="clocks" hidden>listening<b id="listened">0:00</b></div>
+        </div>
         <div class="vol">
           <span aria-hidden="true">🔉</span>
           <input type="range" id="vol" min="0" max="100" value="85" aria-label="Volume">
@@ -195,7 +236,6 @@
       <div class="meta">
         <div>listeners <b id="listeners">–</b></div>
         <div>on air <b id="uptime">–</b></div>
-        <div id="likesWrap" hidden>total likes <b id="likesTotal">–</b></div>
       </div>
     </div>
 
@@ -269,16 +309,36 @@
     audio.load();
     return audio.play();
   }
+  // How long you have been listening. It starts when sound actually arrives
+  // rather than when the button is pressed, because waiting for a stream is not
+  // listening. A stall that recovers fires 'playing' a second time and must not
+  // reset the count, so the moment is recorded only when no session is already
+  // running. Pausing throws the stream away and the next press rejoins live, so
+  // that genuinely is a new session and the counter leaves rather than freezing
+  // on a number that has stopped being true. This is the only clock this page
+  // can honestly keep. It knows nothing about where the track on the air began,
+  // only when this browser started hearing it.
+  let listenSince = null;
+  function tick() {
+    if (listenSince === null) { $('clocks').hidden = true; return; }
+    $('listened').textContent = mmss((Date.now() - listenSince) / 1000);
+    $('clocks').hidden = false;
+  }
+
   // Three states, one place. 'loading' is set by the press itself and cleared
   // only by sound actually arriving, or by giving up - never on a timer, because
   // a timer would lie in whichever direction the network did not go.
   const GLYPH_PLAY = '▶', GLYPH_PAUSE = '❚❚';
   function setBtn(state) {
     btn.classList.toggle('loading', state === 'loading');
+    btn.classList.toggle('spinning', state === 'pause');   // the record turns only while sound is coming out
     btn.textContent = state === 'loading' ? '' :
                       state === 'pause'   ? GLYPH_PAUSE : GLYPH_PLAY;
     btn.setAttribute('aria-label', state === 'loading' ? 'Connecting to the stream' :
                                    state === 'pause'   ? 'Pause' : 'Play');
+    if (state === 'pause') { if (listenSince === null) listenSince = Date.now(); }
+    else if (state === 'play') listenSince = null;
+    tick();
   }
   btn.addEventListener('click', () => {
     if (audio.paused) {
@@ -743,18 +803,22 @@
   try { liked = JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { liked = []; }
   let likeId = '';
 
-  // The station-wide total, served alongside the per-song count. Until a
-  // response actually carries the field the slot stays out of the row
-  // entirely - a zero, or a dash, would each read as an answer.
-  function showTotal(j) {
-    const t = j && j.total;
-    if (t === undefined || t === null) return;
-    $('likesTotal').textContent = t;
-    $('likesWrap').hidden = false;
-  }
-
+  // The count belongs to the song on the air, not to the station: it is the
+  // number a listener can move, and it changes when the track does. The two
+  // places that carry it, the heart there is to press and the figure in the
+  // meta row, are written here from the same response, so a vote and a track
+  // change move both at once and neither can be caught telling a different
+  // story than the other. The response also carries a station-wide total of
+  // every like ever given to anything, which this page no longer shows: beside
+  // a number about this song it only muddied which of the two was which.
+  //
+  // One counter, and it is the heart. It was briefly written in two places at
+  // once, which cannot disagree - both are set here from the same response -
+  // but two copies of one number a hundred pixels apart is not reassurance,
+  // it is a question about whether they might ever differ. The count belongs
+  // on the thing you press to change it; the row below stays about the
+  // station, which is a different subject.
   function showLikes(j) {
-    showTotal(j);
     likeId = (j && j.id) || '';
     if (!likeId) { $('likerow').hidden = true; return; }
     const mine = liked.includes(likeId);
@@ -784,6 +848,7 @@
   setInterval(pollChat, 4000);
   setInterval(pollNarrator, 4000);
   setInterval(pollLikes, 5000);
+  setInterval(tick, 1000);
 })();
 </script>
 </body>
