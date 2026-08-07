@@ -233,9 +233,19 @@ while ($true) {
                         $rows   = @($parsed)
                     }
                 }
+                # Trimmed, and that is the whole of the dedupe working. The
+                # words arrive as the contents of a file, so they carry the
+                # trailing newline whoever wrote it ended with - and the say
+                # path adds one of its own on the way out. So "Say it again" on
+                # a row took its text, which already ended in a newline, put
+                # another on it, and came back here one character longer than
+                # the row it came from. Different words, by the only test this
+                # has, so it never matched and every replay minted another row.
+                # Observed: the same sentence at 34 characters and at 35, one
+                # newline apart, listed twice.
                 $row  = [pscustomobject]@{
                     t    = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
-                    text = $text
+                    text = $text.Trim()
                 }
                 # Dedupe on the words, and drop anything with no text while we are
                 # here. Empty text never gets this far - it is binned up at the top of
@@ -244,7 +254,7 @@ while ($true) {
                 # the /narrator page cannot show those anyway. That makes the next
                 # announcement flatten the file that is on disk now, with no separate
                 # repair step.
-                $rows = @($row) + @($rows | Where-Object { $_ -and $_.text -and $_.text -ne $text })
+                $rows = @($row) + @($rows | Where-Object { $_ -and $_.text -and $_.text.Trim() -ne $row.text })
                 if ($rows.Count -gt 200) { $rows = $rows[0..199] }
                 [IO.File]::WriteAllText($hist, (ConvertTo-Json @($rows) -Depth 4), $utf8)
             }
