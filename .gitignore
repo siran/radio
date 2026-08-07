@@ -35,6 +35,18 @@ cache/
 messages/voice/*
 !messages/voice/.keep
 
+# admin and restart requests, and the results written back. A result from a
+# mint carries a NEW SPEAKER'S PASSWORD in plain text for the ten minutes
+# before the watcher bins it, so this folder must never reach the remote.
+messages/admin/
+messages/restart/
+
+# live station state, written by the desk and the narrator watcher. Not
+# source: it is whatever someone last tuned, and it changes hourly.
+config/desk.json
+config/history.json
+config/limits.json
+
 # bcrypt hashes for each speaker - safe-ish, but it is a user list
 speakers.caddy
 admins.caddy
