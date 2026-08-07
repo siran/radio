@@ -10,11 +10,19 @@
     --bg: #0b0b0e; --panel: #131318; --line: #24242c;
     --fg: #ecebe8; --dim: #8b8b96; --accent: #4ade80;
     /* The diameter of the record, and through it the height of the volume row
-       and the width of the column under the button. A word has to be legible on
-       a label a third of this across, which is what decided the number: at the
-       62px this button used to be, PAUSE lands at about five pixels tall and is
-       a smudge rather than a word. */
-    --lp: 96px;
+       and the width of the column under the button. This number is no longer the
+       one chosen first. The play triangle is chosen first, at fourteen pixels
+       tall, which is the height of the triangle in a standard twenty-four pixel
+       play icon and so the size a play button is on anything else; the label is
+       then made wide enough to hold that triangle with the word above it; and
+       the vinyl is finally made only as wide as it has to be for the grooves
+       outside the label to still read as grooves, which takes about five of
+       them. Deciding in that order lands on eighty-four pixels, twelve less than
+       the ninety-six this used to be, while the triangle goes from six pixels
+       tall to fourteen. Shrinking it is not free: the counter below the button
+       is pinned to this width and does not scale with it, and 10:00 / 100:00
+       measures 71.7px, so there are twelve pixels in hand and no more to give. */
+    --lp: 84px;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
@@ -80,12 +88,18 @@
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* The button is the record, and the record is a twelve inch LP built the way
-     one looks: black vinyl carrying fine concentric grooves, a smooth run-out
-     ring where the grooves stop, a red paper label taking a bit over a third of
-     the face, and a spindle hole punched dead centre. Every measurement here is
-     a fraction of --lp, so changing the diameter changes the whole pressing
-     rather than leaving the label the wrong size for the disc it is glued to.
+  /* The button is the record, and the record is built the way one looks: black
+     vinyl carrying fine concentric grooves, a smooth run-out ring where the
+     grooves stop, a red paper label, and a spindle hole punched dead centre. The
+     label takes three fifths of the face here rather than the third a twelve
+     inch LP gives it, which is nearer the proportion of a seven inch single, and
+     it is that way round because the label has to carry a full sized play
+     triangle and a word above it. The record is built outward from those rather
+     than the label being handed whatever the disc had left over, which is how it
+     ended up with a six pixel triangle on a ninety-six pixel button. Every
+     measurement here is a fraction of --lp, so changing the diameter changes the
+     whole pressing rather than leaving the label the wrong size for the disc it
+     is glued to.
 
      The background layers are listed in the order the background property wants
      them, topmost first, which is the reverse of the order anyone would describe
@@ -94,10 +108,18 @@
      the disc rather than light landing on it. On a black record the glint is
      also most of what makes the turning legible, since grooves in motion look
      exactly like grooves at rest. Then the run-out, the smooth dark band every
-     pressing has between the last groove and the paper. Then the grooves, a ring
-     of near-black just over a pixel wide followed by the same again of
-     barely-there white, repeating every 2.6px, which is the finest pitch that
-     survives at this size and puts about a dozen rings across the playing area.
+     pressing has between the last groove and the paper. Its inner edge is
+     written as sixty-one per cent, which is the same number as the label's share
+     of the diameter, and that is not a coincidence to be tidied away: a
+     percentage in this gradient is a fraction of the disc's radius, and the
+     label's edge lies at exactly the label's fraction of it. Move one number
+     without the other and the smooth band stops meeting the paper. Then the
+     grooves, a ring of near-black just over a pixel wide followed by the same
+     again of barely-there white, repeating every 2.6px, which is the finest
+     pitch that survives at this size. Thirteen pixels of playing area are left
+     once the label has taken three fifths of the face and the run-out its band,
+     so there are five rings where there were ten. Five still reads as a series
+     of rings rather than as a texture, and it is the fewest that does.
      Underneath is the vinyl, a shade lighter at the centre than at the rim so
      the face reads as a moulded object rather than a hole cut in the page.
 
@@ -120,7 +142,7 @@
       conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.34) 15deg,
                      rgba(255,255,255,.08) 29deg, rgba(255,255,255,0) 44deg,
                      rgba(255,255,255,0) 360deg),
-      radial-gradient(circle closest-side, transparent 0 36%, #0f0f14 36% 44%, transparent 44%),
+      radial-gradient(circle closest-side, transparent 0 61%, #0f0f14 61% 69%, transparent 69%),
       repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0 1.2px,
                                 rgba(255,255,255,.085) 1.2px 2.6px),
       radial-gradient(circle closest-side, #26262f 0 26%, #16161c 60%, #08080b 100%);
@@ -134,22 +156,56 @@
      five letters where PLAY is four and the label is a circle, so the chord
      available to the word is the same in both cases and the longer word simply
      has to be set smaller. That is not a compromise, it is what pressing plants
-     do, and setting both at the size PAUSE needs would waste the label on PLAY. */
+     do, and setting both at the size PAUSE needs would waste the label on PLAY.
+
+     Three rows rather than a stacked column, and the spindle hole is the reason.
+     A column centres the group of word, hole and symbol as one block, which
+     leaves the hole at the centre of the record only for as long as the word and
+     the symbol are about the same height. They no longer are, because the symbol
+     is now close to twice the word, and laying these same sizes out as a column
+     puts the hole three and a half pixels above the middle of a disc that turns,
+     and five and a half while playing, where the symbol is larger still. A
+     spindle hole that orbits the centre is the one thing on a record nobody can
+     look past. Giving the hole a row of its own between two rows of equal
+     share fixes it at the centre whatever sizes the word and the symbol are set
+     to, and the word and the symbol are then pulled inwards to meet it so that
+     each sits where the circle is still wide rather than out at its narrow
+     ends. Measured
+     on the rendered button the hole is within a hundredth of a pixel of centre
+     in every state, and the word, which used to come within one pixel of the
+     edge of the paper, now clears it by six.
+
+     The hairline round the paper is --lp divided by the diameter --lp is set to,
+     so it is one pixel at the size this is drawn at and thickens with the record
+     rather than staying a hair on a much larger pressing. */
   .lp-label {
-    width: calc(var(--lp) * .36); height: calc(var(--lp) * .36); border-radius: 50%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: calc(var(--lp) * .010); line-height: 1; color: #fff4ef;
+    width: calc(var(--lp) * .61); height: calc(var(--lp) * .61); border-radius: 50%;
+    display: grid; grid-template-rows: 1fr auto 1fr;
+    justify-items: center; align-items: center;
+    gap: calc(var(--lp) * .018); line-height: 1; color: #fff4ef;
     background: radial-gradient(circle closest-side, #e02a3e 0 58%, #c4142a 100%);
-    box-shadow: 0 0 0 calc(var(--lp) / 96) rgba(0,0,0,.5);
+    box-shadow: 0 0 0 calc(var(--lp) / 84) rgba(0,0,0,.5);
   }
-  .lp-word { font-weight: 700; font-size: calc(var(--lp) * .094); }
-  button.play.spinning .lp-word { font-size: calc(var(--lp) * .078); }
+  .lp-word { font-weight: 700; font-size: calc(var(--lp) * .131); align-self: end; }
+  button.play.spinning .lp-word { font-size: calc(var(--lp) * .11); }
   /* A hole, not a dot: it takes the colour of the panel behind the button rather
      than a dark grey of its own, so it reads as the page showing through. */
-  .lp-hole { flex: none; width: calc(var(--lp) * .055); height: calc(var(--lp) * .055);
+  .lp-hole { width: calc(var(--lp) * .065); height: calc(var(--lp) * .065);
              border-radius: 50%; background: var(--panel);
              box-shadow: inset 0 0 0 1px rgba(0,0,0,.45); }
-  .lp-sym { font-size: calc(var(--lp) * .080); }
+  /* The symbol is the one thing on this button that was not free to be whatever
+     the disc had left. A play triangle fourteen pixels tall is what a play
+     button looks like everywhere else, and every other measurement on the record
+     was worked back from it. It takes two font sizes to get one symbol size:
+     U+25B6 inks 0.783 of its em and the pair of U+275A bars inks 0.700 of
+     theirs, so set at a single size the bars come out a pixel and a half shorter
+     than the triangle and the pause reads as the smaller of the two controls.
+     Set at these two, the ink of both measures fourteen pixels tall, which is
+     the thing being compared. They stay fractions of --lp rather than becoming
+     fixed pixels so that the symbol still travels if the record is ever resized,
+     even though here it was the symbol that decided the record's size. */
+  .lp-sym { font-size: calc(var(--lp) * .213); align-self: start; }
+  button.play.spinning .lp-sym { font-size: calc(var(--lp) * .238); }
   /* The ring is a thin arc and can afford to merely slow down. The record is the
      whole face of the button turning with a word written on it, which is a great
      deal more motion, so it stops outright and is named here rather than being
