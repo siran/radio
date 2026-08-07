@@ -9,6 +9,12 @@
   :root {
     --bg: #0b0b0e; --panel: #131318; --line: #24242c;
     --fg: #ecebe8; --dim: #8b8b96; --accent: #4ade80;
+    /* The diameter of the record, and through it the height of the volume row
+       and the width of the column under the button. A word has to be legible on
+       a label a third of this across, which is what decided the number: at the
+       62px this button used to be, PAUSE lands at about five pixels tall and is
+       a smudge rather than a word. */
+    --lp: 96px;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
@@ -55,8 +61,8 @@
         min-height: 1.6em; overflow-wrap: anywhere; }
 
   .controls { display: flex; align-items: center; gap: 16px; }
-  button.play { flex: none; width: 62px; height: 62px; border-radius: 50%; cursor: pointer;
-    border: none; background: #0d0d11; color: #16161b; font-size: 1.4rem;
+  button.play { flex: none; width: var(--lp); height: var(--lp); border-radius: 50%; cursor: pointer;
+    border: none; background: #0d0d11; padding: 0;
     display: grid; place-items: center; transition: transform .12s ease; }
   button.play:hover:not(:disabled) { transform: scale(1.05); }
   button.play:disabled { opacity: .28; cursor: not-allowed; }
@@ -69,99 +75,113 @@
   button.play { position: relative; }
   button.play.loading { cursor: progress; }
   button.play.loading::after {
-    content: ''; position: absolute; inset: 7px; border-radius: 50%;
-    border: 2px solid #edece9; border-top-color: transparent;
+    content: ''; position: absolute; inset: calc(var(--lp) * .113); border-radius: 50%;
+    border: calc(var(--lp) / 31) solid #edece9; border-top-color: transparent;
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* The button is the record, and this station plays dub and psychedelia rather
-     than notification sounds, so the disc is a picture disc pressed on coloured
-     vinyl instead of a plain black one. It is five background layers, listed in
-     the order the background property wants them, topmost first, which is the
-     reverse of the order anyone would describe them in.
+  /* The button is the record, and the record is a twelve inch LP built the way
+     one looks: black vinyl carrying fine concentric grooves, a smooth run-out
+     ring where the grooves stop, a red paper label taking a bit over a third of
+     the face, and a spindle hole punched dead centre. Every measurement here is
+     a fraction of --lp, so changing the diameter changes the whole pressing
+     rather than leaving the label the wrong size for the disc it is glued to.
 
-     The label in the middle is opaque cream with a hot pink rim, and it is the
-     only part of this that is not allowed to be interesting: the glyph is a
-     fixed dark colour in both themes and it stands on this and nothing else, so
-     whatever happens to the rest of the disc the middle of it stays pale. Then
-     the glint, one soft streak of white that fades up and back down again
-     rather than starting at full brightness, because a hard edge on a wedge of
-     white reads as a bite taken out of the disc rather than light landing on
-     it. Then the grooves, a ring of near-black just over a pixel wide followed
-     by the same again of barely-there white, repeating every 2.6px, which is
-     about a dozen grooves across a 62px face and the finest that survives being
-     that small. Then the layer that decides where the light falls at all: a
-     wheel of near-black that thins almost to nothing twice, so the colour comes
-     up in two lobes on opposite sides and the rest of the face stays vinyl.
-     That is what keeps the disc dark enough for a white loading ring to land on
-     it and still be the brightest thing there, and it is also the asymmetry
-     that makes the turning legible, because grooves in motion look exactly like
-     grooves at rest. Underneath all of it is the colour itself, one turn of
-     saturated hue, started sixty degrees off the glint so the brightest part of
-     the sweep is not permanently parked on the same hue.
+     The background layers are listed in the order the background property wants
+     them, topmost first, which is the reverse of the order anyone would describe
+     them in. The glint is one soft streak of white that fades up and back down
+     again, because a hard edge on a wedge of white reads as a bite taken out of
+     the disc rather than light landing on it. On a black record the glint is
+     also most of what makes the turning legible, since grooves in motion look
+     exactly like grooves at rest. Then the run-out, the smooth dark band every
+     pressing has between the last groove and the paper. Then the grooves, a ring
+     of near-black just over a pixel wide followed by the same again of
+     barely-there white, repeating every 2.6px, which is the finest pitch that
+     survives at this size and puts about a dozen rings across the playing area.
+     Underneath is the vinyl, a shade lighter at the centre than at the rim so
+     the face reads as a moulded object rather than a hole cut in the page.
 
-     It comes round in four and a half seconds, which is far slower than a real
-     record and is left exactly as it was: at 62px anything near the real speed
+     It comes round in four and a half seconds, far slower than a real record and
+     deliberately so: at this size anything near thirty-three revolutions a minute
      stops reading as a record and starts reading as the loading ring above,
-     which means something else entirely and can follow it within the same
-     press. The hue drift is twenty-one seconds, which is not a multiple of the
-     spin, so the two only come back into step once every sixty-three seconds
-     and the disc is rarely quite where it was last looked at. Both are a
-     transform and a filter on one 62px pseudo-element, so neither costs a
-     layout and the repaint is the size of a thumbnail. The disc has to paint
-     under the glyph and over the button background, which is what the stacking
-     context is for. */
-  button.play { isolation: isolate; }
-  button.play::before {
-    content: ''; position: absolute; inset: 0; border-radius: 50%; z-index: -1;
+     which means something else entirely and can follow it within the same press.
+
+     The animation is declared on the disc unconditionally and left paused, and
+     playing only flips animation-play-state to running. Toggling the animation
+     itself on and off would throw the angle away and snap the label back to
+     upright every time the stream stopped, which is the opposite of what a
+     record does; pausing the play state leaves the transform exactly where it
+     had got to, so the label freezes mid-turn and the next press carries on from
+     the same angle. */
+  .lp-disc {
+    position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
     background:
-      radial-gradient(circle closest-side, #f2efe4 0 40%, #ded7c4 40% 43.5%,
-                      #ff2f87 43.5% 46%, transparent 46%),
-      conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.42) 16deg,
-                     rgba(255,255,255,.10) 30deg, rgba(255,255,255,0) 46deg,
+      conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.34) 15deg,
+                     rgba(255,255,255,.08) 29deg, rgba(255,255,255,0) 44deg,
                      rgba(255,255,255,0) 360deg),
-      repeating-radial-gradient(circle closest-side, rgba(0,0,0,.58) 0 1.2px,
-                                rgba(255,255,255,.07) 1.2px 2.6px),
-      conic-gradient(from 24deg, rgba(9,9,14,.97) 0deg, rgba(9,9,14,.16) 58deg,
-                     rgba(9,9,14,.97) 132deg, rgba(9,9,14,.97) 198deg,
-                     rgba(9,9,14,.10) 248deg, rgba(9,9,14,.97) 322deg,
-                     rgba(9,9,14,.97) 360deg),
-      conic-gradient(from 190deg, #ff2f87, #ff8a2b, #f2e04a, #4cf07a,
-                     #22d3ee, #6d7bff, #c04dff, #ff2f87);
+      radial-gradient(circle closest-side, transparent 0 36%, #0f0f14 36% 44%, transparent 44%),
+      repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0 1.2px,
+                                rgba(255,255,255,.085) 1.2px 2.6px),
+      radial-gradient(circle closest-side, #26262f 0 26%, #16161c 60%, #08080b 100%);
+    animation: spin 4.5s linear infinite;
+    animation-play-state: paused;
   }
-  button.play.spinning::before { animation: spin 4.5s linear infinite, drift 21s linear infinite; }
-  @keyframes drift { to { filter: hue-rotate(360deg); } }
-  /* The ring is a two pixel arc and can afford to merely slow down. The record
-     is the whole face of the button turning and its colour crawling underneath,
-     which is a great deal more motion, so both stop outright - one animation
-     shorthand set to none takes the spin and the drift together. Neither is
-     reached by the universal animation kill at the foot of this sheet, because
-     * does not match pseudo-elements. */
+  button.play.spinning .lp-disc { animation-play-state: running; }
+  /* The paper label. It is the only part of the record that is allowed to be a
+     flat bright colour, because it is the only part that has to carry words: a
+     word on grooves is unreadable at any size this button will ever be. PAUSE is
+     five letters where PLAY is four and the label is a circle, so the chord
+     available to the word is the same in both cases and the longer word simply
+     has to be set smaller. That is not a compromise, it is what pressing plants
+     do, and setting both at the size PAUSE needs would waste the label on PLAY. */
+  .lp-label {
+    width: calc(var(--lp) * .36); height: calc(var(--lp) * .36); border-radius: 50%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: calc(var(--lp) * .010); line-height: 1; color: #fff4ef;
+    background: radial-gradient(circle closest-side, #e02a3e 0 58%, #c4142a 100%);
+    box-shadow: 0 0 0 calc(var(--lp) / 96) rgba(0,0,0,.5);
+  }
+  .lp-word { font-weight: 700; font-size: calc(var(--lp) * .094); }
+  button.play.spinning .lp-word { font-size: calc(var(--lp) * .078); }
+  /* A hole, not a dot: it takes the colour of the panel behind the button rather
+     than a dark grey of its own, so it reads as the page showing through. */
+  .lp-hole { flex: none; width: calc(var(--lp) * .055); height: calc(var(--lp) * .055);
+             border-radius: 50%; background: var(--panel);
+             box-shadow: inset 0 0 0 1px rgba(0,0,0,.45); }
+  .lp-sym { font-size: calc(var(--lp) * .080); }
+  /* The ring is a thin arc and can afford to merely slow down. The record is the
+     whole face of the button turning with a word written on it, which is a great
+     deal more motion, so it stops outright and is named here rather than being
+     left to the universal animation kill at the foot of this sheet - that rule
+     does now reach the disc, because the disc became a real element, but relying
+     on it would mean relying on a rule written for something else. The loading
+     ring is still a pseudo-element and * has never matched it. */
   @media (prefers-reduced-motion: reduce) {
     button.play.loading::after { animation-duration: 2.4s; }
-    button.play.spinning::before { animation: none; }
+    .lp-disc { animation: none; }
   }
-  /* The counters go under the button rather than beside it so the row keeps its
-     shape on a phone: the deck is a narrow column and the slider takes whatever
-     is left of the row, and while nothing is playing both counters are absent
-     rather than sitting there at zero. The track label is the widest thing in
-     the column and therefore the thing that sets its width, so it is held to
-     one line: wrapped over two it stops reading as a caption under a button and
-     starts reading as a sentence someone expects you to stop and read. An
-     element hidden by the hidden attribute needs its display saying twice,
-     because the rule that lays it out is an author rule and beats the display
-     none the browser applies for the attribute. */
-  .deck { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; }
-  .clocks { font-size: .68rem; color: var(--dim); text-align: center; }
-  .clocks b { display: block; color: var(--fg); font-weight: 550; font-size: .82rem;
-              font-variant-numeric: tabular-nums; }
-  .clocks .ontrack { display: block; margin-top: 5px; white-space: nowrap; }
-  .clocks .ontrack[hidden] { display: none; }
+  /* The counter goes under the button rather than beside it so the row keeps its
+     shape on a phone. It used to appear when playback started and vanish when it
+     stopped, and the track line inside it used to wait for a title, so the block
+     changed both width and height as you played and paused and the whole row
+     jumped. Now it is always rendered and always exactly as wide as the button
+     above it, which is what makes it steady: the column is given the diameter of
+     the record explicitly, so no string this line can hold is able to widen it,
+     and the line is centred inside that fixed box. Tabular figures keep the
+     digits from shuffling sideways as the seconds turn over, and the placeholder
+     occupies the same shape as a real reading so there is no empty box waiting
+     to be filled. */
+  .deck { flex: none; width: var(--lp);
+          display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .clocks { width: 100%; text-align: center; white-space: nowrap;
+            font-size: .72rem; color: var(--dim);
+            font-variant-numeric: tabular-nums; }
   /* Pinned to the height of the button rather than centred in the row, so
      that the slider stays level with the record whether or not the counter
      underneath it is there. Centring would drop it half the height of the
      counter every time playback started. */
-  .vol { flex: 1; align-self: flex-start; height: 62px;
+  .vol { flex: 1; align-self: flex-start; height: var(--lp);
          display: flex; align-items: center; gap: 9px; color: var(--dim); }
   input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
   .narrator { margin-top: 8px; font-size: .8rem; color: var(--dim); line-height: 1.45; }
@@ -271,8 +291,8 @@
       </div>
       <div class="controls">
         <div class="deck">
-          <button class="play" id="btn" disabled aria-label="Play or pause">▶</button>
-          <div class="clocks" id="clocks" hidden>listening<b id="listened">0:00</b><span class="ontrack" id="ontrack" hidden>this track<b id="intotrack">0:00</b></span></div>
+          <button class="play" id="btn" disabled aria-label="Play or pause"><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-word" id="btnword">PLAY</span><span class="lp-hole"></span><span class="lp-sym" id="btnsym">▶</span></span></span></button>
+          <div class="clocks" id="intotrack">--:-- / --:--</div>
         </div>
         <div class="vol">
           <span aria-hidden="true">🔉</span>
@@ -345,6 +365,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const audio = $('audio'), btn = $('btn'), vol = $('vol');
+  const word = $('btnword'), sym = $('btnsym');
   let lastTitle = null, titleSince = Date.now();
   let replyTo = null;   // filename of the message being replied to
 
@@ -356,68 +377,58 @@
     audio.load();
     return audio.play();
   }
-  // How long you have been listening. It starts when sound actually arrives
-  // rather than when the button is pressed, because waiting for a stream is not
-  // listening. A stall that recovers fires 'playing' a second time and must not
-  // reset the count, so the moment is recorded only when no session is already
-  // running. Pausing throws the stream away and the next press rejoins live, so
-  // that genuinely is a new session and the counter leaves rather than freezing
-  // on a number that has stopped being true. This is the only clock this page
-  // can honestly keep. It knows nothing about where the track on the air began,
-  // only when this browser started hearing it.
+  // One line, always on screen, and only ever about the track. There used to be
+  // two counters here and the other one was how long this browser had been
+  // listening, which is a private stopwatch nobody asked to see; it was also the
+  // wider of the two by a long way, and the row on a phone cannot afford it next
+  // to a volume slider. The position and the duration are what a player shows and
+  // what the operator sketched, they come from the station rather than from a
+  // guess made here, and they are therefore right for someone who arrived in the
+  // middle of a song, which a count started at page load never could be.
   //
-  // The second counter is the track, and it is a floor rather than a
-  // measurement. titleSince is the moment this browser first saw the title
-  // change, which for someone who was already here is the moment the track
-  // started and for someone who arrived mid-song is the moment they arrived, so
-  // the figure is the track's elapsed time in the first case and something
-  // smaller in the second. The label says at least for exactly that reason: the
-  // song has been on this long and possibly longer is true either way round,
-  // and it is the most this page can claim without asking the server a question
-  // it has no credential to ask. It is also why the counter says nothing at all
-  // until a title has actually arrived - titleSince is set at page load, and
-  // before the first poll answers it would be timing the wait for the stream
-  // and calling it music.
-  let listenSince = null;
+  // The line is never hidden and never empty. When the station has not said where
+  // it is, or has stopped answering, the line says so in the shape of a reading
+  // rather than going blank, because a box that empties and refills is exactly
+  // the jumping this replaces. A duration of zero is a live input saying it does
+  // not know the length, and the honest answer to that is the same placeholder in
+  // the second half only - inventing a total would be worse than admitting there
+  // is none.
+  const NOTIME = '--:--';
   // What the station last said about the track, and when it said it.
   let trackElapsed = 0, trackTotal = 0, trackAt = null;
   function tick() {
-    if (listenSince === null) { $('clocks').hidden = true; return; }
-    $('listened').textContent = mmss((Date.now() - listenSince) / 1000);
-    // The station's own position, not this page's guess at it. /likes/now
-    // answers with elapsed and duration off the frame being played, so this is
-    // right for someone who arrived mid-song too - the guess from when this
-    // browser first saw the title change never could be. Carried forward
-    // between polls by the wall clock so the seconds move every second rather
-    // than in jumps.
-    if (trackAt === null) { $('ontrack').hidden = true; }
-    else {
-      const on = trackElapsed + (Date.now() - trackAt) / 1000;
-      // A negative duration is the source saying it does not know the length,
-      // which is what a live input answers. Then there is a position and no
-      // total, and showing one without the other is the honest half.
-      $('intotrack').textContent = trackTotal > 0
-        ? mmss(on) + ' of ' + mmss(trackTotal)
-        : mmss(on);
-      $('ontrack').hidden = false;
-    }
-    $('clocks').hidden = false;
+    // /likes/now answers with elapsed and duration off the frame being played.
+    // Carried forward between polls by the wall clock so the seconds move every
+    // second rather than in jumps every five.
+    $('intotrack').textContent = trackAt === null
+      ? NOTIME + ' / ' + NOTIME
+      : mmss(trackElapsed + (Date.now() - trackAt) / 1000) + ' / ' +
+        (trackTotal > 0 ? mmss(trackTotal) : NOTIME);
   }
 
-  // Three states, one place. 'loading' is set by the press itself and cleared
-  // only by sound actually arriving, or by giving up - never on a timer, because
-  // a timer would lie in whichever direction the network did not go.
+  // Three states, one place, and the place is still here. 'loading' is set by the
+  // press itself and cleared only by sound actually arriving, or by giving up -
+  // never on a timer, because a timer would lie in whichever direction the
+  // network did not go. What changed is where the state gets written: the label
+  // has to turn with the record, so it lives inside the disc, and a
+  // pseudo-element could never have held text that this function sets. The word
+  // and the symbol are therefore two spans addressed by id. While the stream is
+  // still coming the label is cleared rather than the disc being taken away - a
+  // blank pressing with a ring turning over it is the record on the platter and
+  // not yet playing, which is exactly what is true at that moment. The aria-label
+  // is untouched and is still the whole accessible name of this button; the label
+  // on the disc is hidden from assistive technology precisely so that the name
+  // never becomes a decoration that happens to be upside down half the time.
   const GLYPH_PLAY = '▶', GLYPH_PAUSE = '❚❚';
   function setBtn(state) {
     btn.classList.toggle('loading', state === 'loading');
     btn.classList.toggle('spinning', state === 'pause');   // the record turns only while sound is coming out
-    btn.textContent = state === 'loading' ? '' :
-                      state === 'pause'   ? GLYPH_PAUSE : GLYPH_PLAY;
+    word.textContent = state === 'loading' ? '' :
+                       state === 'pause'   ? 'PAUSE' : 'PLAY';
+    sym.textContent  = state === 'loading' ? '' :
+                       state === 'pause'   ? GLYPH_PAUSE : GLYPH_PLAY;
     btn.setAttribute('aria-label', state === 'loading' ? 'Connecting to the stream' :
                                    state === 'pause'   ? 'Pause' : 'Play');
-    if (state === 'pause') { if (listenSince === null) listenSince = Date.now(); }
-    else if (state === 'play') listenSince = null;
-    tick();
   }
   btn.addEventListener('click', () => {
     if (audio.paused) {
