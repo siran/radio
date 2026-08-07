@@ -103,18 +103,39 @@ $restartStamp = "$repo\messages\admin\.last-restart"
 # folder takes one action and the body cannot change it.
 $rreq = "$repo\messages\restart\req"
 $rres = "$repo\messages\restart\res"
-$RESTART_MIN_S = 120
+# Off by default, and a number rather than a switch so it says what it means.
+# config/limits.json: {"restart_min_seconds": 120} to turn it on. Absent,
+# unreadable or 0 means no limit at all - which is the default, because this
+# is a circle of trust and the button exists for the moment the station is
+# already broken. Being told to wait two minutes while it is off the air is
+# the wrong answer to the only emergency this button has.
+# Read per request, not at startup, so changing it does not need a restart
+# of the thing that performs restarts.
+$limitsFile = "$repo\config\limits.json"
+
+function Restart-Min-Seconds {
+    try {
+        if (-not (Test-Path $limitsFile)) { return 0 }
+        $raw = Get-Content $limitsFile -Raw
+        if (-not $raw -or -not $raw.Trim()) { return 0 }
+        $v = (ConvertFrom-Json $raw).restart_min_seconds
+        if ($null -eq $v) { return 0 }
+        $n = [double]$v
+        if ($n -gt 0) { return $n } else { return 0 }
+    } catch { return 0 }
+}
 
 function Restart-Station($what, $who) {
     $ok = @('liquidsoap', 'icecast', 'all', 'watchers')
     $w  = if ($what -and ($what -in $ok)) { $what } else { 'liquidsoap' }
 
-    if (Test-Path $restartStamp) {
+    $minS = Restart-Min-Seconds
+    if ($minS -gt 0 -and (Test-Path $restartStamp)) {
         $since = ((Get-Date) - (Get-Item $restartStamp).LastWriteTime).TotalSeconds
-        if ($since -lt $RESTART_MIN_S) {
+        if ($since -lt $minS) {
             return @{ ok = $false
                       error = ("the station was restarted " + [int]$since +
-                               "s ago - wait " + [int]($RESTART_MIN_S - $since) + "s") }
+                               "s ago - wait " + [int]($minS - $since) + "s") }
         }
     }
     [IO.File]::WriteAllText($restartStamp, (Get-Date).ToString('o'))

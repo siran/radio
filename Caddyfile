@@ -273,16 +273,10 @@ import admins.caddy
 			path /req/*.json
 		}
 		handle @put {
-			# A restart is fifteen seconds of silence for everyone. Six in five
-			# minutes is already far more than anyone needs, and the watcher
-			# refuses any two closer than two minutes regardless.
-			rate_limit {
-				zone restart_writes {
-					key {remote_host}
-					events 6
-					window 5m
-				}
-			}
+			# No limiter here on purpose. The one place a rate limit could live and
+			# be changed without editing config and reloading is the watcher, so it
+			# lives there and only there - config/limits.json, off by default. A
+			# limit in two places is a limit nobody can turn off.
 			request_body {
 				max_size 1KB
 			}
