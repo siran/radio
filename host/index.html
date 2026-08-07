@@ -295,6 +295,14 @@
       <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
       <input id="glide" type="range" disabled>
     </div>
+    <!-- Not a mixing control, and it is here anyway. This is the station's own
+         machinery rather than one host's sound, and the only other place it
+         could sit is beside Skip, where a press meant for the next track would
+         sooner or later land on the one button that stops the music for
+         everybody. It is last in the fold for the same reason. -->
+    <div class="btns">
+      <button class="tbtn" id="restart" title="ten to fifteen seconds of silence for every listener">Restart the station</button>
+    </div>
     <div class="err" id="derr"></div>
   </details>
 
@@ -996,37 +1004,47 @@
   // file holding a mix of what is set now and what was set before, which is a
   // desk nobody ever chose. The values are read back from liquidsoap rather
   // than taken off the controls, for the reason set out in the read below.
+  //
+  // A slider holds whatever the page last polled, not what liquidsoap holds
+  // now. A page left open across a restart still shows the startup defaults -
+  // 2, 12, 295, -29, 3.5, 17.5, 0.45, 3, 0.01 - so anything built off the
+  // controls wrote those nine over the tuning that was actually set, 3, 1, 80,
+  // -26, 6, 12, 0.6, 2, 0.01: the file that exists to survive a restart,
+  // destroyed by one, three times now, and a preset silently rewritten the
+  // same way once. Two callers need that read - the keeper below, and
+  // presCurrent() when it captures a preset - so it is written here once and
+  // both go through it rather than each keeping a copy that can drift.
+  //
+  // It throws rather than answering with what it managed to get. Every caller
+  // is about to write a whole desk somewhere, and a knob liquidsoap did not
+  // report has no value this page is entitled to invent; leaving it out would
+  // write exactly the partial desk the paragraph above rules out.
+  async function readDesk() {
+    const kres = await fetch('/control/knobs',
+      { credentials: 'same-origin', cache: 'no-store' });
+    if (!kres.ok) throw new Error('HTTP ' + kres.status);
+    const live = await kres.json();
+    applyKnobs(live);            // and a page that was stale stops being stale
+    const now = new Map(live), d = {};
+    for (const k in KNOBS) {
+      const v = parseFloat(now.get(k));
+      if (!isFinite(v)) throw new Error(k + ' was not reported');
+      d[k] = v;
+    }
+    return d;
+  }
+
   let deskTimer = 0;
   function saveDesk() {
     // Dragging a slider fires change once, but loading a preset moves nine in
     // a row; one write after the last of them is enough.
     clearTimeout(deskTimer);
     deskTimer = setTimeout(async () => {
-      const d = {};
       try {
-        // A slider holds whatever the page last polled, not what liquidsoap
-        // holds now. A page left open across a restart still shows the
-        // startup defaults - 2, 12, 295, -29, 3.5, 17.5, 0.45, 3, 0.01 - so
-        // moving any one knob wrote those nine over the tuning that was
-        // actually set, 3, 1, 80, -26, 6, 12, 0.6, 2, 0.01: the file that
-        // exists to survive a restart, destroyed by one, three times now.
-        // setKnob() has already POSTed this change to /interactive, so a read
-        // taken here answers with the new value and with the true current
-        // value of the other eight.
-        const kres = await fetch('/control/knobs',
-          { credentials: 'same-origin', cache: 'no-store' });
-        if (!kres.ok) throw new Error('HTTP ' + kres.status);
-        const live = await kres.json();
-        applyKnobs(live);          // and a page that was stale stops being stale
-        const now = new Map(live);
-        for (const k in KNOBS) {
-          const v = parseFloat(now.get(k));
-          // Refuse rather than guess. A knob liquidsoap did not report has no
-          // value this page is entitled to invent, and leaving it out would
-          // write exactly the partial desk the paragraph above rules out.
-          if (!isFinite(v)) throw new Error(k + ' was not reported');
-          d[k] = v;
-        }
+        // setKnob() has already POSTed this change to /interactive, so the
+        // read answers with the new value and with the true current value of
+        // the other eight.
+        const d = await readDesk();
         const res = await fetch(DESK_URL, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -1058,6 +1076,85 @@
   // another host, or liquidsoap's own page, may have moved one since.
   $('deskwrap').addEventListener('toggle', () => {
     if ($('deskwrap').open) loadKnobs();
+  });
+
+  // Restarting liquidsoap is asked for through a file rather than through
+  // /control/, and that is the whole point of it: when liquidsoap is the thing
+  // that is wedged, a request routed through liquidsoap is as dead as the
+  // thing it is meant to revive. A watcher outside it picks the file up within
+  // about three seconds, does the work, and writes the answer where the poll
+  // below reads it. The answer is written only once the restart has returned,
+  // which is after the silence rather than before it, so a 404 while waiting
+  // means "not finished yet" and not "went wrong".
+  const RESTART_WAIT_MS = 40000, RESTART_POLL_MS = 2000;
+
+  $('restart').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    // A second press would ask for a second restart in the middle of the
+    // first, which is the one moment the station can least afford it.
+    if (b.classList.contains('busy')) return;
+    // Said in full, and in words rather than in the name of a service, because
+    // the cost is paid by people who are not in the room: everybody listening
+    // hears silence, and a host part way through a note loses it.
+    if (!confirm('Restart the station?\n\n' +
+                 'Every listener loses the sound for roughly ten to fifteen ' +
+                 'seconds while liquidsoap comes back, and any host who is ' +
+                 'recording a note right now will have that note interrupted.' +
+                 '\n\nThe music, the desk and the queue come back on their own.')) {
+      return;
+    }
+    busy(b, true);
+    say('derr', 'Asked for a restart. This takes ten to fifteen seconds.');
+    try {
+      // Any name will do, and this one cannot collide with another host asking
+      // at the same second, which is what would make two people read one
+      // answer.
+      const id = 'host-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const res = await fetch('/host/restart/req/' + id + '.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          what: 'liquidsoap',
+          who: ($('whoami').textContent || '').trim()
+        })
+      });
+      if (!(res.ok || res.status === 201 || res.status === 204))
+        throw new Error(res.status === 401
+          ? 'your sign-in expired, reload the page' : 'HTTP ' + res.status);
+      let ans = null;
+      const until = Date.now() + RESTART_WAIT_MS;
+      while (Date.now() < until) {
+        await new Promise(r => setTimeout(r, RESTART_POLL_MS));
+        const g = await fetch('/host/restart/res/' + id + '.json',
+          { credentials: 'same-origin', cache: 'no-store' });
+        if (g.status === 404) continue;
+        if (!g.ok) throw new Error('HTTP ' + g.status);
+        ans = await g.json();
+        break;
+      }
+      if (!ans) {
+        // Not a failure, and not a success either. The request is on disk and
+        // the watcher may still be working through it, so this says what is
+        // actually known rather than picking one of the two.
+        say('derr', 'No answer after 40 seconds. The request was accepted, so listen ' +
+                    'to the stream before asking again.');
+      } else if (ans.ok) {
+        say('derr', 'Restarted ' + (ans.what || 'liquidsoap') +
+                    (ans.by ? ', asked for by ' + ans.by : '') +
+                    '. The desk came back from its saved file; close and open this ' +
+                    'fold to read what it is holding.');
+      } else {
+        // Word for word. The watcher answers in sentences meant to be read -
+        // a rate limit says how many seconds are left - and rewording it here
+        // would lose the number that makes it useful.
+        say('derr', 'Not restarted: ' + (ans.error || 'no reason given'));
+      }
+    } catch (err) {
+      say('derr', 'Could not ask for a restart: ' + err.message);
+    } finally {
+      busy(b, false);
+    }
   });
 
   // Lazy like the desk above, though for a reason of its own: it is a whole
@@ -1584,7 +1681,8 @@
     }
   }
 
-  function presCurrent() {
+  // Asynchronous because of the desk below, and for no other reason.
+  async function presCurrent() {
     const cap = {};
     for (const id in CAP) cap[id] = $(id).value;
     const eq = {};
@@ -1593,11 +1691,15 @@
     // it belongs to the station - so loading a preset moves it for everybody
     // listening. That is the same thing the desk has always done; a preset
     // just makes it one press instead of nine.
-    const desk = {};
-    for (const k in KNOBS) {
-      const v = parseFloat($(k).value);
-      if (isFinite(v)) desk[k] = v;
-    }
+    //
+    // Read from liquidsoap and never off the sliders, for the reason written
+    // out over readDesk(). A preset captured from the controls of a page that
+    // had been open across a restart took the startup defaults instead of the
+    // tuning that was on the air, and loading it later would have put those
+    // defaults back on air under the name of the sound it replaced. The read
+    // throws when it cannot answer, and both callers below let it: a preset
+    // built from guesses is worse than no preset saved at all.
+    const desk = await readDesk();
     return {
       cap: cap,
       voice: { gain: settings.gain, duck: settings.duck, eq: eq },
@@ -1707,7 +1809,12 @@
     if (!(n in presets) && Object.keys(presets).length >= PRES_MAX)
       return presErr('That is already ' + PRES_MAX + ' presets - delete one first.');
     const prev = presets[n];
-    presets[n] = presCurrent();
+    try {
+      presets[n] = await presCurrent();
+    } catch (e) {
+      return presErr('Could not read the mixing desk, so nothing was saved: ' + e.message +
+                     '. Open the Mixing desk fold to see whether the station is answering.');
+    }
     if (await presPut('Saved "' + n + '" \u2014 voice, EQ, streaming settings, the desk, and which panels were open.')) {
       presDraw();
       $('preslist').value = n;
@@ -1748,7 +1855,17 @@
         // wrong device, saving over "dj" from the right one is the fix.
         let onDevice = false;
         try { onDevice = !!localStorage.getItem(CAP_KEY); } catch {}
-        presets = { dj: presCurrent() };
+        let seed;
+        try { seed = await presCurrent(); }
+        catch (e) {
+          // The same rule as saving by hand, and it matters more here: this is
+          // the one write that becomes the seed every later preset is judged
+          // against. Nothing is written, and the next load tries the read
+          // afresh.
+          return presErr('Could not read the mixing desk, so "dj" was not saved: ' + e.message +
+                         '. Reload the page once the station is answering.');
+        }
+        presets = { dj: seed };
         presDraw();
         $('preslist').value = 'dj';
         await presPut('Saved your current sound as "dj": your voice settings from the server, ' +
