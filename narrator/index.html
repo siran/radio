@@ -89,23 +89,30 @@
       The announcer is a speaker like any other - the same volume, in the same
       settings.json, that every host has in their own folder.</div>
 
-    <label for="say">Words for it to say &mdash; typed here, spoken on the air, once</label>
+    <label for="say">Words &mdash; typed here, then either spoken on the air or
+      kept on the list below</label>
     <textarea id="say" rows="3" maxlength="500" spellcheck="true"></textarea>
     <div class="btns">
       <button id="saybtn" type="button">Say it</button>
+      <button id="addbtn" type="button">Add to the list</button>
     </div>
-    <div class="hint">On air in about eight seconds. Piper reads the line
+    <div class="hint">Say it puts the words on the air in about eight seconds,
+      and onto the list below as they go out. Add to the list only keeps them
+      there, ready for later, and says nothing at all. Piper reads the line
       literally, so it is spoken exactly as typed. 500 characters at most.</div>
 
-    <label>What it has said &mdash; the lines already spoken, newest first and
-      each one only once, so one can go out again without typing it twice</label>
+    <label>The phrases this station keeps &mdash; the ones it has spoken and the
+      ones put here to have ready, newest first and each one only once</label>
     <div id="histlist"></div>
-    <div class="hint">Say it again reads the line afresh, with the voice and the
+    <div class="hint">A phrase arrives here either way: Add to the list puts it
+      here and speaks nothing, and Say it speaks it and it lands here as it goes
+      out. Say it again reads the line afresh, with the voice and the
       speed set below as they stand at the moment you press it &mdash; it is not
       a recording of what went out, so a line first said in another voice comes
       back in this one. Delete takes it off the list for good; it does not unsay
-      what has already been on the air. The list is read when this page opens,
-      so a line you send now joins it after a reload.</div>
+      what has already been on the air. The list reads itself again a few
+      seconds after anything is said, so a line you send now joins it on its
+      own.</div>
 
     <label for="voice">Voice &mdash; which installed voice speaks, and therefore which language</label>
     <select id="voice"></select>
@@ -537,6 +544,15 @@
       clear();
       $('say').value = '';
       setStatus('on air in about eight seconds');
+      // The list is read once, at page open, so a line just sent is not on it
+      // until a reload. The watcher polls every 3 s, waits one more poll for the
+      // file to stop changing, and only appends to the ledger once piper has
+      // spoken - about eight seconds end to end - so a single delayed re-read a
+      // little past that brings the line in on its own. Twelve for the margin.
+      // Deliberately not a poller and deliberately not retried: if it lands
+      // early the line is simply not there yet, and the next thing said or
+      // added brings it in with it.
+      setTimeout(histLoad, 12000);
     } catch (e) {
       setStatus('not sent');
       fail('Could not send that line: ' + e.message);
@@ -544,11 +560,13 @@
     $('saybtn').disabled = false;
   });
 
-  // What it has said. narrator-watcher.ps1 appends every line it renders to
-  // this one file as it speaks it: newest first, the same words kept only
-  // once, 200 rows at most - a list to pick from rather than an archive. It
-  // sits in config/ beside the desk because it belongs to the station and not
-  // to whoever is signed in, since everybody's narrator is the same narrator.
+  // The phrases the station keeps. Two things write to this one file and they
+  // write it the same way: narrator-watcher.ps1 appends every line it renders
+  // as it speaks it, and Add to the list below puts one in that has not been
+  // spoken at all. Newest first, the same words kept only once, 200 rows at
+  // most - a list to pick from rather than an archive. It sits in config/
+  // beside the desk because it belongs to the station and not to whoever is
+  // signed in, since everybody's narrator is the same narrator.
   const HISTORY_URL = '/narrator/history/history.json';
 
   // What the list is showing at this moment. Kept so a failed delete can put
@@ -583,7 +601,7 @@
     if (!rows.length) {
       const none = document.createElement('div');
       none.className = 'hint';
-      none.textContent = 'Nothing said yet.';
+      none.textContent = 'No phrases kept yet.';
       box.appendChild(none);
       return;
     }
@@ -630,12 +648,78 @@
       await sayIt(text);
       clear();
       setStatus('on air in about eight seconds');
+      // As over Say it above: one delayed re-read, so the line moves to the
+      // top when the watcher writes it there.
+      setTimeout(histLoad, 12000);
     } catch (e) {
       setStatus('not sent');
       fail('Could not say that line again: ' + e.message);
     }
     btn.disabled = false;
   }
+
+  // The other way a phrase gets onto the list, and the reason the list is no
+  // longer only what was said: this keeps the words without speaking them, so
+  // a phrase can be written once and put on the air later, or several times.
+  //
+  // Read, modify, write, the same shape as histDelete below and for the reason
+  // written out over it: the file is read AGAIN first rather than taken from
+  // what this page loaded, because the watcher appends to it every time the
+  // station speaks and writing back the copy from page load would take out
+  // every line said since. The rule for combining is the watcher's own, so
+  // what this writes is what the watcher would have written - newest first,
+  // deduplicated on the words, 200 rows at most - which is what makes a phrase
+  // already on the list move to the top instead of arriving a second time.
+  async function histAdd(text, btn) {
+    const had = ledger;
+    btn.disabled = true;
+    setStatus('adding');
+    try {
+      const rows = await histRead();
+      // The watcher stamps the local clock with no zone on it, and histDraw
+      // shows a stamp as it was written, so this has to be that same shape or
+      // a phrase added here would read as the wrong hour beside a spoken one.
+      // toISOString is UTC, so the offset comes off before it is taken.
+      const now = new Date();
+      const t = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 19);
+      const keep = [{ t: t, text: text }]
+        .concat(rows.filter(r => !(r && r.text === text)));
+      if (keep.length > 200) keep.length = 200;
+      const res = await fetch(HISTORY_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(keep)
+      });
+      if (!(res.ok || res.status === 201 || res.status === 204)) {
+        throw new Error(res.status === 401
+          ? 'your sign-in expired, reload the page'
+          : 'HTTP ' + res.status);
+      }
+      ledger = keep;
+      histDraw();
+      clear();
+      // Emptied the same way Say it empties it, and for the same reason: the
+      // words are somewhere else now.
+      $('say').value = '';
+      setStatus('added to the list');
+    } catch (e) {
+      // Back to exactly what the screen was showing, as in histDelete below.
+      // A row on the page that is not in the file is the one way this lies.
+      ledger = had;
+      histDraw();
+      setStatus('not added');
+      fail('Could not add that line to the list: ' + e.message);
+    }
+    btn.disabled = false;
+  }
+
+  $('addbtn').addEventListener('click', () => {
+    const words = $('say').value.trim();
+    if (!words) return setStatus('nothing to add');
+    histAdd(words, $('addbtn'));
+  });
 
   // Read, modify, write, the same shape as every other save on this page. The
   // file is read AGAIN first rather than taken from what this page loaded,
@@ -683,7 +767,7 @@
       ledger = await histRead();
       histDraw();
     } catch (e) {
-      fail('Could not read what it has said (' + e.message + ').');
+      fail('Could not read the phrases it keeps (' + e.message + ').');
     }
   }
 

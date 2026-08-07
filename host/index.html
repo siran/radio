@@ -1298,16 +1298,6 @@
     }
   });
 
-  // Lazy like the desk above, though for a reason of its own: it is a whole
-  // page behind the password, so loading it eagerly would pop an auth prompt
-  // on arrival. It sits on a path of its own rather than under /host/, so
-  // the browser may ask for the credential once more when the fold is first
-  // opened; the realm is the same, so it is asked once and not again.
-  $('narwrap').addEventListener('toggle', () => {
-    const f = $('narrator');
-    if ($('narwrap').open && !f.src) f.src = '/narrator/';
-  });
-
   // A frame with a fixed height scrolls inside itself, which on a phone means
   // two scrollbars and never the one you meant. The narrator page is
   // same-origin, so the height of the page inside can simply be read and the
@@ -1329,6 +1319,17 @@
     });
   }
   fitFrame($('narrator'));
+  // Loaded now rather than when the fold is first opened, and after fitFrame
+  // above so the load it starts is the one that sizes the frame. It was lazy
+  // because it is a whole page behind the password and an eager fetch could
+  // pop an auth prompt on arrival; that mattered when the panel held a few
+  // sliders, and it now holds the phrase list, so the panel opening empty and
+  // filling in a moment later is the only panel on this console that behaves
+  // that way. The cost is one more fetch on every console load, of a page of
+  // about 36KB. It sits on a path of its own rather than under /host/, so the
+  // browser may ask for the credential once more; the realm is the same, so it
+  // is asked once and not again.
+  $('narrator').src = '/narrator/';
 
   // The music. Every one of these answers with the same state object, so one
   // draw() serves the poll and every button alike, and no button has to guess
