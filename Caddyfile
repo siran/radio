@@ -237,21 +237,6 @@ import admins.caddy
 	# removed when a host deletes one. Same folder and same shape as the desk,
 	# because it is the same kind of thing: station state, not a speaker's.
 	# 200 lines at 500 characters is 100KB before quoting, so 256KB.
-	# One small public file: which optional behaviours the listener page should
-	# switch on. It has to be readable WITHOUT a password, because the page that
-	# reads it is the one anybody can open - so it holds nothing but flags, and
-	# is written only by admin, which is already behind its own realm.
-	handle /features.json {
-		@get method GET
-		handle @get {
-			root * C:/Users/an/src/radio/config
-			file_server
-		}
-		handle {
-			respond 405
-		}
-	}
-
 	handle /narrator/history/* {
 		import speakers
 		@hist {

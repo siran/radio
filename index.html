@@ -68,19 +68,6 @@
      it says heard you, and still coming. */
   button.play { position: relative; }
   button.play.loading { cursor: progress; }
-  /* A live stream has no seek. If the player stalls - a sleeping phone, a
-     backgrounded tab, one bad moment of network - icecast keeps sending and the
-     player buffers what it could not play. It never drops audio to catch up; it
-     plays everything, late, for the life of the connection. That lag only grows,
-     and nothing on the page said so, which cost an evening of chasing bugs that
-     were not there. */
-  .behind { display:none; margin-top:14px; padding:10px 12px; border-radius:8px;
-    background:rgba(255,193,7,.10); border:1px solid rgba(255,193,7,.35);
-    font-size:.8rem; line-height:1.5; text-align:center; }
-  .behind.on { display:block; }
-  .behind button { margin-top:8px; cursor:pointer; font:inherit; font-size:.78rem;
-    padding:6px 14px; border-radius:6px; border:1px solid var(--line);
-    background:transparent; color:inherit; }
   button.play.loading::after {
     content: ''; position: absolute; inset: 7px; border-radius: 50%;
     border: 2px solid currentColor; border-top-color: transparent;
@@ -265,10 +252,6 @@
   </footer>
 </div>
 
-<div class="behind" id="behind" role="status">
-  <span id="behindmsg"></span><br>
-  <button type="button" id="golive">Jump to live</button>
-</div>
 <audio id="audio" preload="none"></audio>
 
 <script>
@@ -308,51 +291,6 @@
   audio.addEventListener('playing', () => setBtn('pause'));
   audio.addEventListener('pause',   () => setBtn('play'));
   audio.addEventListener('error',   () => { if (audio.paused) setBtn('play'); });
-
-  // ----- how far behind live are we? -----------------------------------------
-  // Measured here rather than asked of the server, because this page has no
-  // password and /control/now does. It does not need one: wall-clock time and
-  // the player's own currentTime both start together and should advance
-  // together, so whatever they differ by is exactly the audio the player
-  // buffered instead of playing. Every stall adds to it and nothing ever takes
-  // it away, which is the property that makes it worth showing.
-  let driftOn = false, playedFrom = 0, clockFrom = 0;
-  const BEHIND_S = 12;          // under this is buffering, and normal
-
-  fetch('/features.json', { cache: 'no-store' })
-    .then(r => r.ok ? r.json() : null)
-    .then(f => { driftOn = !!(f && f.drift); })
-    .catch(() => { driftOn = false; });   // unreadable means off: a warning that
-                                          // cannot be switched off is a liability
-
-  function driftReset() {
-    playedFrom = audio.currentTime;
-    clockFrom = Date.now();
-    $('behind').classList.remove('on');
-  }
-  function driftCheck() {
-    if (!driftOn || audio.paused || !clockFrom) return;
-    const wall = (Date.now() - clockFrom) / 1000;
-    const played = audio.currentTime - playedFrom;
-    const behind = wall - played;
-    if (behind < BEHIND_S) return $('behind').classList.remove('on');
-    const mins = Math.floor(behind / 60), secs = Math.round(behind % 60);
-    $('behindmsg').textContent =
-      'You are about ' + (mins ? mins + 'm ' + secs + 's' : secs + 's') +
-      ' behind the live broadcast. A stream cannot catch up on its own - ' +
-      'reconnecting is what puts you back on air.';
-    $('behind').classList.add('on');
-  }
-  audio.addEventListener('playing', driftReset);
-  setInterval(driftCheck, 4000);
-
-  // The same thing pressing pause and play does, without losing the press: a
-  // fresh connection is the only way back to live.
-  $('golive').addEventListener('click', () => {
-    $('behind').classList.remove('on');
-    setBtn('loading');
-    start().catch(() => { setBtn('play'); setLive(false, 'could not start'); });
-  });
 
   function setLive(on, label) {
     $('live').className = 'live' + (on ? ' on' : '');
