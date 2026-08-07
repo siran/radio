@@ -948,16 +948,23 @@
   };
   const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k].unit; };
 
+  // Drawing a read onto the sliders is the same work whether the read came
+  // from opening the fold or from a save, so it is written here once and both
+  // go through it rather than each keeping a copy of its own that can drift.
+  const applyKnobs = pairs => {
+    for (const [k, v] of pairs) {
+      if (!(k in KNOBS)) continue;   // liquidsoap may know knobs we do not draw
+      $(k).value = v;
+      showKnob(k);
+    }
+  };
+
   async function loadKnobs() {
     try {
       const res = await fetch('/control/knobs',
         { credentials: 'same-origin', cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      for (const [k, v] of await res.json()) {
-        if (!(k in KNOBS)) continue;   // liquidsoap may know knobs we do not draw
-        $(k).value = v;
-        showKnob(k);
-      }
+      applyKnobs(await res.json());
       $('derr').textContent = '';
     } catch (e) { $('derr').textContent = 'Mixing desk: ' + e.message; }
   }
@@ -987,8 +994,8 @@
   //
   // The WHOLE desk every time, never one key: a partial write would leave the
   // file holding a mix of what is set now and what was set before, which is a
-  // desk nobody ever chose. Values come off the controls rather than out of
-  // KNOBS, so what is on screen is what is kept.
+  // desk nobody ever chose. The values are read back from liquidsoap rather
+  // than taken off the controls, for the reason set out in the read below.
   let deskTimer = 0;
   function saveDesk() {
     // Dragging a slider fires change once, but loading a preset moves nine in
@@ -996,11 +1003,30 @@
     clearTimeout(deskTimer);
     deskTimer = setTimeout(async () => {
       const d = {};
-      for (const k in KNOBS) {
-        const v = parseFloat($(k).value);
-        if (isFinite(v)) d[k] = v;
-      }
       try {
+        // A slider holds whatever the page last polled, not what liquidsoap
+        // holds now. A page left open across a restart still shows the
+        // startup defaults - 2, 12, 295, -29, 3.5, 17.5, 0.45, 3, 0.01 - so
+        // moving any one knob wrote those nine over the tuning that was
+        // actually set, 3, 1, 80, -26, 6, 12, 0.6, 2, 0.01: the file that
+        // exists to survive a restart, destroyed by one, three times now.
+        // setKnob() has already POSTed this change to /interactive, so a read
+        // taken here answers with the new value and with the true current
+        // value of the other eight.
+        const kres = await fetch('/control/knobs',
+          { credentials: 'same-origin', cache: 'no-store' });
+        if (!kres.ok) throw new Error('HTTP ' + kres.status);
+        const live = await kres.json();
+        applyKnobs(live);          // and a page that was stale stops being stale
+        const now = new Map(live);
+        for (const k in KNOBS) {
+          const v = parseFloat(now.get(k));
+          // Refuse rather than guess. A knob liquidsoap did not report has no
+          // value this page is entitled to invent, and leaving it out would
+          // write exactly the partial desk the paragraph above rules out.
+          if (!isFinite(v)) throw new Error(k + ' was not reported');
+          d[k] = v;
+        }
         const res = await fetch(DESK_URL, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
