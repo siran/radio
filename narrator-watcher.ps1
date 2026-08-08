@@ -13,6 +13,11 @@ $ErrorActionPreference = 'Continue'
 
 $voice = 'C:\Users\an\src\radio\messages\voice'
 
+# Where the console's Say box lands. Every folder under $voice is spoken the
+# same way; this is the only one whose words are also KEPT, and the reason is
+# down at the ledger.
+$announcerDir = Join-Path $voice 'announcer'
+
 # Piper, out of its own venv. It is a python package rather than an exe, so it
 # gets invoked as a module. It writes 22050 Hz mono 16 bit, which the ffmpeg
 # inside liquidsoap reads as pcm_s16le and prepares without a murmur, so
@@ -198,81 +203,168 @@ while ($true) {
 
             Rename-Item $pending (Split-Path $wav -Leaf)
 
-            # Keep what was said. The .txt itself cannot stay - it would be
-            # rendered again three seconds later - so the words move into a
-            # ledger and the file goes. This is what lets a host see everything
-            # the station has said, say one again, and keep the ones worth
-            # keeping in a preset.
+            # Keep what was said - but only when a host typed it here.
             #
+            # The ledger is the phrase list on the /narrator page: lines to pick
+            # from, say again, and carry in a preset. That only makes sense for
+            # words somebody wrote in the Say box. Three different things write
+            # text into these folders and only one of them is that:
+            #
+            #   messages\voice\announcer\say-*.txt     the Say box - this one
+            #   messages\voice\announcer\track-*.txt   radio.liq, between tracks
+            #   messages\voice\<speaker>\*.md, *.txt   relayed: eGPT, and whoever
+            #                                         it is speaking on behalf of
+            #
+            # All three go on the air identically. The ledger is the only place
+            # they differ, and it has to, because a relayed line arriving in the
+            # host's own list looks like something they wrote and is not: a chat
+            # aside is not a phrase anyone wants to keep, and a busy hour of them
+            # buries the ones that are.
+            #
+            # The folder AND the prefix. The prefix alone would let a relayed file
+            # called say-anything.txt in; the folder alone would fill the list with
+            # the station's own between-track patter. A relay posting to a speaker
+            # named "announcer" is the single case this cannot tell apart, and at
+            # that point it genuinely is the same route writing the same file into
+            # the same place.
+            $typedHere = ($f.DirectoryName -eq $announcerDir) -and ($f.Name -like 'say-*')
+
             # Newest first, deduplicated on the text, capped at 200. This is a
             # list to pick from, not an archive: an unbounded array rewritten
             # every few seconds is a cost with no reader. Wrapped, because a
             # ledger that cannot be written is not worth losing a broadcast
             # over.
-            try {
-                $hist = Join-Path $repoConfig 'history.json'
-                $rows = @()
-                if (Test-Path $hist) {
-                    $raw = Get-Content $hist -Raw
-                    if ($raw -and $raw.Trim()) {
-                        # Land the parse in a variable before wrapping it. PowerShell
-                        # 5.1's ConvertFrom-Json writes a top-level JSON array to the
-                        # pipeline as ONE object rather than a row at a time, so
-                        # @(ConvertFrom-Json $raw) collects a single item - the array
-                        # itself - and yields an array holding an array. Measured on
-                        # this machine: for a two-row file @(ConvertFrom-Json $raw)
-                        # has Count 1 and its element is an Object[], while assigning
-                        # first and then @($parsed) has Count 2 of PSCustomObject.
-                        # Reading it the wrong way is what put each previous ledger in
-                        # at position 1 of the new one, which ConvertTo-Json renders
-                        # as {"value":[...],"Count":n} - a wrapper deeper per
-                        # announcement. The -Depth 4 below was never the problem; a
-                        # flat ledger is only two levels and serialises the same at
-                        # any depth from 2 up.
-                        $parsed = ConvertFrom-Json $raw
-                        $rows   = @($parsed)
+            if ($typedHere) {
+                try {
+                    $hist = Join-Path $repoConfig 'history.json'
+                    $rows = @()
+                    if (Test-Path $hist) {
+                        # ReadAllText, NOT Get-Content -Raw. This file is written a
+                        # few lines below with a BOM-less UTF-8 encoder, so there is
+                        # no byte order mark for PowerShell 5.1 to sniff and
+                        # Get-Content falls back to the ANSI code page - every
+                        # accented character comes back as the two characters its
+                        # UTF-8 bytes look like in cp1252. Written straight back out
+                        # as UTF-8 that is one more layer of mojibake on EVERY row
+                        # in the file, once per announcement, and it compounds.
+                        #
+                        # Measured here: a file holding "hablo" with an o-acute
+                        # reads as 195,179 through Get-Content and as 243 through
+                        # ReadAllText. Left alone it doubled, and it did - one
+                        # Spanish sentence reached 91572 characters in four hours,
+                        # the file went past the 256KB cap on the /narrator/history
+                        # route, caddy TRUNCATED the PUT mid-character rather than
+                        # refusing it, and the ledger was unparseable, and so
+                        # unwritable, from that moment on. It only bit once there
+                        # was non-ASCII to bite; English had hidden it for weeks.
+                        #
+                        # ReadAllText sniffs a mark if there is one and assumes
+                        # UTF-8 when there is not - exactly how the .txt above is
+                        # read. Same file, same encoder, same reader.
+                        $raw = [IO.File]::ReadAllText($hist)
+                        if ($raw -and $raw.Trim()) {
+                            # Land the parse in a variable before wrapping it. PowerShell
+                            # 5.1's ConvertFrom-Json writes a top-level JSON array to the
+                            # pipeline as ONE object rather than a row at a time, so
+                            # @(ConvertFrom-Json $raw) collects a single item - the array
+                            # itself - and yields an array holding an array. Measured on
+                            # this machine: for a two-row file @(ConvertFrom-Json $raw)
+                            # has Count 1 and its element is an Object[], while assigning
+                            # first and then @($parsed) has Count 2 of PSCustomObject.
+                            # Reading it the wrong way is what put each previous ledger in
+                            # at position 1 of the new one, which ConvertTo-Json renders
+                            # as {"value":[...],"Count":n} - a wrapper deeper per
+                            # announcement. The -Depth 4 below was never the problem; a
+                            # flat ledger is only two levels and serialises the same at
+                            # any depth from 2 up.
+                            #
+                            # Its own try, because a ledger that cannot be READ must not be
+                            # a ledger that can never be WRITTEN. The truncation above
+                            # wedged this permanently: every announcement threw here, wrote
+                            # a half-megabyte .ledger-err quoting the same broken file, and
+                            # left it exactly where it was for the next one to trip over.
+                            # Eight in a row before anybody noticed the list had stopped
+                            # growing. Now the bad copy moves aside once, under a stamped
+                            # name so nothing overwrites the evidence, and the list starts
+                            # again empty. A lost phrase list is a small loss; a phrase
+                            # list that stays lost is the actual bug.
+                            try {
+                                $parsed = ConvertFrom-Json $raw
+                                $rows   = @($parsed)
+                            }
+                            catch {
+                                $bad = Join-Path $repoConfig ('history.bad-{0}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+                                Move-Item $hist $bad -Force -ErrorAction SilentlyContinue
+                                $rows = @()
+                            }
+                        }
                     }
+                    # Trimmed, and that is the whole of the dedupe working. The
+                    # words arrive as the contents of a file, so they carry the
+                    # trailing newline whoever wrote it ended with - and the say
+                    # path adds one of its own on the way out. So "Say it again" on
+                    # a row took its text, which already ended in a newline, put
+                    # another on it, and came back here one character longer than
+                    # the row it came from. Different words, by the only test this
+                    # has, so it never matched and every replay minted another row.
+                    # Observed: the same sentence at 34 characters and at 35, one
+                    # newline apart, listed twice.
+                    $row  = [pscustomobject]@{
+                        t    = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+                        text = $text.Trim()
+                    }
+                    # Dedupe on the words, and drop anything with no text while we are
+                    # here. Empty text never gets this far - it is binned up at the top of
+                    # the loop - so a row without text can only be one of the
+                    # {"value":...,"Count":...} wrappers the bug above already wrote, and
+                    # the /narrator page cannot show those anyway. That makes the next
+                    # announcement flatten the file that is on disk now, with no separate
+                    # repair step.
+                    $rows = @($row) + @($rows | Where-Object { $_ -and $_.text -and $_.text.Trim() -ne $row.text })
+                    if ($rows.Count -gt 200) { $rows = $rows[0..199] }
+
+                    # A second cap, on bytes rather than rows, because the row count was
+                    # never the limit that mattered. The /narrator page reads this file
+                    # and writes it back WHOLE - to delete a phrase, or to merge the ones
+                    # a preset kept - through a route capped at 256KB, and caddy does not
+                    # refuse a body over that. It truncates it and leaves the cut bytes
+                    # on disk. So a ledger this loop is perfectly happy to write is one
+                    # the page can turn into rubble just by saving it, and 200 rows at
+                    # the 500 characters the Say box allows is past 256KB on its own,
+                    # mojibake or none.
+                    #
+                    # Drop the oldest until it fits, with room to spare. Newest first, so
+                    # this always sheds the least interesting end.
+                    $json = ConvertTo-Json @($rows) -Depth 4
+                    while ($rows.Count -gt 1 -and $utf8.GetByteCount($json) -gt 200000) {
+                        $rows = @($rows[0..($rows.Count - 2)])
+                        $json = ConvertTo-Json @($rows) -Depth 4
+                    }
+                    [IO.File]::WriteAllText($hist, $json, $utf8)
                 }
-                # Trimmed, and that is the whole of the dedupe working. The
-                # words arrive as the contents of a file, so they carry the
-                # trailing newline whoever wrote it ended with - and the say
-                # path adds one of its own on the way out. So "Say it again" on
-                # a row took its text, which already ended in a newline, put
-                # another on it, and came back here one character longer than
-                # the row it came from. Different words, by the only test this
-                # has, so it never matched and every replay minted another row.
-                # Observed: the same sentence at 34 characters and at 35, one
-                # newline apart, listed twice.
-                $row  = [pscustomobject]@{
-                    t    = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
-                    text = $text.Trim()
+                catch {
+                    # Say WHY, the same way the render failure below does: a stamped line
+                    # in a file beside the wav. ".ledger-err" is not an audio extension
+                    # and not a text one either, so neither the pickup nor this loop looks
+                    # at it. It carries the words as well as the message, because the .txt
+                    # is deleted a few lines down and the ledger was the only other copy.
+                    #
+                    # What it deliberately does not do is rethrow. The wav is rendered and
+                    # renamed by now - it is already on the air - and the outer catch would
+                    # rename the source to .failed as though nothing had been said. An
+                    # unwritten ledger is a lost line; a rethrow here would be a lost
+                    # broadcast, which is worse. The file is the alarm.
+                    #
+                    # The message is capped, because ConvertFrom-Json quotes its entire
+                    # input back at you in the exception. Eight of these landed at 568KB
+                    # each and every one was the same 256KB of broken ledger. The first
+                    # 500 characters say which error it is; the rest was only weight.
+                    $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                    $msg   = "$($_.Exception.Message)"
+                    if ($msg.Length -gt 500) { $msg = $msg.Substring(0, 500) + ' ...' }
+                    $why   = "$stamp  history.json not written: $msg`r`n$text"
+                    [IO.File]::WriteAllText("$wav.ledger-err", $why, $utf8)
                 }
-                # Dedupe on the words, and drop anything with no text while we are
-                # here. Empty text never gets this far - it is binned up at the top of
-                # the loop - so a row without text can only be one of the
-                # {"value":...,"Count":...} wrappers the bug above already wrote, and
-                # the /narrator page cannot show those anyway. That makes the next
-                # announcement flatten the file that is on disk now, with no separate
-                # repair step.
-                $rows = @($row) + @($rows | Where-Object { $_ -and $_.text -and $_.text.Trim() -ne $row.text })
-                if ($rows.Count -gt 200) { $rows = $rows[0..199] }
-                [IO.File]::WriteAllText($hist, (ConvertTo-Json @($rows) -Depth 4), $utf8)
-            }
-            catch {
-                # Say WHY, the same way the render failure below does: a stamped line
-                # in a file beside the wav. ".ledger-err" is not an audio extension
-                # and not a text one either, so neither the pickup nor this loop looks
-                # at it. It carries the words as well as the message, because the .txt
-                # is deleted a few lines down and the ledger was the only other copy.
-                #
-                # What it deliberately does not do is rethrow. The wav is rendered and
-                # renamed by now - it is already on the air - and the outer catch would
-                # rename the source to .failed as though nothing had been said. An
-                # unwritten ledger is a lost line; a rethrow here would be a lost
-                # broadcast, which is worse. The file is the alarm.
-                $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-                $why   = "$stamp  history.json not written: $($_.Exception.Message)`r`n$text"
-                [IO.File]::WriteAllText("$wav.ledger-err", $why, $utf8)
             }
 
             Remove-Item $f.FullName -Force
