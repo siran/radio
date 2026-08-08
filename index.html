@@ -838,7 +838,18 @@
     const stamp = now.toISOString().replace(/[:.]/g, '');
     const rand  = Math.random().toString(36).slice(2, 8);
     const file  = stamp + '-' + rand + '.md';
-    const into  = mmss((Date.now() - titleSince) / 1000);
+    // The station's own position, the same number the clock under the button
+    // shows. This used to be measured from when THIS browser first saw the
+    // title change, which is the moment the reader arrived rather than the
+    // moment the track began - so every note left by someone who tuned in
+    // mid-song recorded a position earlier than the one they were actually
+    // hearing, and recorded it into a file that is kept. There is no guess to
+    // make any more: /likes/now answers with the elapsed time off the frame
+    // being played. An empty field when the station has not answered yet,
+    // because a blank is honest and a zero is a claim.
+    const into  = trackAt === null
+      ? ''
+      : mmss(trackElapsed + (Date.now() - trackAt) / 1000);
 
     const md =
       '---\n' +
