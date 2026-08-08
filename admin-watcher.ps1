@@ -70,6 +70,29 @@ function Add-Speaker($name, $password) {
     New-Item -ItemType Directory -Force -Path (Join-Path $voice $clean) | Out-Null
     & icacls (Join-Path $voice $clean) /grant 'svc-radio:(OI)(CI)M' /Q *> $null
 
+    # Land flat: unity gain and seven zeroes. The same file mint-speaker.ps1
+    # writes, because a host minted through this endpoint and a host minted at
+    # the console are the same kind of thing and should not arrive sounding
+    # different. Without it a new speaker falls back to the station-wide
+    # voice_gain, which is a shared knob that has been anywhere from 1.0 to 12.0
+    # in a single day - one inheriting 12.0 arrives distorted, one inheriting 1.0
+    # arrives inaudible, and either way they would reasonably conclude the radio
+    # is broken rather than that they have sliders to move. Flat is not a guess
+    # at a good sound; it is the absence of one, which is the only honest default
+    # for a microphone this station has never heard.
+    #
+    # Never overwritten. Re-minting a speaker rotates their password and must
+    # not undo their tuning.
+    #
+    # WriteAllText with a BOM-less encoder because liquidsoap parses this file
+    # raw and a byte order mark is not JSON, and written INSIDE the folder so it
+    # inherits the permission just granted rather than carrying one in.
+    $seed = Join-Path (Join-Path $voice $clean) 'settings.json'
+    if (-not (Test-Path $seed)) {
+        $flat = '{"gain":1,"duck":true,"eq":{"f100":0,"f200":0,"f400":0,"f800":0,"f1600":0,"f3150":0,"f6300":0}}'
+        [IO.File]::WriteAllText($seed, $flat, (New-Object Text.UTF8Encoding($false)))
+    }
+
     if (-not (Reload-Caddy)) { return @{ ok = $false; error = 'caddy rejected the new config' } }
     return @{ ok = $true; name = $clean; password = $password }
 }
