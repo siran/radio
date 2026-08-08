@@ -1371,6 +1371,47 @@ def is_new(f) =
   end
 end
 
+# Nothing has ever stopped this loop finding a file that is still being written.
+# The scan runs four times a second, and caddy's webdav writes an upload
+# straight into the speaker's folder under its final name - there is no staging
+# name and no rename, because over HTTP the body lands where it lands. So a note
+# that takes any time at all to arrive is visible, and incomplete, for as long as
+# it is arriving. /host/upload/ has had this exposure from the start and has got
+# away with it only because a browser upload is small and finishes fast; the
+# relay route hands the same folders to whatever a phone recorded over whatever
+# signal it had. A writer cannot fix this from its end, so it is fixed here,
+# once, for everything that writes into these folders.
+#
+# Measured on this build rather than assumed, because the whole idea rests on
+# it: while a file is being written the mtime on disk keeps up with the writes,
+# reading a quarter of a second old after a quarter-second pause and never
+# staler, so it really is a signal of "still arriving" and not merely the moment
+# of creation. file.mtime keeps the fraction as well - 1786208424.89 rather than
+# a whole second - so a window shorter than a second is meaningful here.
+#
+# Half a second, against a poll every 0.25s. It has to be longer than one poll
+# interval or a file written between two polls could already be settled the
+# first time it is seen, which is the case being guarded against; two intervals
+# means every file is looked at at least twice before it can queue. It costs a
+# note at most 0.75s - the half second, plus the poll that notices it has
+# passed - which is nothing beside the couple of seconds a note already takes to
+# reach the air, and it is a long way short of the five minutes the cleanup
+# below allows, so nothing can be binned while it waits.
+settle = 0.5
+
+def settled(f) =
+  try
+    time() - file.mtime(f) >= settle
+  catch _ do
+    # Cannot tell, so do not invent a reason to hold the file back: fall through
+    # to is_new, which already treats an mtime it could not get as "not new" and
+    # lets the note go the same way as one written before the station started.
+    # A file that is simply gone reads 0.0 here, which is older than any settle
+    # window and so passes straight through to that same decision.
+    true
+  end
+end
+
 def pickup() =
   # file.ls with recursive=true ignores `pattern` entirely - patterns do not
   # cross a directory separator - and it returns directories alongside files.
@@ -1390,7 +1431,16 @@ def pickup() =
 
   list.iter(
     fun (f) ->
-      if not list.mem(f, seen()) then
+      # `settled` is asked BEFORE `seen` is written, and that order is the whole
+      # of the guard. `seen` means "do not queue this path" and is never
+      # revisited while the file is on disk, so a note marked seen while it was
+      # still arriving would be dropped for good rather than played a moment
+      # late - which is silently losing someone's note, the worst outcome here.
+      # Leaving a file that is still changing out of `seen` altogether is what
+      # gets it reconsidered on the very next poll, and every poll after, until
+      # it stops changing. `and` is lazy on this build - measured - so a file
+      # already in `seen` still costs no stat at all.
+      if not list.mem(f, seen()) and settled(f) then
         # Recorded either way, so an old note costs one stat and not four a
         # second. `seen` keeps meaning exactly what it meant - do not queue
         # this path - and the cleanup below still forgets it once the file is

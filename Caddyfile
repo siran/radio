@@ -24,6 +24,34 @@
 
 import speakers.caddy
 import admins.caddy
+import relays.caddy
+
+# What the door accepts. Stated once, and used by both /host/upload/ and
+# /host/relay/ below, because a list written out twice is a list that will
+# eventually disagree with itself: add .flac to one of them and notes are either
+# accepted and then never played, or refused for something the station decodes
+# perfectly well. Neither failure says anything about an extension list.
+#
+# This is one half of a pair that cannot be collapsed any further. The other
+# half is `exts` in radio.liq, and caddy and liquidsoap share no configuration
+# format that could hold it, so one statement per program is the floor rather
+# than something worth working around. radio.liq is the AUTHORITATIVE half: it
+# is what actually decodes the file and decides whether a note reaches the air,
+# and this is only the door in front of it. An extension added there and not
+# here is refused at the door; added here and not there, it lands in a speaker's
+# folder and is never played.
+#
+# Case is not spelled out the way radio.liq spells it out. Measured on this
+# build: caddy's `path` matcher is case-insensitive, so .OPUS and .TXT match
+# these lowercase patterns on their own, where liquidsoap compares strings and
+# therefore carries an explicit uppercase twin of every entry.
+#
+# .md and .txt are here for the relay, which takes a spoken line of text down
+# the identical path with the speaker's own gain and ducking rather than making
+# a second mechanism of it. /host/upload/ narrows them back out.
+(note_exts) {
+	@noteext path *.webm *.ogg *.oga *.opus *.mp3 *.m4a *.wav *.md *.txt
+}
 
 (jellyfin) {
 	encode zstd gzip
@@ -137,39 +165,203 @@ import admins.caddy
 	# again - which it will not reliably do across two sibling paths.
 	handle /host/upload/* {
 		import speakers
-		@putaudio {
-			method PUT
-			path *.webm *.ogg *.oga *.opus *.mp3 *.m4a *.wav
-		}
-		handle @putaudio {
-			rate_limit {
-				zone voice_writes {
-					key {remote_host}
-					events 150
-					window 1m
+		@put method PUT
+		handle @put {
+			import note_exts
+			# The two text forms in that list are the relay's, not this route's.
+			# A browser recording a note has no reason to post one and this path
+			# has never taken them, so they are narrowed back out here rather
+			# than widening this route by a side effect of sharing the list.
+			@text path *.md *.txt
+			handle @text {
+				respond 403
+			}
+			handle @noteext {
+				rate_limit {
+					zone voice_writes {
+						key {remote_host}
+						events 150
+						window 1m
+					}
+				}
+				# A note is now ONE recording uploaded once, however long it
+				# runs, so this has to hold a whole show and not a 1.5s
+				# fragment. Same measured trap as settings.json below: max_size
+				# TRUNCATES the body, it does not reject it - an oversized note
+				# would be written cut short, with nothing said to the speaker.
+				# That is why the host page stops itself at 15MB and says why:
+				# the ceiling is reached in the browser, where it can be
+				# explained, and never here. Measured since, on this build: the
+				# request that overruns answers 405 and leaves 16,000,000 bytes
+				# on disk, so max_size 16MB is 16 million bytes and not 16 MiB.
+				# /host/relay/ refuses on the declared length before webdav
+				# opens the file; this route still relies on the page's guard.
+				request_body {
+					max_size 16MB
+				}
+				# The folder is whoever authenticated - never what the client
+				# says. This is the property /host/relay/ cannot have and the
+				# reason it checks the folder instead.
+				webdav {
+					root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+					prefix /host/upload
 				}
 			}
-			# A note is now ONE recording uploaded once, however long it runs,
-			# so this has to hold a whole show and not a 1.5s fragment. Same
-			# measured trap as settings.json below: max_size TRUNCATES the
-			# body, it does not reject it - an oversized note would be written
-			# cut short, with nothing said to the speaker. That is why the host
-			# page stops itself at 15MB and says why: the ceiling is reached in
-			# the browser, where it can be explained, and never here.
-			request_body {
-				max_size 16MB
+			handle {
+				respond 403
 			}
-			# The folder is whoever authenticated - never what the client says.
-			webdav {
-				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
-				prefix /host/upload
-			}
-		}
-		@putother method PUT
-		handle @putother {
-			respond 403
 		}
 		# never readable over http - these are someone's voice
+		handle {
+			respond 404
+		}
+	}
+
+	# The relay. eGPT takes a voice note out of a chat and puts it straight into
+	# a speaker's folder, so something spoken into a phone reaches the air
+	# without anyone opening the host page. One credential covers every speaker,
+	# and it is deliberately not any speaker's own: eGPT never learns a human's
+	# password and so can never rotate one out from under them. That is what
+	# settled this shape over letting eGPT mint speakers of its own - roger and
+	# dj sign into the host console with those same passwords, and a relay that
+	# re-mints itself to recover would lock a human out of his own console with
+	# nothing anywhere saying why.
+	#
+	# The block above is the opposite of this one, and the difference is the
+	# whole design. /host/upload/ files the write under {http.auth.user.id}, so
+	# the folder IS whoever authenticated and cannot be aimed anywhere else.
+	# This route cannot work that way, because one credential posts on behalf of
+	# many people, so the speaker is named in the path instead - and nothing
+	# here consults the authenticated user for anything beyond getting through
+	# the door. {http.auth.user.id} would read `egpt-relay`, which is not a
+	# speaker and is never going to be one; a note filed under it would land in
+	# a folder nobody reads. The path is therefore CHECKED rather than trusted,
+	# and that check is the file matcher below.
+	handle /host/relay/* {
+		import relays
+		# The shape, and only the shape - a speaker and a filename. What counts
+		# as an acceptable filename is the shared list at the top of this file
+		# rather than a third copy of it written out here. mint-speaker.ps1
+		# reduces a name to [a-z0-9] and lowercases it, so that is exactly what
+		# a folder under messages/voice can be called and exactly what is
+		# allowed here, which also means no spelling of a dot-segment can reach
+		# the file matcher or the webdav under it. The one capture is the
+		# speaker, read below as {re.relay.1}.
+		@relay {
+			method PUT
+			path_regexp relay ^/host/relay/([a-z0-9]+)/[A-Za-z0-9._-]+$
+		}
+		handle @relay {
+			import note_exts
+			handle @noteext {
+				# A body with no declared length cannot be checked before it
+				# is written, and letting it through is exactly the
+				# truncation described below. 411 says which of the two
+				# things is wrong. eGPT sends a file whose size it knows, so
+				# this should never fire.
+				@nolength not header_regexp Content-Length ^[0-9]+$
+				handle @nolength {
+					respond 411
+				}
+				# The measured reason there is a guard here at all rather
+				# than max_size on its own. Against max_size 16MB a 17MB PUT
+				# answers 405 and leaves 16,000,000 bytes sitting in the
+				# speaker's folder: not a 413, and not nothing - a truncated
+				# note carrying a current mtime, which the pickup then
+				# queues and the station plays. It is the same trap the
+				# settings files document, except that here the corrupt file
+				# goes on the air instead of being quietly reparsed. So the
+				# length is refused before webdav ever opens the file.
+				#
+				# 16,000,000 and not 16777216: max_size counts in millions,
+				# so the 16MB below is 16,000,000 bytes exactly and this has
+				# to be the same number, or the gap between the two is
+				# precisely the range that gets truncated. Measured at the
+				# boundary - 16,000,000 lands whole, 16,000,001 writes
+				# nothing at all.
+				@toobig expression `int({http.request.header.Content-Length}) > 16000000`
+				handle @toobig {
+					respond 413
+				}
+				# Does this speaker exist? The trailing slash is
+				# load-bearing: the file matcher reads a path ending in a
+				# separator as "must be a directory" and one without as
+				# "must not be", so this asks for a FOLDER rather than for
+				# anything that happens to carry the name. Verified against
+				# this binary - a plain file sitting beside the speaker
+				# folders does not satisfy it.
+				#
+				# This is what the route exists for. An unknown speaker is
+				# eGPT's own bug, a name in its table that was never minted,
+				# and the operator fixes it in the admin page; a wrong
+				# credential is eGPT's to fix. Answered as the same code,
+				# every one of them gets diagnosed by the wrong person.
+				# Nothing here creates the folder: a typo has to be an error
+				# and not a silent new lane nobody meant to make.
+				@known file {
+					root C:/Users/an/src/radio/messages/voice
+					try_files {re.relay.1}/
+				}
+				handle @known {
+					# Only a backstop now, since the guard above refuses
+					# anything this could cut. Kept because a cap that
+					# lives solely in a matcher is one edit from gone.
+					request_body {
+						max_size 16MB
+					}
+					# The folder is the one named in the path and
+					# confirmed above - never {http.auth.user.id}, which
+					# here is the relay and not a speaker.
+					#
+					# webdav creates the file where it belongs instead of
+					# moving it in, and both halves of that matter. A
+					# created file inherits the folder's ACEs - measured
+					# on this tree, svc-radio keeps Modify, and svc-radio
+					# is what both caddy and liquidsoap run as - where a
+					# file moved in carries the ACL of wherever it came
+					# from and the note then fails as a codec error,
+					# which sends whoever debugs it a long way from the
+					# actual problem. It also gets a current mtime, which
+					# the pickup requires: anything older than the
+					# station's own start is ignored by design.
+					#
+					# The name is written exactly as it arrived. Nothing
+					# here normalises or disambiguates it, so what lands
+					# is always what was asked for, and webdav's 201
+					# carries no body that could say otherwise. A repeat
+					# of a name overwrites, which the ISO timestamps make
+					# a non-event.
+					webdav {
+						root C:/Users/an/src/radio/messages/voice
+						prefix /host/relay
+					}
+				}
+				handle {
+					respond 404
+				}
+			}
+			# The right shape but an extension the station would never
+			# play. Kept apart from the 404 above so that "I sent you
+			# something you do not accept" cannot be read as "that person
+			# does not exist" - the two are fixed in different places by
+			# different people.
+			handle {
+				respond 415
+			}
+		}
+		# Everything else under /host/relay/: a GET or a DELETE, a path of the
+		# wrong depth, or a speaker name no minting could have produced, which
+		# is the same answer as a speaker who is not there. Refused rather than
+		# left to fall through to the file_server in `handle /host*`, which
+		# would serve somebody's voice notes back over http - these are never
+		# readable, the same rule /host/upload/ keeps.
+		#
+		# No rate limit here, and it is a choice rather than an omission. The
+		# agreed status table has eGPT stop on a 4xx and retry with backoff on
+		# a 5xx; 429 is in neither column, so a limiter firing while a backlog
+		# is flushed after a restart would drop notes under a code the other
+		# side has no rule for. This is one credential, revoked by deleting one
+		# line in relays.caddy, which is the lever that actually fits.
 		handle {
 			respond 404
 		}
@@ -670,7 +862,16 @@ import admins.caddy
 	}
 
 	# Source notes live alongside the page - keep them off the internet.
-	@docs path *.md *.markdown
+	#
+	# Except on the relay, which carries a spoken line of text as a .md into a
+	# speaker's folder. This rule has no path prefix of its own, so it reaches
+	# every .md on the site including that one, and the note came back 404 while
+	# the identical .txt landed 201 - the same code the relay uses for an unknown
+	# speaker, which is exactly the confusion the relay was built to avoid.
+	@docs {
+		path *.md *.markdown
+		not path /host/relay/*
+	}
 	handle @docs {
 		respond 404
 	}
