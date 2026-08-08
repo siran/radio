@@ -116,28 +116,49 @@
      diameter, and that is not a coincidence to be tidied away: a percentage in
      this gradient is a fraction of the disc's radius, and the label's edge lies
      at exactly the label's fraction of it. Move one number without the other and
-     the smooth band stops meeting the paper.
+     the smooth band stops meeting the paper. Its outer edge is a different kind
+     of number: it was sixty-nine per cent and is now sixty-five and a half,
+     which is where the ninth groove came from, and the reason it could be moved
+     is that nothing else is measured from it.
 
-     Then the grooves, and they are a ramp rather than a step. Thirteen pixels of
-     playing area are left once the label has taken three fifths of the face and
-     the run-out its band, and the ink used to step from near-black to a
-     barely-there white and back every 2.6px, which put five rings in those
-     thirteen. Simply tightening that step to fit seven did not produce seven
-     rings. A step edge carries a great deal of energy above its own pitch, and
-     once the pitch is down near the width of a pixel that energy folds back and
-     the ring field breaks into a speckled hatch, which was rendered at true size
-     and is not a subtle failure: it is worse than having no grooves. Written as a
-     ramp instead, from near-black up to the light of the groove at the halfway
-     point and back down, seven rings survive, because a ramp has almost nothing
-     above its own pitch left to fold. The white is carried heavier than it was to
-     recover the contrast a ramp gives away against a step, and the pitch and that
-     weight together hold the average brightness of the band within a couple of
-     levels out of two hundred and fifty-five of what the five ring pressing had,
-     which is what keeps the margin reading as black vinyl rather than as grey
-     card. This pitch is in pixels and not a fraction of --lp on purpose, unlike
-     everything else here: it was chosen against the raster the browser draws it
-     on, and a pitch that scaled with the record would land somewhere else on that
-     raster at every size and alias differently at each.
+     Then the grooves, and they are a ramp rather than a step. A step edge carries
+     a great deal of energy above its own pitch, and once the pitch is down near
+     the width of a pixel that energy folds back and the ring field breaks into a
+     speckled hatch, which was rendered at true size and is not a subtle failure:
+     it is worse than having no grooves. Written as a ramp instead, from near-black
+     up to the light of the groove at the halfway point and back down, the field
+     survives at pitches a step cannot reach, because a ramp has almost nothing
+     above its own pitch left to fold.
+
+     Nine rings is what is wanted here and nine is what is drawn, but not by
+     dividing the old band into nine. That band was 13.02px and nine periods across
+     it comes to 1.45px, and these rings are a gradient sampled on a raster whose
+     pixels are one: measured off the rendered button over a fixed annulus, 1.45px
+     draws its nine rings at a contrast of 9.3 levels out of 255 where the seven
+     period pressing had 16.2, and the angular scatter that tells a ring field from
+     a hash goes up by half again with it. Contrast lives in the pitch and the pitch
+     lives in the width of the band, so the width was bought from the run-out rather
+     than the pitch being forced. Moving the run-out's outer edge in by three and a
+     half points of the radius turns 13.02px of playing area into 14.49px, and nine
+     periods across that is 1.61px instead of 1.45px, which measures 13.5 levels of
+     contrast and lays down nine rings whose spacing varies by under a tenth of a
+     pixel. The old pressing declared seven periods and drew six clear rings with
+     the seventh lost in the rim; this one declares nine and draws nine, the
+     innermost two thirds of a pixel clear of the run-out and the outermost a whole
+     pixel clear of the edge. The smooth band pays 1.47px of its 3.36px for that and
+     keeps 1.89px, which still reads as a run-out. Taking the rest of its width would
+     buy about another level of contrast and leave the record without the one feature
+     that says the grooves have ended, which is not a trade worth making.
+
+     The white is left at the weight it was already carrying, because the band's
+     average brightness follows that weight and hardly notices the pitch, so leaving
+     it alone keeps the margin reading as black vinyl rather than as grey card
+     without anything else having to be arranged: over the same annulus the nine
+     ring band sits about one level above the seven ring one. This pitch is in
+     pixels and not a fraction of --lp on purpose, unlike everything else here: it
+     was chosen against the raster the browser draws it on, and a pitch that scaled
+     with the record would land somewhere else on that raster at every size and
+     alias differently at each.
 
      Underneath is the vinyl, a shade lighter at the centre than at the rim so
      the face reads as a moulded object rather than a hole cut in the page.
@@ -158,9 +179,9 @@
     position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     background:
-      radial-gradient(circle closest-side, transparent 0 61%, #0f0f14 61% 69%, transparent 69%),
+      radial-gradient(circle closest-side, transparent 0 61%, #0f0f14 61% 65.5%, transparent 65.5%),
       repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0,
-                                rgba(255,255,255,.12) .93px, rgba(0,0,0,.86) 1.86px),
+                                rgba(255,255,255,.12) .805px, rgba(0,0,0,.86) 1.61px),
       radial-gradient(circle closest-side, #26262f 0 26%, #16161c 60%, #08080b 100%);
     animation: spin 4.5s linear infinite;
     animation-play-state: paused;
@@ -205,6 +226,53 @@
                                rgba(255,255,255,0) 360deg);
     -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 61%, #000 62%);
     mask-image: radial-gradient(circle closest-side, transparent 0 61%, #000 62%);
+  }
+  /* The lip. A pressed record is not flat at its edge: there is a raised smooth
+     rim outside the last groove, and being smooth it is the one part of the black
+     face that returns a specular reflection rather than scattering it, which is
+     why the edge of a record catches the light in a way the playing surface never
+     does. That is the thing being drawn here, and it decides where it belongs.
+     Light that comes from a lamp in the room does not turn with the turntable, so
+     the lip's highlight has to sit still while the vinyl passes under it, exactly
+     as the glint above does, and it lives on the glint for that reason rather than
+     on the disc. It is brightest at 265 degrees because that is where the glint is
+     brightest: the glint's conic starts at 250 and reaches its peak fifteen degrees
+     later, and this one starts at 85 and reaches its own peak half a turn later, so
+     the same number is arrived at from the other side of the circle rather than
+     being copied. Two lights on one record pointing in two directions is the single
+     thing that would give the whole illusion away.
+
+     The texture is in the shape of the arc rather than in a pattern laid over it.
+     A repeating conic gradient was tried first, which is the obvious way to write
+     texture that turns with the surface, and it was measured rather than admired:
+     at forty-eight and at ninety-six cells around the circumference the phase of
+     the ripple did not move with the disc at all through a whole revolution,
+     because a cell is then two to five pixels wide on a band two pixels tall and
+     what survives the raster is its own beat against the pixel grid and not
+     anything that was drawn. At twenty-four cells it does genuinely turn, and it
+     turns as a ring of visible dashes, which is a worse thing to have than a plain
+     rim. So the variation is written into the conic itself as a main lobe with
+     several lesser ones around it, which is what an edge that is not polished under
+     a room that is not one point light actually looks like, and it varies over tens
+     of degrees rather than over three, which is a rate two pixels can hold.
+
+     The mask is what makes this a lip rather than a wash over the whole face: it
+     opens at ninety-five and a half per cent of the radius, is fully open across
+     the crest, and closes again at the rim so the outermost half pixel, which is
+     already being shared with the button's antialiased edge, is not asked to carry
+     a hard bright line. It is declared prefixed and unprefixed for the same reason
+     the glint's own mask is. Nothing here animates, so there is nothing here to
+     freeze, and the lip is in the same place at every angle and in every state. */
+  .lp-glint::after {
+    content: ''; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 85deg, rgba(255,255,255,.03) 0deg, rgba(255,255,255,.055) 38deg,
+                               rgba(255,255,255,.03) 72deg, rgba(255,255,255,.10) 104deg,
+                               rgba(255,255,255,.07) 131deg, rgba(255,255,255,.34) 180deg,
+                               rgba(255,255,255,.17) 203deg, rgba(255,255,255,.24) 222deg,
+                               rgba(255,255,255,.08) 258deg, rgba(255,255,255,.115) 292deg,
+                               rgba(255,255,255,.04) 325deg, rgba(255,255,255,.03) 360deg);
+    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 95.5%, #000 97% 99.3%, transparent 100%);
+    mask-image: radial-gradient(circle closest-side, transparent 0 95.5%, #000 97% 99.3%, transparent 100%);
   }
   /* The paper label. It is the only part of the record that is allowed to be a
      flat bright colour, because it is the only part that has to carry words: a
