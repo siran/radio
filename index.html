@@ -14,12 +14,17 @@
        one chosen first. The play triangle is chosen first, at fourteen pixels
        tall, which is the height of the triangle in a standard twenty-four pixel
        play icon and so the size a play button is on anything else; the label is
-       then made only wide enough to hold that triangle hanging below the
-       spindle hole; and the vinyl is finally made only as wide as it has to be
-       for the grooves outside the label to still read as grooves, which takes
-       about five of them. Deciding in that order lands on eighty-four pixels, twelve less than
-       the ninety-six this used to be, while the triangle goes from six pixels
-       tall to fourteen. Shrinking it is not free: the counter below the button
+       then made only wide enough to hold that symbol, which is now centred on
+       the spindle hole rather than hanging below it; and the vinyl is finally
+       made only as wide as it has to be for the grooves outside the label to
+       still read as grooves. Deciding in that order lands on eighty-four pixels,
+       twelve less than the ninety-six this used to be, while the triangle goes
+       from six pixels tall to fourteen. Centring the symbol on the hole is what
+       has moved since, and it moved the middle step only: a label no longer has
+       to be tall enough to hold a hole and a symbol stacked one above the other,
+       so the paper falls from fifty-seven and a half per cent of the diameter to
+       thirty and a half and the grooves take every pixel of the difference,
+       going from ten rings to seventeen. Shrinking it is not free: the counter below the button
        is pinned to this width and does not scale with it, and 10:00 / 100:00
        measures 71.7px, so there are twelve pixels in hand and no more to give. */
     --lp: 84px;
@@ -91,12 +96,13 @@
   /* The button is the record, and the record is built the way one looks: black
      vinyl carrying fine concentric grooves, a smooth run-out ring where the
      grooves stop, a red paper label, and a spindle hole punched dead centre. The
-     label takes a little over half the face here rather than the third a twelve
-     inch LP gives it, which is nearer the proportion of a seven inch single, and
-     it is that way round because the label has to carry a full sized play
-     triangle hanging below the spindle hole. The record is built outward from
-     that rather than the label being handed whatever the disc had left over, which
-     is how it ended up with a six pixel triangle on a ninety-six pixel button.
+     label takes a little under a third of the face, which is about what a twelve
+     inch LP gives it, and it can be that small because the symbol is printed
+     around the spindle hole rather than stacked below it: what the paper has to
+     cover is the symbol's furthest corner from the centre, and no longer the
+     length of a hole and a symbol laid end to end. The record is built outward
+     from the symbol rather than the label being handed whatever the disc had left
+     over, which is how it ended up with a six pixel triangle on a ninety-six pixel button.
      Every measurement here is a fraction of --lp, so changing the diameter changes
      the whole pressing rather than leaving the label the wrong size for the disc
      it is glued to.
@@ -111,17 +117,17 @@
      evidence.
 
      So the first layer is the run-out, the smooth dark band every pressing has
-     between the last groove and the paper. Its inner edge is written as fifty-seven
-     and a half per cent, which is the same number as the label's share of the
+     between the last groove and the paper. Its inner edge is written as thirty and
+     a half per cent, which is the same number as the label's share of the
      diameter, and that is not a coincidence to be tidied away: a percentage in
      this gradient is a fraction of the disc's radius, and the label's edge lies
      at exactly the label's fraction of it. Move one number without the other and
      the smooth band stops meeting the paper. Its outer edge is a different kind
      of number, measured from the inner one and from nothing else: the band is
      four and a half points of the radius wide, which is the 1.89px it was cut to
-     when the rings were last counted, so the outer edge is sixty-two per cent. It
-     moved in by exactly what the paper moved in by, because a run-out that does
-     not follow the paper is a run-out that no longer starts at it.
+     when the rings were last counted, so the outer edge is thirty-five per cent.
+     It moved in by exactly what the paper moved in by, because a run-out that
+     does not follow the paper is a run-out that no longer starts at it.
 
      Then the grooves, and they are a ramp rather than a step. A step edge carries
      a great deal of energy above its own pitch, and once the pitch is down near
@@ -132,28 +138,33 @@
      survives at pitches a step cannot reach, because a ramp has almost nothing
      above its own pitch left to fold.
 
-     Ten rings is what is drawn now, and the pitch that draws them has not moved by
-     so much as a hundredth of a pixel. Contrast lives in the pitch and the pitch
-     lives on the raster: these rings are a gradient sampled on a grid whose pixels
-     are one, and measured off the rendered button over a fixed annulus a pitch of
-     1.45px draws its rings at 9.3 levels out of 255 where 1.61px draws them at 13.5,
-     and the angular scatter that tells a ring field from a hash goes up by half
-     again at the finer pitch. A pitch chosen to make a ring count come out is
-     therefore a pitch that throws the rings away, and the count has to follow the
-     band instead. Taking the word off the label let the paper come in from sixty-one
-     per cent of the radius to fifty-seven and a half, the run-out came in with it
-     keeping its 1.89px, and the playing surface went from 14.49px to 15.96px without
-     a number in the groove gradient being touched. A repeating radial gradient is
-     phased from the centre, so a light ring falls at 1.61px, 3.22px, 4.83px and so
-     on outward whatever happens to be covering it; the ring at 26.54px was under the
-     old run-out and is now simply uncovered. Nine rings become ten, and measured off
-     the rendered button over the band each one actually occupies, the ten come out
-     at 13.7 levels of contrast against the nine's 13.5, with the angular scatter at
-     5.72 against 5.69 - uncovering a ring costs nothing, because nothing about the
-     ring itself changed. The innermost of the ten sits at 26.54px and clears the
-     run-out by half a pixel, which is the same order as the two thirds of a pixel
-     the innermost of the nine had, and the outermost clears the rim by a whole
-     one. Eleven would need the paper in another pixel and a half, which is more
+     Seventeen rings is what is drawn now, and the pitch that draws them has not
+     moved by so much as a hundredth of a pixel. Contrast lives in the pitch and
+     the pitch lives on the raster: these rings are a gradient sampled on a grid
+     whose pixels are one, and measured off the rendered button over a fixed
+     annulus a pitch of 1.45px draws its rings at 9.3 levels out of 255 where
+     1.61px draws them at 13.5, and the angular scatter that tells a ring field
+     from a hash goes up by half again at the finer pitch. A pitch chosen to make
+     a ring count come out is therefore a pitch that throws the rings away, and the
+     count has to follow the band instead. Centring the symbol on the spindle hole
+     let the paper come in from fifty-seven and a half per cent of the radius to
+     thirty and a half, the run-out came in with it keeping its 1.89px, and the
+     playing surface went from 15.96px to 27.30px without a number in the groove
+     gradient being touched. A repeating radial gradient is phased from the centre,
+     so a light ring falls at 0.81px, 2.42px, 4.03px and so on outward whatever
+     happens to be covering it; the seven rings from 15.35px to 24.90px were under
+     the old paper and its run-out and are now simply uncovered. Ten rings become
+     seventeen, and measured off the rendered button over the band each one actually
+     occupies, the seventeen come out at 18.1 levels of contrast against the ten's
+     13.7, with the angular scatter at 6.03 against 5.72. The contrast rises because
+     the vinyl beneath the newly uncovered rings is the lighter part of the moulding,
+     where the same gradient has more room to swing, and not because anything about a
+     ring changed; the scatter rises by three tenths of a level, which is what
+     measuring a band nearly twice as wide costs and not a field beginning to break.
+     The innermost of the seventeen sits at 15.35px and clears the run-out by two
+     thirds of a pixel, which is the same order as the half pixel the innermost of
+     the ten had, and the outermost sits at 41.00px and clears the rim by a whole
+     one. Eighteen would need the paper in another pixel and a half, which is more
      than the symbol has to give, or a pitch of 1.45px, which is the one already
      measured and already rejected.
 
@@ -161,8 +172,9 @@
      average brightness follows that weight and hardly notices the pitch, so leaving
      it alone keeps the margin reading as black vinyl rather than as grey card
      without anything else having to be arranged: each measured over the band it
-     actually occupies, the ten ring field reads 24.4 levels of mean luminance
-     where the nine ring one read 24.0. This pitch is in
+     actually occupies, the seventeen ring field reads 26.6 levels of mean luminance
+     where the ten ring one read 24.4, and the whole of that rise is the lighter
+     moulding near the middle being groove now instead of paper. This pitch is in
      pixels and not a fraction of --lp on purpose, unlike everything else here: it
      was chosen against the raster the browser draws it on, and a pitch that scaled
      with the record would land somewhere else on that raster at every size and
@@ -187,7 +199,7 @@
     position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     background:
-      radial-gradient(circle closest-side, transparent 0 57.5%, #0f0f14 57.5% 62%, transparent 62%),
+      radial-gradient(circle closest-side, transparent 0 30.5%, #0f0f14 30.5% 35%, transparent 35%),
       repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0,
                                 rgba(255,255,255,.12) .805px, rgba(0,0,0,.86) 1.61px),
       radial-gradient(circle closest-side, #26262f 0 26%, #16161c 60%, #08080b 100%);
@@ -222,9 +234,11 @@
      argument on its own: it is a conic wedge, so it narrows as it approaches the
      middle, and any of it allowed over the label reads as a beam aimed at the
      spindle hole rather than as a sheen across paper. A version at a third of the
-     strength was rendered and it still draws that line. Fifty-six and a half per
-     cent is the label's share of the diameter once more, so the light stops exactly
-     where the paper starts. The mask is declared twice because Safari wanted the prefix
+     strength was rendered and it still draws that line. Thirty and a half per cent
+     is the label's share of the diameter once more, so the light stops exactly
+     where the paper starts, and it now stops a good deal nearer the middle than it
+     used to for no reason other than that the paper does. The mask is declared
+     twice because Safari wanted the prefix
      until 15.4 and this page is public; a browser that honours neither gets the
      highlight across the label, which is wrong but is not broken. */
   .lp-glint {
@@ -232,8 +246,8 @@
     background: conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.34) 15deg,
                                rgba(255,255,255,.08) 29deg, rgba(255,255,255,0) 44deg,
                                rgba(255,255,255,0) 360deg);
-    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 57.5%, #000 58.5%);
-    mask-image: radial-gradient(circle closest-side, transparent 0 57.5%, #000 58.5%);
+    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 30.5%, #000 31.5%);
+    mask-image: radial-gradient(circle closest-side, transparent 0 30.5%, #000 31.5%);
   }
   /* The lip. A pressed record is not flat at its edge: there is a raised smooth
      rim outside the last groove, and being smooth it is the one part of the black
@@ -292,61 +306,103 @@
      not already saying. What it cost is easy to state and what it bought is not,
      which is the shape of an argument that ends in a deletion.
 
-     Losing it does not shrink the paper by anything like the width of a word. The
-     label is a circle centred on the spindle hole and the symbol hangs below that
-     hole, so what sets the radius is how far the lowest and outermost corner of the
-     symbol reaches from the centre, and that corner belongs to the pause bars at
-     22.10px. The word sat in the row above and never reached as far out as that, so
-     it was never what the radius was paying for. The paper comes in from sixty-one
-     per cent of the radius to fifty-seven and a half, which is the symbol's reach
-     plus 2.05px of red, and not to anything remotely like the size of the symbol
-     itself. Closing the gap under the hole to buy more of that margin was tried and
-     put back: at 0.84px instead of 1.512px the symbol's box does move up by the
-     0.672px the arithmetic promises, and not one pixel of its ink moves with it,
-     because the line box is painted at a whole pixel and both positions round to
-     the same one.
+     Losing it does not shrink the paper by anything like the width of a word, and
+     what has shrunk the paper since is a different thing altogether: the symbol is
+     printed around the spindle hole now instead of hanging below it. The label is a
+     circle centred on that hole either way, so what sets its radius is how far the
+     furthest corner of the symbol reaches from the centre. Stacked below the hole
+     that corner was the lower outer end of the pause bars, 22.10px out. Centred on
+     the hole it is the upper outer end of the same bars, 10.73px out, and the paper
+     follows it in from fifty-seven and a half per cent of the diameter to thirty
+     and a half, which is that reach plus 2.07px of red - the same margin the
+     stacked pressing carried, around a label of half the size. Every pixel of the
+     difference goes to the grooves, which is where the seven new rings came from.
 
-     Three rows rather than a stacked column, and the spindle hole is still the
-     reason. A column would centre the hole and the symbol together as one block,
-     which leaves the hole above the middle of a disc that turns by half the height
-     of whatever is under it, and a spindle hole that orbits the centre is the one
-     thing on a record nobody can look past. A row of its own between two rows of
-     equal share fixes the hole at the centre whatever size the symbol is set to.
-     The top row is empty now and it is not dead weight: being empty and being the
-     same height as the bottom row is the whole of how the hole stays centred. What
-     it does cost is that the two remaining children have to be told which rows they
-     are in, because an item with an automatic position is placed in the first free
-     cell, and left to itself the hole would take row one and the symbol row two and
-     the hole would leave the centre.
+     One row rather than three, and the spindle hole is still the reason there is a
+     grid here at all rather than a stacked column. Both children are placed in the
+     same single cell and centred in it, so each is centred on the label and
+     therefore on the disc, and the hole cannot leave the middle whatever size the
+     symbol is set to. That is what the three rows were for as well; they were the
+     answer to the same question asked of a symbol that had to sit somewhere else,
+     and with the symbol on the centre too there is nothing left for an empty row to
+     hold apart. The minmax(0, 1fr) they were written with goes with them. It was
+     there because a track written 1fr may not be smaller than its own contents, and
+     the pause symbol's line box was 0.07px taller than the row it had to fit in, so
+     the bottom row would quietly steal that 0.07px from the empty top one and carry
+     the hole off centre with it; a single cell has no neighbour to steal from and
+     cannot fail that way. Measured off the rendered raster the hole is within a
+     hundredth of a pixel of the centre of the disc in both states, and it has to
+     be: a hole that is off centre orbits visibly the moment the record turns, and
+     it is the one thing on a record nobody can look past.
 
-     The two outer rows are written minmax(0, 1fr) rather than 1fr, and at the old
-     size it would not have mattered. A track written 1fr may not be smaller than
-     its own contents, and on the smaller paper the pause symbol's line box is
-     19.98px where half of what is left after the hole and the gaps is 19.91px, so
-     the bottom row quietly takes the 0.07px it wants from the top one and carries
-     the hole off centre with it, which is the exact failure these three rows exist
-     to prevent arriving through the back door the moment the label got small
-     enough. With minmax(0, 1fr) the row has no such floor, the two stay equal, and
-     the 0.07px of line box that does not fit hangs down into empty red where there
-     is nothing to disturb. Measured on the rendered button the hole is within a
-     hundredth of a pixel of centre in every state.
+     An earlier pressing put the hole and the triangle concentric, found that a hole
+     punched through a triangle reads as a triangle with a bite out of it, and
+     stacked them instead. That was true of the drawing it was made from and not of
+     the arrangement in general, and the two things it missed are both measurable.
+     The first is that the hole was being put at the triangle's bounding box centre,
+     and the triangle's inradius about that point - the distance from it to the
+     nearest edge of the ink - is 1.99px, which is less than the 2.73px radius of the
+     hole then in use. The hole was not sitting in the triangle at all; it was
+     crossing its edge, and a bite is exactly what that draws. A right pointing
+     triangle's visual centre is not the middle of its box but its centroid, a third
+     of the way from base to apex, and about the centroid the inradius is 4.11px. The
+     second is that the hole was wider than it had to be. At 4.61px across it leaves
+     1.80px of white all the way round at the tightest point, and at true size that
+     reads as a spindle hole showing through printed label art, which is what it is.
+     A hole of 5.21px was rendered as well, and that is where the white thins to
+     about a pixel and the triangle does begin to look eaten, so the earlier
+     conclusion was not wrong about the hole it had - only about holes.
+
+     The pause state asks for none of that argument, because a spindle hole falling
+     in the gap between two upright bars is where a spindle shows on any real label.
+     It does ask for the bars to be set a little further apart than the font sets
+     them: at the size they are drawn the gap is 3.63px and the hole is 4.61px, so
+     left alone the hole would rest on both bars at once rather than between them.
+     The letter-spacing below opens the gap to 5.88px, which leaves 0.63px of red
+     between the hole and each bar.
 
      The hairline round the paper is --lp divided by the diameter --lp is set to,
      so it is one pixel at the size this is drawn at and thickens with the record
      rather than staying a hair on a much larger pressing. */
   .lp-label {
-    width: calc(var(--lp) * .575); height: calc(var(--lp) * .575); border-radius: 50%;
-    display: grid; grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+    width: calc(var(--lp) * .305); height: calc(var(--lp) * .305); border-radius: 50%;
+    display: grid; grid-template: 1fr / 1fr;
     justify-items: center; align-items: center;
-    gap: calc(var(--lp) * .018); line-height: 1; color: #fff4ef;
+    line-height: 1; color: #fff4ef;
     background: radial-gradient(circle closest-side, #e02a3e 0 58%, #c4142a 100%);
     box-shadow: 0 0 0 calc(var(--lp) / 84) rgba(0,0,0,.5);
   }
   /* A hole, not a dot: it takes the colour of the panel behind the button rather
-     than a dark grey of its own, so it reads as the page showing through. */
-  .lp-hole { grid-row: 2; width: calc(var(--lp) * .065); height: calc(var(--lp) * .065);
+     than a dark grey of its own, so it reads as the page showing through. It is
+     4.61px across where it used to be 5.45px, and that pixel was not given up for
+     looks. It is the width at which the hole still fits between the pause bars
+     without the bars having to be pushed so far apart that the label grows again to
+     cover them, and at which the play triangle keeps 1.80px of white all round it.
+
+     It is written last inside the label and given a position of its own so that it
+     paints over the symbol, because a spindle hole is punched through whatever is
+     printed on the paper and not printed under it. Being written last is not enough
+     on its own: the symbol carries a transform, which puts it in the late painting
+     pass that positioned elements are painted in, and an ordinary in-flow hole would
+     be painted before it and disappear underneath. Giving the hole a position puts
+     the two in the same pass, where the one written second wins, and no z-index is
+     needed to say so - which is the same argument the glint above is placed by.
+
+     The dark line round the inside of it is the cut edge of the paper, and it had
+     to be darkened from a rgba(0,0,0,.45) to a .9 the moment the symbol moved onto
+     the hole. In the dark theme the change is invisible, because the hole is filled
+     with the panel colour and the panel is darker than the line drawn over it. In
+     the light theme the panel is white, and in the play state the hole is now
+     surrounded by the white of the triangle rather than by red paper: at .45 the
+     two whites met across a grey so faint that the hole read as a smudge on the ink
+     rather than as a hole through it, which was rendered before this was changed.
+     At .9 the edge carries the whole of the hole in that one case and is not
+     noticeable in any of the others, which is what an edge that is a cut rather
+     than a shading should do. */
+  .lp-hole { grid-area: 1 / 1; position: relative;
+             width: calc(var(--lp) * .055); height: calc(var(--lp) * .055);
              border-radius: 50%; background: var(--panel);
-             box-shadow: inset 0 0 0 1px rgba(0,0,0,.45); }
+             box-shadow: inset 0 0 0 1px rgba(0,0,0,.9); }
   /* The symbol is the one thing on this button that was not free to be whatever
      the disc had left. A play triangle fourteen pixels tall is what a play
      button looks like everywhere else, and every other measurement on the record
@@ -357,9 +413,25 @@
      Set at these two, the ink of both measures fourteen pixels tall, which is
      the thing being compared. They stay fractions of --lp rather than becoming
      fixed pixels so that the symbol still travels if the record is ever resized,
-     even though here it was the symbol that decided the record's size. */
-  .lp-sym { grid-row: 3; font-size: calc(var(--lp) * .213); align-self: start; }
-  button.play.spinning .lp-sym { font-size: calc(var(--lp) * .238); }
+     even though here it was the symbol that decided the record's size.
+
+     The transforms are what put the hole inside the symbol rather than merely near
+     it, and they differ between the states because the two shapes do. A pair of
+     upright bars is symmetric about both of its axes, so centring the box centres
+     the ink, and the only correction wanted is half of the letter-spacing that opens
+     the gap: that space is added after the second bar as well as between the two,
+     and without the correction it would carry the pair that far to the left of the
+     hole. A right pointing triangle is symmetric about one axis only, and its visual
+     centre along the other is its centroid rather than the middle of its box, which
+     is 2.17px further right; the line box adds 1.25px of its own downward, because a
+     glyph does not sit centred in the em it is set in. Both are written in em rather
+     than as fractions of --lp, because they are corrections to a glyph and should
+     follow the size that glyph is set at, and both were read off a button rendered
+     at eight times scale rather than taken from the font's published metrics,
+     because what is being lined up is where the pixels land. */
+  .lp-sym { grid-area: 1 / 1; font-size: calc(var(--lp) * .213); transform: translate(.1211em, .07em); }
+  button.play.spinning .lp-sym { font-size: calc(var(--lp) * .238);
+                                 letter-spacing: .111em; transform: translate(.0555em, 0); }
   /* The ring is a thin arc and can afford to merely slow down. The record is the
      whole face of the button turning with a symbol printed on it, which is a great
      deal more motion, so it stops outright and is named here rather than being
@@ -501,7 +573,7 @@
       </div>
       <div class="controls">
         <div class="deck">
-          <button class="play" id="btn" disabled aria-label="Play or pause"><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-hole"></span><span class="lp-sym" id="btnsym">▶</span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
+          <button class="play" id="btn" disabled aria-label="Play or pause"><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-sym" id="btnsym">▶</span><span class="lp-hole"></span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
           <div class="clocks" id="intotrack">--:-- / --:--</div>
         </div>
         <div class="vol">
