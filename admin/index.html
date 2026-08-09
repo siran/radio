@@ -32,6 +32,11 @@
   li { display:flex; justify-content:space-between; align-items:center; gap:10px;
        padding:9px 0; border-bottom:1px solid var(--line); }
   li:last-child { border-bottom:0; }
+  /* the name takes the slack so two buttons sit together on the right */
+  li span { flex:1; min-width:0; }
+  li span.off { color:var(--dim); }
+  /* remove is the destructive one and keeps the red hover to itself */
+  button.ghost.mild:hover { color:var(--fg); border-color:#4a4a55; }
   .status { font-size:13px; color:var(--dim); margin-top:10px; }
   .err { color:var(--bad); font-size:13px; margin-top:8px; }
   #card { background:#101013; border:1px solid var(--on); border-radius:10px;
@@ -103,38 +108,70 @@
     throw new Error('no answer in 25s - is the admin watcher running?');
   }
 
-  function render(speakers) {
+  // Two lists come back and they are both speakers: the ones who can sign in
+  // and the ones who have been switched off. Shown together and sorted as one,
+  // because "who is on this station" is a single question - a disabled host
+  // hidden away in a second list is a host the operator forgets they have.
+  function render(speakers, disabled) {
     const ul = $('list');
     ul.innerHTML = '';
-    if (!speakers || !speakers.length) {
+    const rows = (speakers || []).map(n => ({ name: n, on: true }))
+      .concat((disabled || []).map(n => ({ name: n, on: false })))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (!rows.length) {
       ul.innerHTML = '<li><span>nobody yet</span></li>';
       return;
     }
-    speakers.forEach(s => {
+    rows.forEach(s => {
       const li = document.createElement('li');
       const n = document.createElement('span');
-      n.textContent = s;
+      n.textContent = s.on ? s.name : s.name + ' — off the air';
+      if (!s.on) n.className = 'off';
+
+      // Reversible, so no confirm. The whole point of this button is that
+      // pressing it is not a decision anybody has to be sure about.
+      const t = document.createElement('button');
+      t.className = 'ghost mild';
+      t.textContent = s.on ? 'disable' : 'enable';
+      t.addEventListener('click', async () => {
+        t.disabled = true;
+        setStatus((s.on ? 'disabling ' : 'enabling ') + s.name + '…');
+        try {
+          const r = await ask({ action: s.on ? 'disable' : 'enable', name: s.name });
+          setStatus(r.ok ? s.name + (s.on ? ' is off the air' : ' is back on') : '');
+          if (!r.ok) fail(r.error || 'could not change that');
+          render(r.speakers, r.disabled);
+        } catch (e) { fail(e.message); t.disabled = false; }
+      });
+
       const b = document.createElement('button');
       b.className = 'ghost';
       b.textContent = 'remove';
       b.addEventListener('click', async () => {
-        if (!confirm('Remove ' + s + '? They will not be able to talk any more.')) return;
+        // Say what remove costs that disable does not, at the moment of asking.
+        if (!confirm('Remove ' + s.name + '? Their folder, their settings and their '
+                   + 'password go with them, and none of it comes back. To take them '
+                   + 'off the air and keep all of it, use disable instead.')) return;
         b.disabled = true;
-        setStatus('removing ' + s + '…');
+        setStatus('removing ' + s.name + '…');
         try {
-          const r = await ask({ action: 'remove', name: s });
-          setStatus(r.ok ? s + ' removed' : '');
+          const r = await ask({ action: 'remove', name: s.name });
+          setStatus(r.ok ? s.name + ' removed' : '');
           if (!r.ok) fail(r.error || 'could not remove');
-          render(r.speakers);
+          render(r.speakers, r.disabled);
         } catch (e) { fail(e.message); b.disabled = false; }
       });
-      li.append(n, b);
+
+      li.append(n, t, b);
       ul.appendChild(li);
     });
   }
 
   async function refresh() {
-    try { render((await ask({ action: 'list' })).speakers); }
+    try {
+      const r = await ask({ action: 'list' });
+      render(r.speakers, r.disabled);
+    }
     catch (e) { $('list').innerHTML = '<li><span>' + e.message + '</span></li>'; }
   }
 
@@ -157,7 +194,7 @@
           '<div class="status">Send them that. It is shown once — ' +
           'create them again if it is lost.</div>';
       } else fail(r.error || 'could not create');
-      render(r.speakers);
+      render(r.speakers, r.disabled);
     } catch (e) { fail(e.message); }
     $('add').disabled = false;
   });

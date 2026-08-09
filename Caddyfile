@@ -298,6 +298,25 @@ import relays.caddy
 				# every one of them gets diagnosed by the wrong person.
 				# Nothing here creates the folder: a typo has to be an error
 				# and not a silent new lane nobody meant to make.
+				# Taken off the air by an admin, and still a speaker. The
+				# credential half of that is a commented line in
+				# speakers.caddy, which stops them signing in - but it does
+				# NOTHING here, because this route authenticates as the relay
+				# and only asks whether the folder exists. Without this a host
+				# who had been disabled would still be on the air through
+				# WhatsApp, which is the one place the operator cannot see.
+				#
+				# 403 and not 404: the speaker exists, this is a refusal. The
+				# relay treats 404 as "tell the operator to mint them", which
+				# is the wrong instruction for somebody who was minted and
+				# then switched off on purpose.
+				@off file {
+					root C:/Users/an/src/radio/messages/voice
+					try_files {re.relay.1}/disabled
+				}
+				handle @off {
+					respond 403
+				}
 				@known file {
 					root C:/Users/an/src/radio/messages/voice
 					try_files {re.relay.1}/

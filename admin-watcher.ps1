@@ -30,6 +30,17 @@ function Get-Speakers {
         ForEach-Object { ($_ -split '\s+', 3)[1] }
 }
 
+# Everyone who has a line in the file but is commented out - off the air, and
+# still a speaker. Same extraction as above and that is not an accident: an
+# active line splits to ['', name, hash] because it starts with whitespace, and
+# a disabled one splits to ['#', name, hash] because it starts with the marker,
+# so the name is at index 1 either way.
+function Get-Disabled {
+    Get-Content $snip -ErrorAction SilentlyContinue |
+        Where-Object { $_ -match '^#\s+(\S+)\s+\$2' } |
+        ForEach-Object { ($_ -split '\s+', 3)[1] }
+}
+
 function Reload-Caddy {
     # The Caddyfile reads the ACME contact from an environment variable, and a
     # process only ever sees the machine environment as it stood when IT
@@ -52,6 +63,16 @@ function Add-Speaker($name, $password) {
     $clean = ($name -replace '[^a-zA-Z0-9]', '').ToLower()
     if (-not $clean) { return @{ ok = $false; error = 'name needs letters or digits' } }
     if ($clean -in @('voice', 'admin', 'djadmin')) { return @{ ok = $false; error = 'reserved name' } }
+
+    # A disabled speaker already has a line, a folder and settings. Adding over
+    # the top would leave the commented line behind AND write a live one, so the
+    # file would hold the same name twice in two states and every later enable or
+    # disable would act on whichever the regex reached first. Say what the state
+    # is instead - the operator wanted this person back, and enable is that.
+    if (@(Get-Content $snip) -match "^#\s+$clean\s+\`$2") {
+        return @{ ok = $false
+                  error = "$clean is disabled - enable them rather than adding again" }
+    }
 
     if (-not $password) {
         $alpha = ('abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789').ToCharArray()
@@ -97,10 +118,84 @@ function Add-Speaker($name, $password) {
     return @{ ok = $true; name = $clean; password = $password }
 }
 
+# Off the air without being deleted.
+#
+# Commenting the line out is the whole of it on the credential side: caddy
+# ignores a line starting with #, the bcrypt hash stays where it is, and the
+# folder, the settings, the presets and the playlists are never touched. So
+# enable is the same edit backwards and they come back as themselves rather
+# than as a new host with the same name. One file still shows everybody, on
+# air or not, which is worth more than a tidier active list.
+#
+# But the credential is only half of who can speak as this person. The relay
+# route posts on behalf of ANY speaker using eGPT's one credential, and it
+# decides by asking whether the folder exists - so commenting out a password
+# does nothing to it, and a host taken off the air here would still be on the
+# air through WhatsApp. Hence the marker file: the folder is the identity, so
+# the folder also carries whether it is live, and the relay route refuses when
+# it is there. Two mechanisms because there are two doors, and both are
+# visible on disk.
+#
+# The marker goes down BEFORE the line is commented, and comes up AFTER it is
+# uncommented. Whichever order this runs in there is a window; this is the one
+# where the window is closed rather than open.
+function Set-SpeakerState($name, $enable) {
+    $clean = ($name -replace '[^a-zA-Z0-9]', '').ToLower()
+    if (-not $clean) { return @{ ok = $false; error = 'name needs letters or digits' } }
+
+    $lines  = @(Get-Content $snip)
+    $active = "^\s+$clean\s+\`$2"
+    $off    = "^#\s+$clean\s+\`$2"
+    $dir    = Join-Path $voice $clean
+    $marker = Join-Path $dir 'disabled'
+
+    # Already in the state that was asked for is not a failure. The page can
+    # be open in two places and the second press should agree with the first.
+    if ($enable) {
+        if (-not ($lines -match $off)) {
+            if ($lines -match $active) {
+                Remove-Item $marker -Force -ErrorAction SilentlyContinue
+                return @{ ok = $true; name = $clean; enabled = $true }
+            }
+            return @{ ok = $false; error = "$clean is not a speaker" }
+        }
+        $out = $lines | ForEach-Object { if ($_ -match $off) { $_.Substring(1) } else { $_ } }
+    }
+    else {
+        if (-not ($lines -match $active)) {
+            if ($lines -match $off) { return @{ ok = $true; name = $clean; enabled = $false } }
+            return @{ ok = $false; error = "$clean is not a speaker" }
+        }
+        # Written INSIDE the folder rather than moved in, for the same reason
+        # everything else here is: a file moved in carries its own ACL and
+        # svc-radio cannot read it. Nothing reads this one but caddy, which
+        # runs as svc-radio too, so it would fail the same way.
+        #
+        # It has no extension on purpose. The pickup filters on a whitelist of
+        # audio extensions and the narrator loop on .txt and .md, so a file
+        # called `disabled` is invisible to both and will never be spoken.
+        if (Test-Path $dir) {
+            [IO.File]::WriteAllText($marker, ((Get-Date).ToString('o') + "`r`n"),
+                                    (New-Object Text.UTF8Encoding($false)))
+        }
+        $out = $lines | ForEach-Object { if ($_ -match $active) { '#' + $_ } else { $_ } }
+    }
+
+    Set-Content -Path $snip -Value $out -Encoding ASCII
+    if (-not (Reload-Caddy)) { return @{ ok = $false; error = 'caddy rejected the new config' } }
+    if ($enable) { Remove-Item $marker -Force -ErrorAction SilentlyContinue }
+    return @{ ok = $true; name = $clean; enabled = [bool]$enable }
+}
+
 function Remove-Speaker($name) {
     $clean = ($name -replace '[^a-zA-Z0-9]', '').ToLower()
     $lines = Get-Content $snip
-    $kept = $lines | Where-Object { $_ -notmatch "^\s+$clean\s+\`$2" }
+    # Both forms. A disabled speaker is still a speaker, and remove has to be
+    # able to reach one - otherwise the only way to delete somebody you had
+    # taken off the air would be to put them back on first.
+    $kept = $lines | Where-Object {
+        $_ -notmatch "^\s+$clean\s+\`$2" -and $_ -notmatch "^#\s+$clean\s+\`$2"
+    }
     if ($kept.Count -eq $lines.Count) { return @{ ok = $false; error = "$clean is not a speaker" } }
     Set-Content -Path $snip -Value $kept -Encoding ASCII
     Remove-Item (Join-Path $voice $clean) -Recurse -Force -ErrorAction SilentlyContinue
@@ -184,6 +279,8 @@ while ($true) {
             switch ($body.action) {
                 'add'    { $r = Add-Speaker $body.name $body.password }
                 'remove' { $r = Remove-Speaker $body.name }
+                'disable' { $r = Set-SpeakerState $body.name $false }
+                'enable'  { $r = Set-SpeakerState $body.name $true }
                 'list'    { $r = @{ ok = $true } }
                 'restart' { $r = Restart-Station $body.what $body.who }
                 default  { $r = @{ ok = $false; error = 'unknown action' } }
@@ -192,6 +289,7 @@ while ($true) {
         catch { $r = @{ ok = $false; error = 'could not read the request' } }
 
         $r.speakers = @(Get-Speakers)
+        $r.disabled = @(Get-Disabled)
         Write-Result $id $r
         Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
     }
