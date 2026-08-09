@@ -10,9 +10,17 @@
 # does not say "you are not an administrator".
 #
 # Order matters. Icecast is the transmitter: restart it and liquidsoap's
-# connection drops, so liquidsoap goes after it. Caddy is only the front door -
-# it can go any time, but restarting it disconnects every listener, so it is
-# never part of -What all and has to be asked for by name.
+# connection drops, so liquidsoap goes after it. Caddy is the front door and
+# goes last, so what is in front comes back after the things behind it.
+#
+# Caddy IS part of -What all. It used to be left out because restarting it
+# disconnects every listener - true, /stream* is proxied through it - but -What
+# all already restarts icecast, which disconnects them anyway, so the exclusion
+# bought nothing. And it now costs: caddy resolves {env.RADIO_HOME} and the rest
+# at REQUEST time out of its own process environment, so a caddy that was not
+# restarted after those variables changed serves every static path off an empty
+# root. Measured: the whole site 404 while /likes/now stayed 200, because that
+# one is proxied and never touches a root.
 param(
     [ValidateSet('all', 'icecast', 'liquidsoap', 'caddy', 'watchers')]
     [string]$What = 'all',
@@ -112,7 +120,7 @@ if ($What -in 'all', 'liquidsoap') {
 }
 
 $order = switch ($What) {
-    'all'        { 'icecast', 'liquidsoap' }   # caddy deliberately not included
+    'all'        { 'icecast', 'liquidsoap', 'caddy' }   # caddy last: the front door
     'icecast'    { 'icecast', 'liquidsoap' }   # icecast alone would strand liquidsoap
     'liquidsoap' { , 'liquidsoap' }
     'caddy'      { , 'caddy' }
