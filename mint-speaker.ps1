@@ -14,10 +14,26 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$snip  = 'C:\Users\an\src\radio\speakers.caddy'
-$cf    = 'C:\Users\an\src\radio\Caddyfile'
-$caddy = 'C:\Program Files\Caddy\caddy.exe'
-$voice = 'C:\Users\an\src\radio\messages\voice'
+# Paths come from the machine environment so this can move without editing
+# code. A process only sees that environment as it stood when it STARTED, so a
+# shell, an explorer session or a scheduled task older than the variables does
+# not have them - read the machine scope directly in that case rather than
+# refusing to run. admin-watcher.ps1 already learned this for ACME_EMAIL; it is
+# the same lesson and it bit again the first time somebody double-clicked the
+# restart wrapper. A recovery script that will not start because your shell is
+# old is not a recovery script.
+foreach ($v in 'RADIO_HOME', 'RADIO_CADDY') {
+    if (-not [Environment]::GetEnvironmentVariable($v)) {
+        $m = [Environment]::GetEnvironmentVariable($v, 'Machine')
+        if ($m) { [Environment]::SetEnvironmentVariable($v, $m) }
+    }
+    if (-not [Environment]::GetEnvironmentVariable($v)) { throw "$v is not set" }
+}
+
+$snip  = Join-Path $env:RADIO_HOME 'speakers.caddy'
+$cf    = Join-Path $env:RADIO_HOME 'Caddyfile'
+$caddy = Join-Path $env:RADIO_CADDY 'caddy.exe'
+$voice = Join-Path $env:RADIO_HOME 'messages\voice'
 
 $clean = ($Name -replace '[^a-zA-Z0-9]', '').ToLower()
 if (-not $clean) { throw 'name must contain letters or digits' }

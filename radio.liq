@@ -9,7 +9,16 @@
 
 settings.log.level        := 3
 settings.log.file         := true
-settings.log.file.path    := "D:/Liquidsoap/log/radio.log"
+# Where things live. Machine environment variables, so the station can move
+# without editing code - the same mechanism RADIO_HARBOR_PASSWORD already uses
+# further down, and the only one liquidsoap, caddy and powershell all speak.
+# Empty means the variable is not set for the account this runs as; the three
+# roots are printed to the log below so that is visible rather than mysterious.
+radio_home = environment.get("RADIO_HOME")
+music_dir  = environment.get("RADIO_MUSIC")
+liq_home   = environment.get("RADIO_LIQ")
+
+settings.log.file.path    := "#{liq_home}/log/radio.log"
 settings.log.stdout       := true
 
 # Control socket: skip a track, inspect what is playing. Bound to loopback,
@@ -51,7 +60,7 @@ settings.server.telnet.port      := 1234
 # float, so a page that writes 1 rather than 1.0 still parses. It has to be a
 # function of its own: `x = try ... end` does not parse, a try is only
 # allowed where a statement is.
-narrator_config = "C:/Users/an/src/radio/config/narrator.json"
+narrator_config = "#{radio_home}/config/narrator.json"
 
 def narrator_cfg() =
   try
@@ -81,7 +90,7 @@ ncfg = narrator_cfg()
 # falls through to the built-in numbers rather than taking the station with it.
 # The page writes this file; nothing here writes it back, so what is on disk is
 # always what somebody chose.
-desk_config = "C:/Users/an/src/radio/config/desk.json"
+desk_config = "#{radio_home}/config/desk.json"
 
 def desk_cfg() =
   try
@@ -210,7 +219,7 @@ music = playlist(
   mode        = "randomize",
   reload_mode = "watch",
   on_reload   = fun (_) -> rescan_at := time() + 10.0,
-  "D:/Music"
+  music_dir
 )
 
 # The control endpoints further down reach into the playlist itself: `current`,
@@ -526,7 +535,7 @@ def scan_paths() =
     list.exists(fun (e) -> stem ^ ".#{e}" == fl, music_exts)
   end
   list.filter(is_music,
-    file.ls("D:/Music", absolute = true, sorted = true, recursive = true))
+    file.ls(music_dir, absolute = true, sorted = true, recursive = true))
 end
 
 # Tags, and "" for a file that has none or cannot be read. file.metadata goes
@@ -1019,7 +1028,7 @@ harbor.http.register(port = 8005, method = "POST", "/control/queue/move",
 # of the lines, so they come back after a restart by reading the file once
 # below. Nothing ever rewrites it, so the worst a crash mid-write can cost is
 # the last line.
-likes_file = "C:/Users/an/src/radio/live/likes.jsonl"
+likes_file = "#{radio_home}/live/likes.jsonl"
 
 # path -> count. One entry per distinct path, rebuilt from the ledger at
 # startup and kept in step on every like, so serving a count is a lookup
@@ -1067,6 +1076,8 @@ list.iter(
   end,
   string.split(separator = "\n", ledger()))
 
+log.important(label = "config",
+  "home #{radio_home} | music #{music_dir} | liquidsoap #{liq_home}")
 log.important(label = "likes", "#{list.length(likes())} liked tracks loaded")
 
 # A like is not worth taking the station off the air for. A full disk or a
@@ -1162,7 +1173,7 @@ live = input.harbor(
 # streaming protocol involved: each file arrives as an ordinary upload with a
 # content length, which is the part that has proven reliable.
 
-voice_dir = "C:/Users/an/src/radio/messages/voice"
+voice_dir = "#{radio_home}/messages/voice"
 
 # Four lanes, mixed together. A speaker always lands in the same lane, so
 # their own slices stay in order; different speakers get different lanes, so
@@ -1618,7 +1629,7 @@ announcer_dir = "#{voice_dir}/announcer"
 # endpoints, which sit behind the speaker credential. The page ages the line
 # out on the timestamp, so a stale "that was" cannot sit under the volume
 # slider for the rest of the evening.
-narrator_file = "C:/Users/an/src/radio/live/narrator.json"
+narrator_file = "#{radio_home}/live/narrator.json"
 
 # What to say when the station has no idea what it is playing. About one track
 # in seven of this library is untagged, and saying nothing sounds like

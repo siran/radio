@@ -68,7 +68,7 @@ import relays.caddy
 		format json
 	}
 
-	root * C:/Users/an/src/radio
+	root * {env.RADIO_HOME}
 
 	# Live chat. Same idea as the guestbook: one small file per line.
 	# Ephemeral by nature - delete the folder any time.
@@ -89,7 +89,7 @@ import relays.caddy
 				max_size 2KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/chat
+				root {env.RADIO_HOME}/chat
 				prefix /chat
 			}
 		}
@@ -144,13 +144,13 @@ import relays.caddy
 				max_size 4KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/messages/admin
+				root {env.RADIO_HOME}/messages/admin
 			}
 		}
 		handle {
 			header Content-Type "application/json; charset=utf-8"
 			header Cache-Control "no-store"
-			root * C:/Users/an/src/radio/messages/admin
+			root * {env.RADIO_HOME}/messages/admin
 			file_server
 		}
 	}
@@ -203,7 +203,7 @@ import relays.caddy
 				# says. This is the property /host/relay/ cannot have and the
 				# reason it checks the folder instead.
 				webdav {
-					root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+					root {env.RADIO_HOME}/messages/voice/{http.auth.user.id}
 					prefix /host/upload
 				}
 			}
@@ -311,14 +311,14 @@ import relays.caddy
 				# is the wrong instruction for somebody who was minted and
 				# then switched off on purpose.
 				@off file {
-					root C:/Users/an/src/radio/messages/voice
+					root {env.RADIO_HOME}/messages/voice
 					try_files {re.relay.1}/disabled
 				}
 				handle @off {
 					respond 403
 				}
 				@known file {
-					root C:/Users/an/src/radio/messages/voice
+					root {env.RADIO_HOME}/messages/voice
 					try_files {re.relay.1}/
 				}
 				handle @known {
@@ -351,7 +351,7 @@ import relays.caddy
 					# of a name overwrites, which the ISO timestamps make
 					# a non-event.
 					webdav {
-						root C:/Users/an/src/radio/messages/voice
+						root {env.RADIO_HOME}/messages/voice
 						prefix /host/relay
 					}
 				}
@@ -419,7 +419,7 @@ import relays.caddy
 			}
 			# The folder is whoever authenticated - never what the client says.
 			webdav {
-				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+				root {env.RADIO_HOME}/messages/voice/{http.auth.user.id}
 				prefix /host/setting
 			}
 		}
@@ -459,7 +459,7 @@ import relays.caddy
 				max_size 256KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/config
+				root {env.RADIO_HOME}/config
 				prefix /narrator/history
 			}
 		}
@@ -492,7 +492,7 @@ import relays.caddy
 				max_size 1KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/messages/restart
+				root {env.RADIO_HOME}/messages/restart
 			}
 		}
 		@res {
@@ -502,7 +502,7 @@ import relays.caddy
 		handle @res {
 			header Content-Type "application/json; charset=utf-8"
 			header Cache-Control "no-store"
-			root * C:/Users/an/src/radio/messages/restart
+			root * {env.RADIO_HOME}/messages/restart
 			file_server
 		}
 		handle {
@@ -534,7 +534,7 @@ import relays.caddy
 				max_size 1KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/config
+				root {env.RADIO_HOME}/config
 				prefix /host/desk
 			}
 		}
@@ -587,7 +587,7 @@ import relays.caddy
 			}
 			# The folder is whoever authenticated - never what the client says.
 			webdav {
-				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+				root {env.RADIO_HOME}/messages/voice/{http.auth.user.id}
 				prefix /host/presets
 			}
 		}
@@ -647,7 +647,7 @@ import relays.caddy
 			}
 			# The folder is whoever authenticated - never what the client says.
 			webdav {
-				root C:/Users/an/src/radio/messages/voice/{http.auth.user.id}
+				root {env.RADIO_HOME}/messages/voice/{http.auth.user.id}
 				prefix /host/playlists
 			}
 		}
@@ -713,7 +713,7 @@ import relays.caddy
 				max_size 64KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/config
+				root {env.RADIO_HOME}/config
 				prefix /narrator/config
 			}
 		}
@@ -731,7 +731,7 @@ import relays.caddy
 	# picked, which the page says.
 	handle_path /narrator/voices/* {
 		import speakers
-		root * D:/services/piper/voices
+		root * {env.RADIO_PIPER}/voices
 		file_server browse
 	}
 	# The announcer's own folder, reached without a login. It is a speaker like
@@ -771,7 +771,7 @@ import relays.caddy
 				max_size 1KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/messages/voice/announcer
+				root {env.RADIO_HOME}/messages/voice/announcer
 				prefix /narrator/announcer
 			}
 		}
@@ -797,7 +797,7 @@ import relays.caddy
 				max_size 4KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/messages/voice/announcer
+				root {env.RADIO_HOME}/messages/voice/announcer
 				prefix /narrator/announcer
 			}
 		}
@@ -829,7 +829,7 @@ import relays.caddy
 				max_size 1KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/messages/private
+				root {env.RADIO_HOME}/messages/private
 				prefix /messages/private
 			}
 		}
@@ -857,7 +857,7 @@ import relays.caddy
 				max_size 8KB
 			}
 			webdav {
-				root C:/Users/an/src/radio/messages
+				root {env.RADIO_HOME}/messages
 				prefix /messages
 			}
 		}

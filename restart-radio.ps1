@@ -20,6 +20,22 @@ param(
 )
 $ErrorActionPreference = 'Continue'
 
+# Paths come from the machine environment so this can move without editing
+# code. A process only sees that environment as it stood when it STARTED, so a
+# shell, an explorer session or a scheduled task older than the variables does
+# not have them - read the machine scope directly in that case rather than
+# refusing to run. admin-watcher.ps1 already learned this for ACME_EMAIL; it is
+# the same lesson and it bit again the first time somebody double-clicked the
+# restart wrapper. A recovery script that will not start because your shell is
+# old is not a recovery script.
+foreach ($v in 'RADIO_HOME', 'RADIO_LIQ') {
+    if (-not [Environment]::GetEnvironmentVariable($v)) {
+        $m = [Environment]::GetEnvironmentVariable($v, 'Machine')
+        if ($m) { [Environment]::SetEnvironmentVariable($v, $m) }
+    }
+    if (-not [Environment]::GetEnvironmentVariable($v)) { throw "$v is not set" }
+}
+
 $services = @{
     icecast    = 'IcecastServer'
     liquidsoap = 'LiquidsoapRadio'
@@ -55,7 +71,7 @@ function Show-State {
         }
     }
     'narrator'
-    $failed = @(Get-ChildItem 'C:\Users\an\src\radio\messages\voice\announcer' -Filter *.failed -ErrorAction SilentlyContinue)
+    $failed = @(Get-ChildItem (Join-Path $env:RADIO_HOME 'messages\voice\announcer') -Filter *.failed -ErrorAction SilentlyContinue)
     if ($failed.Count) {
         '  {0} announcements piper could not render. Newest {1}.' -f $failed.Count,
             ($failed | Sort-Object LastWriteTime | Select-Object -Last 1).LastWriteTime
@@ -90,7 +106,7 @@ if (-not $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 # cleared, the process comes back running the OLD program while the file on disk
 # says otherwise - which has cost hours before now.
 if ($What -in 'all', 'liquidsoap') {
-    Get-ChildItem 'D:\Liquidsoap\cache' -Recurse -Force -ErrorAction SilentlyContinue |
+    Get-ChildItem (Join-Path $env:RADIO_LIQ 'cache') -Recurse -Force -ErrorAction SilentlyContinue |
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     'cleared the liquidsoap script cache'
 }
