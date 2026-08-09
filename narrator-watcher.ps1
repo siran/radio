@@ -35,20 +35,38 @@ $announcerDir = Join-Path $voice 'announcer'
 # Everything about the voice now lives in one json file, shared with radio.liq,
 # so the /narrator page can later write both halves in a single PUT. radio.liq
 # reads announce_every, hold and ident out of it and ignores the rest; this
-# loop reads voice, speed, piper_root and say_as and ignores the rest.
+# loop reads voice, speed and say_as and ignores the rest.
+#
+# WHERE piper is installed is deliberately NOT in that file. narrator.json is
+# written by hosts over /narrator/config/, which sits behind the speakers realm
+# - so every host password can change it. The install path becomes the name of
+# a program this loop executes, and this loop runs as SYSTEM. Demonstrated on
+# this machine rather than argued: with piper_root set through that file to a
+# path that does not exist, the failure came back as
+#
+#   The term 'C:/proof-of-concept-not-a-real-path/venv/Scripts/python.exe' is
+#   not recognized as ... the name of ... an operable program
+#
+# which is the string arriving verbatim as the thing to run. It lives in
+# piper.json instead: same folder, and still configuration rather than a
+# constant, but no caddy route can write it. The three routes rooted at
+# config/ are each pinned to one exact filename - desk.json, narrator.json,
+# history.json - so a sibling there is out of reach from the network.
 #
 # It is re-read on EVERY poll, so a change is on the air at the next
 # announcement without stopping the scheduled task.
 $cfgFile = 'C:\Users\an\src\radio\config\narrator.json'
+$piperFile = 'C:\Users\an\src\radio\config\piper.json'
 $repoConfig  = "C:/Users/an/src/radio/config"   # where narrator.json and history.json live
 
 # What each field falls back to. These are exactly the values that were
 # hardcoded at this spot before the file existed, so a missing or malformed
 # config leaves this loop behaving as it always did.
 #
-# piper_root is configurable because the install does not have to be on D: -
+# The piper install is configurable because it does not have to be on D: -
 # somebody else running this station will put it somewhere else. Both the
-# model and the interpreter hang off it.
+# model and the interpreter hang off it. It comes from piper.json, and this
+# is what is used when that file is missing, empty or refused below.
 $defRoot  = 'D:/services/piper'
 $defVoice = 'en_GB-jenny_dioco-medium'
 
@@ -74,6 +92,38 @@ $inv = [Globalization.CultureInfo]::InvariantCulture
 # "liiive" measured 54% longer than "live", and "li-i-ive" 65% longer. So the
 # fix for a name piper says wrong is to write it the way it should sound.
 # Longest key first, so overlapping names cannot half-match.
+# Where piper lives. Operator configuration, out of reach of the speakers realm,
+# and checked before it is believed.
+#
+# The check is belt and braces - nothing on the network can write piper.json - but
+# it costs four lines and it is the difference between a bad value being a broken
+# narrator and a bad value being a program somebody else chose. Two things are
+# refused outright:
+#
+#   a UNC path, because \\somewhere\share\venv\Scripts\python.exe is a program
+#   fetched over SMB from a machine that is not this one, and that is the whole
+#   remote half of the problem;
+#
+#   a root whose python.exe is not actually there, because the only honest reason
+#   to accept a path is that the thing it names exists.
+#
+# Either way it falls back to $defRoot and says nothing. This is called on every
+# poll and a message per poll is a log nobody reads; the failure is already loud,
+# because a narrator that cannot find piper leaves a .err beside every line it
+# could not say.
+function Get-PiperRoot {
+    try {
+        if (-not (Test-Path $piperFile)) { return $defRoot }
+        $j = ConvertFrom-Json ([IO.File]::ReadAllText($piperFile))
+        $r = "$($j.root)".Trim()
+        if (-not $r) { return $defRoot }
+        if ($r.StartsWith('\\') -or $r.StartsWith('//')) { return $defRoot }
+        if (-not (Test-Path "$r/venv/Scripts/python.exe" -PathType Leaf)) { return $defRoot }
+        return $r
+    }
+    catch { return $defRoot }
+}
+
 function Get-NarratorConfig {
     $cfg = @{
         Python = "$defRoot/venv/Scripts/python.exe"
@@ -84,7 +134,7 @@ function Get-NarratorConfig {
     try {
         $j = ConvertFrom-Json ([IO.File]::ReadAllText($cfgFile))
 
-        $root  = if ("$($j.piper_root)".Trim()) { "$($j.piper_root)".Trim() } else { $defRoot }
+        $root  = Get-PiperRoot
         $voice = if ("$($j.voice)".Trim())      { "$($j.voice)".Trim() }      else { $defVoice }
         $cfg.Python = "$root/venv/Scripts/python.exe"
         $cfg.Model  = "$root/voices/$voice.onnx"
