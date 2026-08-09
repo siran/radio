@@ -276,6 +276,13 @@ while ($true) {
         $id = [IO.Path]::GetFileNameWithoutExtension($f.Name)
         try {
             $body = Get-Content $f.FullName -Raw | ConvertFrom-Json
+            # Read it, then bin it, THEN act. A restart action stops this task,
+            # so the delete at the bottom is never reached - and the request that
+            # killed the loop is still queued when it starts again, so it kills
+            # it again, forever. Measured: three starts, three deaths, and the
+            # only way out was deleting the file over a shell - which is the one
+            # thing this folder exists so nobody needs.
+            Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
             switch ($body.action) {
                 'add'    { $r = Add-Speaker $body.name $body.password }
                 'remove' { $r = Remove-Speaker $body.name }
@@ -300,6 +307,8 @@ while ($true) {
         $id = [IO.Path]::GetFileNameWithoutExtension($f.Name)
         try {
             $b = Get-Content $f.FullName -Raw | ConvertFrom-Json
+            # Same as above, and this folder is where it actually bit.
+            Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
             $r = Restart-Station $b.what $b.who
         }
         catch { $r = @{ ok = $false; error = 'could not read the request' } }
