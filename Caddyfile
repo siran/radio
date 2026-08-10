@@ -19,6 +19,36 @@
 				proxy 127.0.0.1:80
 			}
 		}
+
+		# Going live from outside the house.
+		#
+		# The harbor on 8005 speaks the icecast source protocol: an endless body
+		# with no HTTP framing. reverse_proxy cannot carry it - measured, a real
+		# stream is reset before a note arrives, while an EMPTY put answers 200
+		# and looks like it worked. So this is layer 4: raw TCP, forwarded byte
+		# for byte, with the protocol left entirely alone.
+		#
+		# Same first-byte trick as 1111 above. A TLS handshake starts 0x16 and
+		# nothing in the icecast protocol does, so one port serves both: a client
+		# that can do TLS gets it, one that cannot still connects. Icecast source
+		# clients are old software and many have no TLS at all; refusing those
+		# would mean refusing the phone in your hand.
+		#
+		# Not 8005 externally, because liquidsoap already holds that port here.
+		# Forward 8006 at the router to 192.168.1.102:8006 and this is reachable;
+		# liquidsoap's own firewall rule stays LocalSubnet, so the harbor is
+		# never directly exposed - caddy reaches it over loopback, which the
+		# firewall does not police.
+		:8006 {
+			@tls tls
+			route @tls {
+				tls
+				proxy 127.0.0.1:8005
+			}
+			route {
+				proxy 127.0.0.1:8005
+			}
+		}
 	}
 }
 
