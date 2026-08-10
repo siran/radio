@@ -91,12 +91,40 @@
      sound actually begins. It is not a progress bar and does not pretend to be:
      it says heard you, and still coming. */
   button.play { position: relative; }
+  /* Three states the object itself carries, so the words underneath are a
+     caption rather than the only signal:
+
+       grey and still     nothing is playing
+       black and still    the press landed, the record is on the platter
+       black and turning  sound is coming out
+
+     The filter sits on the BUTTON rather than on the disc, so the silver rim
+     and the light on it grey out with the vinyl - a bright specular highlight
+     on a grey record reads as a rendering fault rather than as a record that is
+     not playing.
+
+     620ms because the colour returning is the whole acknowledgement of a press;
+     instant would look like a redraw, and slower would still be arriving when a
+     fast stream has already started turning. The transition is on the button and
+     is therefore killed with everything else under reduced motion, which leaves
+     the states intact and only removes the fade between them. */
+  button.play { filter: grayscale(1) brightness(.72);
+                transition: filter 620ms ease; }
+  button.play.loading, button.play.spinning { filter: none; }
+  /* Waiting, with no words in it. The record is on the platter and breathing;
+     when sound arrives it stops breathing and starts turning, so the two states
+     are never both true and cannot be confused for each other.
+
+     opacity rather than filter, because filter is already carrying the grey and
+     one property cannot be driven by a transition and an animation at once. It
+     never goes below .55: a control that fades most of the way out looks broken
+     rather than busy, and this one is still the thing you press to give up. */
+  @keyframes lpwait { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+  button.play.loading { animation: lpwait 1.15s ease-in-out infinite; }
   button.play.loading { cursor: progress; }
-  button.play.loading::after {
-    content: ''; position: absolute; inset: calc(var(--lp) * .113); border-radius: 50%;
-    border: calc(var(--lp) / 31) solid #edece9; border-top-color: transparent;
-    animation: spin .8s linear infinite;
-  }
+  /* The ring that used to sit here is gone. A record coming up to speed says
+     the same thing - heard you, still coming - with the object already on
+     screen rather than a second spinner laid over it. */
   @keyframes spin { to { transform: rotate(360deg); } }
   /* The button is the record, and the record is built the way one looks: black
      vinyl carrying fine concentric grooves, a smooth run-out ring where the
@@ -492,15 +520,16 @@
   .lp-sym { grid-area: 1 / 1; font-size: calc(var(--lp) * .243); transform: translate(.1211em, .0087em); }
   button.play.spinning .lp-sym { font-size: calc(var(--lp) * .271);
                                  letter-spacing: .1513em; transform: translate(.07565em, 0); }
-  /* The ring is a thin arc and can afford to merely slow down. The record is the
-     whole face of the button turning with a symbol printed on it, which is a great
-     deal more motion, so it stops outright and is named here rather than being
-     left to the universal animation kill at the foot of this sheet - that rule
-     does now reach the disc, because the disc became a real element, but relying
-     on it would mean relying on a rule written for something else. The loading
-     ring is still a pseudo-element and * has never matched it. */
+  /* The record is the whole face of the button turning with a symbol printed on
+     it, which is a great deal of motion, so under reduced-motion it stops
+     outright. It is named here rather than being left to
+     the universal animation kill at the foot of this sheet: that rule does reach
+     the disc now the disc is a real element, but relying on it would mean relying
+     on a rule written for something else. There used to be a thin loading ring
+     here too, slowed rather than stopped because an arc can afford it; the record
+     was replaced by a line of words under the button, so there is nothing
+     left here to slow. */
   @media (prefers-reduced-motion: reduce) {
-    button.play.loading::after { animation-duration: 2.4s; }
     .lp-disc { animation: none; }
   }
   /* The counter goes under the button rather than beside it so the row keeps its
@@ -738,11 +767,25 @@
   const NOTIME = '--:--';
   // What the station last said about the track, and when it said it.
   let trackElapsed = 0, trackTotal = 0, trackAt = null;
+  // True means the page is not listening and has stopped fetching.
+  let quiet = true;
+  // Numbers only. There was briefly a "putting on a new record" here and it was
+  // wrong for a reason that has nothing to do with how it read: the button lost
+  // its PLAY and PAUSE words on purpose, so that nothing on this control needs
+  // translating, and a status line in English puts that straight back. Waiting
+  // is said by the record pulsing instead - see the button rules in the sheet.
+  //
+  //   3:41 / 5:02     playing, and where in the track
+  //   --:-- / --:--   anything else
+  //
+  // Nothing dated either. A timestamp of when the page last heard from the
+  // station read as information and was not: what a paused page wants to say
+  // is that it is paused, which the placeholder already says.
   function tick() {
     // /likes/now answers with elapsed and duration off the frame being played.
     // Carried forward between polls by the wall clock so the seconds move every
     // second rather than in jumps every five.
-    $('intotrack').textContent = trackAt === null
+    $('intotrack').textContent = (quiet || trackAt === null)
       ? NOTIME + ' / ' + NOTIME
       : mmss(trackElapsed + (Date.now() - trackAt) / 1000) + ' / ' +
         (trackTotal > 0 ? mmss(trackTotal) : NOTIME);
@@ -771,14 +814,30 @@
     btn.setAttribute('aria-label', state === 'loading' ? 'Connecting to the stream' :
                                    state === 'pause'   ? 'Pause' : 'Play');
   }
+  // wake()/sleep() are declared at the foot of this file with the rest of the
+  // polling; function declarations hoist, so calling them from here is fine.
   btn.addEventListener('click', () => {
     if (audio.paused) {
       setBtn('loading');          // before anything else, on the press itself
+      tick();                     // and say so, while no poller is running yet
+
       start().catch(() => { setBtn('play'); setLive(false, 'could not start'); });
     } else {
-      audio.pause(); audio.removeAttribute('src'); audio.load(); setBtn('play');
+      // sleep() by hand rather than trusting the pause EVENT. pause() only
+      // QUEUES that event, and load() on the next statement restarts the media
+      // load algorithm in the same tick, which cancels the element's queued
+      // events - so it never arrives and the pollers ran on. It looked correct
+      // from the outside because setBtn('play') is called right here, so the
+      // record showed the play glyph while the page went on fetching: paused,
+      // zero listeners, clock still counting.
+      //
+      // The listener below stays, for every pause this button does not make -
+      // the lock screen, a headset button, a stream that drops.
+      audio.pause(); audio.removeAttribute('src'); audio.load();
+      setBtn('play'); sleep();
     }
   });
+
   audio.addEventListener('playing', () => setBtn('pause'));
   audio.addEventListener('pause',   () => setBtn('play'));
   audio.addEventListener('error',   () => { if (audio.paused) setBtn('play'); });
@@ -1297,13 +1356,57 @@
     catch { pollLikes(); }
   });
 
+  // Everything on a timer, in one place, because "is sound coming out" is now
+  // the only question that decides whether this page talks to the station at
+  // all. Measured before this existed: one open tab made 691 requests in ten
+  // minutes - 69 a minute, forever, whether or not anybody was listening. A tab
+  // left open overnight was a tab downloading the guestbook two thousand times.
+  //
+  // The audio element is the switch rather than the button, so a pause from the
+  // keyboard, the lock screen, a headset button or the stream dropping all stop
+  // it too - the button is one way in and it was never the only one.
+  const PULSE = [
+    [poll,          8000],
+    [loadMessages, 30000],
+    [pollChat,      4000],
+    [pollNarrator,  4000],
+    [pollLikes,     5000],
+    [tick,          1000],
+  ];
+  let timers = [];
+
+  function wake() {
+    if (timers.length) return;
+    quiet = false;
+    for (const [fn] of PULSE) fn();   // catch up now, do not wait out a cycle
+    timers = PULSE.map(([fn, ms]) => setInterval(fn, ms));
+  }
+
+  function sleep() {
+    if (!timers.length) return;
+    timers.forEach(clearInterval);
+    timers = [];
+    // The clock stops rather than counting on from the last reading it was
+    // given. A position that keeps climbing while nothing is being fetched is
+    // a number this page has no right to - the same rule pollLikes already
+    // follows when the station stops answering.
+    trackAt = null;
+    quiet = true;
+    tick();
+  }
+
+  audio.addEventListener('playing', wake);
+  audio.addEventListener('pause',   sleep);
+  audio.addEventListener('ended',   sleep);
+  audio.addEventListener('error',   () => { if (audio.paused) sleep(); });
+
+  // One round at load and then silence until someone presses play. Without it
+  // the page would open blank - no track, no guestbook, no chat - and asking a
+  // visitor to press play to find out what is playing is the wrong way round.
+  // One round is not traffic; sixty-nine a minute was.
   poll(); loadMessages(); pollChat(); pollNarrator(); pollLikes();
-  setInterval(poll, 8000);
-  setInterval(loadMessages, 30000);
-  setInterval(pollChat, 4000);
-  setInterval(pollNarrator, 4000);
-  setInterval(pollLikes, 5000);
-  setInterval(tick, 1000);
+  quiet = true;
+  tick();
 })();
 </script>
 </body>
