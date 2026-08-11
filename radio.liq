@@ -1380,7 +1380,15 @@ live = input.harbor(
   "live",
   port          = 8005,
   password      = environment.get("RADIO_HARBOR_PASSWORD"),
-  buffer        = 1.0,
+  # A fifth of a second, not a whole one. This is jitter absorption on the way
+  # IN, added to every word a host says before it reaches the mix - half of why
+  # a host talking over the music lands late against what they were hearing.
+  # The other half is their monitor, which is what output.harbor below is for.
+  #
+  # Generous on a LAN, adequate from a phone on wifi. A source on a bad mobile
+  # link will glitch sooner than it used to; `max` still allows ten seconds of
+  # slack when a burst arrives.
+  buffer        = 0.2,
   max           = 10.0,
   # Five, not twenty. This is how long the harbor keeps the mount after audio
   # stops, and it costs twice over: it is silence before the music comes back,
@@ -1822,6 +1830,50 @@ music = amplify(duck_gain, music)
 # Music first, so the track title still shows while you are talking over it.
 # normalize=false so levels do not jump when the live source connects.
 radio = add(id = "mix", normalize = false, [music, talk])
+
+# --- the host's monitor ------------------------------------------------------
+# A MIX-MINUS: everything except the person listening to it.
+#
+# The bed on /stream reaches a host about four seconds late, because icecast
+# hands every new listener a 64KB burst on connect and at 128kbps that IS four
+# seconds. No player setting gets underneath it. This is the same music without
+# the burst, straight out of liquidsoap.
+#
+# Fed `music` and not `radio`, which is the entire point rather than an economy.
+# `radio` carries the host's own voice back to them about a second after they
+# said it, and delayed speech in your ears while you are speaking does not
+# merely annoy - it breaks the sentence you are in. A host monitors their own
+# voice locally at zero delay; the station sends them everything else.
+#
+# Tapped AFTER duck_gain, so the bed dips in the headphones exactly as it dips
+# on air and the host hears what they are doing to the mix.
+#
+# MP3, and this was measured rather than chosen. Ogg/Opus was built first and
+# had lower coder delay - but a client joining a live ogg stream mid-flight
+# gets no OpusHead, and without those headers a browser cannot start the
+# decoder at all: 15 OggS pages in, first one 4706 bytes deep, no OpusHead
+# anywhere. MP3 is self-synchronising and any client can begin at any frame,
+# which is why it is still what live streams use. The codec was never the
+# bottleneck anyway - a browser buffers to its own taste and that dwarfs the
+# difference between coders.
+#
+# ONE extra consumer of `music`, not two. A build with an mp3 and an opus
+# monitor side by side typechecked cleanly, started, and died at once with
+# "no more sources to process, global stop". A clean --check does not prove a
+# graph will run; this file has learned that before, from a gate().
+#
+# Port 8005, the harbor already up, with a mount of its own - no new port, no
+# firewall rule, no layer4 branch. Caddy puts it behind the speaker credential:
+# not because the audio is secret, it is the same music, but because this
+# fan-out happens on the process that runs the audio clock and it is meant for
+# a host or two rather than a crowd.
+output.harbor(
+  %ffmpeg(format = "mp3", %audio(codec = "libmp3lame", b = "128k", ar = 44100, ac = 2)),
+  id    = "monitor",
+  port  = 8005,
+  mount = "monitor",
+  music
+)
 
 # --- the announcer ---------------------------------------------------------
 # The station says what it is playing, and says what it just played, and puts

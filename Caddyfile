@@ -557,6 +557,27 @@ import relays.caddy
 		}
 	}
 
+	# The host's monitor: the music bed without the host in it, straight out of
+	# liquidsoap rather than through icecast, so it carries none of icecast's
+	# four-second burst.
+	#
+	# UNDER /host/ on purpose, and rewritten to the mount name on the way
+	# through. An <audio> element cannot set an Authorization header, so the
+	# only way it authenticates is the credential the browser already cached
+	# for this realm - and a browser sends that to URLs at or below the path it
+	# was challenged on. At /monitor it would have been challenged again, in a
+	# dialog, from an audio tag that cannot show one.
+	#
+	# flush_interval -1 for the same reason /stream has it: never buffer a
+	# response that has no end.
+	handle /host/monitor {
+		import speakers
+		rewrite * /monitor
+		reverse_proxy 127.0.0.1:8005 {
+			flush_interval -1
+		}
+	}
+
 	handle /host/desk/* {
 		import speakers
 		@desk {

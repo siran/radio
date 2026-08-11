@@ -207,6 +207,22 @@
        same reason: a playlist is a file in this speaker's own folder and
        survives a cleared cache and a restart, while the queue is inside
        liquidsoap and survives neither. -->
+  <details class="panel" id="monwrap">
+    <summary>Your monitor <span class="when">&mdash; the music without you in it, so you can talk over it without hearing yourself a second late. Use headphones: on speakers this feeds straight back into the mic.</span></summary>
+    <div class="row">
+      <button class="tbtn" id="monbtn">Listen</button>
+      <label class="lbl" for="monvol">bed</label>
+      <input id="monvol" type="range" min="0" max="100" value="80">
+    </div>
+    <div class="row">
+      <button class="tbtn" id="micmonbtn">Hear my mic</button>
+      <label class="lbl" for="micmonvol">mic</label>
+      <input id="micmonvol" type="range" min="0" max="100" value="60">
+    </div>
+    <div class="status"><span class="when">The bed comes straight from liquidsoap and skips icecast, which hands every new listener four seconds of backlog. Your own mic is added here in the browser, at no delay at all &mdash; the station deliberately does not send your voice back, because hearing yourself a second late does not just distract, it breaks the sentence you are saying.</span></div>
+    <div class="status" id="monmsg"></div>
+  </details>
+  <audio id="mon" preload="none"></audio>
   <details class="panel" id="queuewrap">
     <summary>The queue <span class="when">&mdash; what is going to play, in order, once the track on the air finishes</span></summary>
     <div class="status">The <span class="when">queue</span> is what actually plays next. It lives inside
@@ -564,7 +580,81 @@
   // stacked, the oldest first and no way to tell which one was just earned.
   // Writing one clears the others - the last thing asked for is the only thing
   // still worth reading.
-  const SAY_ELS = ['presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr'];
+
+  // --- the monitor -----------------------------------------------------------
+  // Two sounds, mixed in your head rather than at the station: the bed from
+  // /host/monitor, and your own microphone straight off the sound card. The
+  // station sends everything EXCEPT you, which is what a studio calls a
+  // mix-minus, so nothing you say comes back a second later.
+  //
+  // The bed is an <audio> element rather than Web Audio because an element can
+  // stream an endless response and needs no decoding here; the mic is Web Audio
+  // because a gain knob is the whole feature. They never meet in code.
+  const mon = $('mon');
+  let micCtx = null, micStream = null, micGain = null;
+  const monSay = t => say('monmsg', t);
+
+  mon.volume = $('monvol').value / 100;
+  $('monvol').addEventListener('input', () => { mon.volume = $('monvol').value / 100; });
+
+  $('monbtn').addEventListener('click', () => {
+    if (mon.paused) {
+      // ?t= so it always joins live rather than resuming a stale buffer, the
+      // same trick the listener page uses on /stream.
+      mon.src = '/host/monitor?t=' + Date.now();
+      mon.load();
+      mon.play().then(() => { $('monbtn').textContent = 'Stop'; monSay(''); })
+                .catch(e => monSay('Could not start the monitor: ' + e.message));
+    } else {
+      // Tear the connection down rather than pausing it. A paused <audio> on a
+      // live stream goes on downloading, which cost the listener page 69
+      // requests a minute before anybody noticed.
+      mon.pause(); mon.removeAttribute('src'); mon.load();
+      $('monbtn').textContent = 'Listen';
+    }
+  });
+
+  // The same microphone, asked for the same way the recorder asks - same device,
+  // same constraints - so what you hear is what the station is being sent and
+  // not some other capture of the room with different processing on it.
+  async function micMonOn() {
+    const constraints = captureConstraints();
+    const devId = $('dev').value;
+    if (devId) constraints.deviceId = { exact: devId };
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    micGain = micCtx.createGain();
+    micGain.gain.value = $('micmonvol').value / 100;
+    micCtx.createMediaStreamSource(micStream).connect(micGain);
+    micGain.connect(micCtx.destination);
+  }
+  function micMonOff() {
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (micCtx) { micCtx.close(); micCtx = null; }
+    micGain = null;
+  }
+  $('micmonbtn').addEventListener('click', async () => {
+    if (micCtx) { micMonOff(); $('micmonbtn').textContent = 'Hear my mic'; monSay(''); return; }
+    try {
+      await micMonOn();
+      $('micmonbtn').textContent = 'Mute my mic';
+      monSay('');
+    } catch (e) {
+      micMonOff();
+      monSay('Microphone refused: ' + e.name);
+    }
+  });
+  $('micmonvol').addEventListener('input', () => {
+    if (micGain) micGain.gain.value = $('micmonvol').value / 100;
+  });
+
+  // Leaving the page holding an open microphone is worse than leaving a socket
+  // open: the tab keeps the recording indicator lit and the device claimed.
+  window.addEventListener('pagehide', () => {
+    micMonOff();
+    try { mon.pause(); mon.removeAttribute('src'); mon.load(); } catch (e) {}
+  });
+  const SAY_ELS = ['monmsg', 'presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr'];
   function say(id, msg) {
     const el = $(id);
     if (!el) return;
