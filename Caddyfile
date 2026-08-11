@@ -15,6 +15,23 @@
 			route @tls {
 				proxy 127.0.0.1:8443
 			}
+			# A live source, on the one port measured to arrive from the internet.
+			# 8005 is forwarded at the router and does not come through; 1111 does,
+			# proven from a phone on mobile data. This is the plaintext branch, so
+			# a source that cannot do TLS still gets in - and one that can still
+			# takes the @tls branch above and reaches the site, not the harbor.
+			#
+			# PUT AND A PATH, never PUT alone. The guestbook and the chat are
+			# written with PUT over this same port whenever somebody uses the
+			# plaintext site, and matching on the method by itself would post
+			# their message into the harbor instead of the folder.
+			@source http {
+				method PUT SOURCE
+				path /live
+			}
+			route @source {
+				proxy 127.0.0.1:8005
+			}
 			route {
 				proxy 127.0.0.1:80
 			}
