@@ -71,6 +71,7 @@ tuning: `config/desk.json` is read at startup.
 /host/presets/presets.json   presets: sound, desk, panels, phrases
 /host/playlists/playlists.json  named running orders            hosts
 /host/desk/desk.json         the mixing desk, so it survives    hosts
+/host/onair                  going live: a webcast websocket    hosts
 /host/restart/req|res/*      ask a watcher to restart           hosts
 /control/*                   now, skip, previous, again, repeat,
                              music, pause, knobs, search, enqueue
@@ -107,6 +108,65 @@ design's documented recovery path.
 Still to happen: the operator maps WhatsApp identities to speaker names in
 eGPT's own config, and mints those speakers in the admin page. Nothing about
 chat identity crosses to the station.
+
+## Going live from the console
+
+A host can now open the microphone and stay open, over the music, instead of
+only recording a whole note and sending it when it ends. Both remain; a note is
+still the better way to say something once, and this is the only way to say
+something WITH the bed under it.
+
+```
+/host/ page  --webcast over ws-->  live-bridge.js  --icecast source-->  8005/live
+```
+
+`live-bridge.js` is a scheduled task, `RadioLiveBridge`, registered by
+`install-live-bridge.ps1` and restarted and reported by `restart-radio.ps1`
+alongside the two watchers. It listens on **127.0.0.1:8007 and nowhere else**;
+caddy is the only thing that reaches it, which is what makes it safe for it to
+authenticate nobody. It has no dependencies — the RFC 6455 server framing is in
+the file — and it decodes nothing: MediaRecorder makes webm/opus, the harbor
+takes webm/opus, and every byte crosses unchanged.
+
+**It speaks `webcast`, savonet's protocol, not a framing of ours**
+(`github.com/webcast/webcast.js`): subprotocol `webcast`, a first text frame
+`{type:"hello",data:{mime,audio}}`, then binary frames. So webcaster, or
+anything else that speaks it, points at `/host/onair` unchanged. Server-to-
+client frames (`ready`, `waiting`, `tally`, `warn`, `error`) are an extension —
+the spec defines the client's half only — written in the same `{type,data}`
+shape, and a client that ignores them loses only the explanations.
+
+**Why a bridge at all, since this build's harbor speaks webcast natively.** It
+does — measured, not assumed, and it is worth not re-deriving: a websocket
+upgrade to `/live` on 8005 is answered `101 Switching Protocols` with
+`Sec-WebSocket-Protocol: webcast` echoed, from loopback, from 192.168.1.102 and
+from another machine on the LAN; hello plus webm/opus gave `[live:3]
+Decoding...`; and a wrong password came back as a websocket close `1011` with
+the text `Authentication failed.`. The page could talk to the station directly.
+
+It does not, for one permanent reason: **the webcast hello frame carries the
+source password, and the source password must not be in a page.** The bridge is
+where the credential changes hands — caddy checks the speaker, the bridge
+supplies the station's own, read from the `LiquidsoapRadio` service key. That is
+not a stopgap and does not go away.
+
+The second reason it takes the icecast source protocol on the way out, rather
+than relaying webcast to webcast, is how the two fail:
+
+```
+                 websocket                        icecast source
+wrong password   close 1011 "Authentication..."   401 Wrong Authentication data
+mount taken      close 1006, NO reason at all     403 Mountpoint already taken
+```
+
+A mount already taken is the failure a host actually meets, and only one of
+those two can be turned into a sentence.
+
+**In the page**: `Go on air` is its own panel with its own button, a fixed red
+bar across the top of the screen, and `● ON AIR` in the tab title. That is
+deliberate and not decoration — the monitor's `Hear my mic` had already been
+mistaken for transmitting once. The note recorder is disabled while on air, so
+one voice cannot go out twice.
 
 ## Debts, largest first
 
@@ -173,9 +233,57 @@ Measured on this machine. Several contradict what was assumed.
   128 kbps each. 96 kbps or mono would buy a third to a half more.
 - **Stream start**: `burst-size` 65536 gets 64kB to a joining player in 484ms,
   against 3578ms at 16384.
+- **Going live, mouth to listener: 830–1140 ms, median 875.** Five runs, and it
+  is a real end-to-end figure rather than a sum of guesses: the music was turned
+  off so the stream was digital silence, /stream was read by a process that
+  recorded the wall clock of its first byte, the browser's fake microphone was
+  opened, and the tone's onset was found in the decoded capture. Aligning the
+  capture costs one known constant — icecast's 65536-byte burst is 4.096 s at
+  128 kbps CBR, and everything after it arrives in real time. The budget:
+  MediaRecorder's 300 ms timeslice, the harbor's 200 ms `buffer`, then mp3
+  encoding and icecast.
+- **Getting on the air**: the mount is granted in **35–50 ms** from the socket
+  opening. Pressing the button to the first audio actually leaving the page is
+  **~1.6 s** the first time, because that is opening the device; on a second go
+  with the microphone already warm it is **~420 ms**.
+- **A source is let go of five seconds after its last byte**, whether the socket
+  is half-closed or reset — the two are indistinguishable to the harbor. So
+  stopping and starting again inside that window is refused, and the bridge
+  waits it out: measured at 5 attempts over 5.0 s before it went on.
+- **ogg/opus releases the mount at once, webm/opus waits the full five.** An ogg
+  end-of-stream page tells liquidsoap the stream is over; webm has nothing that
+  says so, so only the timeout ends it.
 
 ## Traps that have cost real time
 
+- **`/control/music` is NOT a toggle.** `radio.liq` reads
+  `req.query["on"] == "true"`, so a POST with no query string is not a no-op —
+  it is an explicit OFF, and calling it again does not undo it. A probe that
+  "toggled" music off left the station silent and then could not put it back.
+  `POST /control/music?on=true`. The same is true of `/control/pause` and
+  `/control/repeat`.
+- **Do not POST at 8005 directly.** `/control/*` through caddy works; the same
+  POST straight at the harbor is reset before it answers, with or without a
+  `Content-Length`, which reads as the station being down and is not. The
+  console page has never done it and neither should a script.
+- **`reg.exe` prints a REG_MULTI_SZ on ONE line** with a literal two-character
+  `\0` between entries, not a NUL byte. Splitting the value on whitespace to
+  find `RADIO_HARBOR_PASSWORD` captures it AND the icecast password after it as
+  one 53-character string, and the harbor answers 401.
+- **A browser throws away userinfo in a websocket URL.** `new
+  WebSocket("ws://user:pass@host/")` sends no credential of any kind: measured
+  against a listener that printed the raw handshake, the request was identical
+  to one with no userinfo and carried no `Authorization` header. Anything that
+  appears to authenticate that way is parsing the URI itself and putting the
+  credential in the protocol — which is what webcast's hello frame is for. A
+  websocket under `/host/` is authenticated by the credential the browser
+  already cached for the realm, the same mechanism `/host/monitor` relies on.
+- **A silence-onset detector will find icecast's burst.** A latency measurement
+  that looked for "first sound after two seconds of silence" locked onto the
+  PREVIOUS run's music resuming inside the 4.1 s burst and reported a latency of
+  minus twenty seconds. Constrain the search to audio emitted after the event
+  being measured. It is the same lesson as the disc-centre artifact below: a
+  measuring script will happily invent a number.
 - **Liquidsoap caches compiled scripts.** `restart-radio.ps1` clears it.
 - **`--check` and a clean startup prove almost nothing about a source operator.**
   A `gate()` in the voice chain typechecked, started, played for an hour, then

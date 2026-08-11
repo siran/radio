@@ -49,7 +49,12 @@ $services = @{
     liquidsoap = 'LiquidsoapRadio'
     caddy      = 'CaddyServer'
 }
-$tasks = @('RadioNarratorWatcher', 'RadioAdminWatcher')
+# RadioLiveBridge is not a watcher - nothing appears in a folder for it to
+# notice - but it is the third long-running thing the station needs, it is
+# registered the same way, and a host pressing Go on air with it stopped gets a
+# socket that will not open. So it is restarted and reported alongside them.
+# install-live-bridge.ps1 is what registers it.
+$tasks = @('RadioNarratorWatcher', 'RadioAdminWatcher', 'RadioLiveBridge')
 
 function Show-State {
     'services'
@@ -61,6 +66,17 @@ function Show-State {
     foreach ($t in $tasks) {
         $x = Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue
         '  {0,-24} {1}' -f $t, $(if ($x) { $x.State } else { 'not registered' })
+    }
+    # A task in state Running only says a process was started, and the bridge is
+    # the one of the three whose failure a host meets directly - Go on air stops
+    # working and nothing else on the console changes. So ask it, rather than
+    # ask Windows about it.
+    'the live bridge'
+    try {
+        $r = Invoke-WebRequest 'http://127.0.0.1:8007/host/onair' -UseBasicParsing -TimeoutSec 5
+        '  answering    {0}' -f $r.Content
+    } catch {
+        '  not answering on 127.0.0.1:8007   <- Go on air will not work; see $env:RADIO_LIQ\log\live-bridge.log'
     }
     'on air'
     try {

@@ -578,6 +578,52 @@ import relays.caddy
 		}
 	}
 
+	# Going live from the console: the microphone open and audio leaving
+	# continuously, rather than a whole note uploaded when it stops. The other
+	# half of the monitor above - that one is the station arriving, this is the
+	# host leaving.
+	#
+	# It speaks `webcast`, savonet's own websocket protocol for pushing audio out
+	# of a browser, so the wire format has a written definition somebody can look
+	# up and anything else that speaks it points here unchanged.
+	#
+	# It goes to live-bridge.js rather than to liquidsoap, and NOT because
+	# liquidsoap cannot take it. This build's harbor speaks webcast perfectly
+	# well - measured, from loopback and from 192.168.1.102 alike, a websocket
+	# upgrade to 8005/live is answered "101 Switching Protocols" with the
+	# webcast subprotocol echoed, and webm/opus frames after it decode.
+	#
+	# The bridge is here because the webcast hello frame carries the source
+	# password, and the source password must not be in a page. That is a
+	# permanent property of the protocol meeting a permanent rule of this
+	# station, so the bridge is a permanent part of it: it takes the credential
+	# caddy has already checked and supplies the station's own. Pointing this
+	# route straight at 8005 would work on the first try and would put the
+	# harbor password in front of every host with a devtools window.
+	#
+	# reverse_proxy carries an Upgrade by itself, so there is nothing to
+	# configure for it. The port is the bridge's own, on loopback, and the
+	# bridge listens nowhere else - it authenticates nobody, and must never be
+	# reachable except through this line.
+	#
+	# UNDER /host/ for the same reason /host/monitor is, and it is not a style
+	# choice: a WebSocket opened from a page cannot carry an Authorization
+	# header either, so the only credential it has is the one the browser
+	# cached for the realm - and a browser sends that to paths at or below where
+	# it was challenged. At /onair it would be an anonymous socket into the
+	# station's microphone.
+	#
+	# X-Host-User is who caddy decided this is. The bridge shows it to the next
+	# console that tries while somebody is on, because the mount holds one and
+	# "403" is not an answer anybody can act on. header_up SETS the header, so
+	# a client sending its own is overwritten and not believed.
+	handle /host/onair {
+		import speakers
+		reverse_proxy 127.0.0.1:8007 {
+			header_up X-Host-User {http.auth.user.id}
+		}
+	}
+
 	handle /host/desk/* {
 		import speakers
 		@desk {

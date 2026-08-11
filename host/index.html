@@ -163,9 +163,41 @@
   @media (prefers-reduced-motion: reduce) {
     .tbtn.busy::after, #rec.busy:not(.recording)::after { animation-duration:2.2s; }
   }
+
+  /* ON AIR.
+
+     There are now three buttons on this page that open the microphone and only
+     one of them transmits, which is exactly the confusion that has already
+     caught somebody out: Hear my mic is headphones, Start talking is a file
+     that goes out when it ends, and this is the air. So the live state is not
+     signalled by a word in a status line - it is a bar across the top of the
+     screen that nothing else on this page can produce, the panel's own border
+     turning red, and the tab's title, which is the only one of the three still
+     visible when the console is behind another window.
+
+     The bar is fixed rather than in the flow because a host scrolled down to
+     the queue must still be able to see it, and body.onair pays for it with
+     the padding it takes. */
+  .airbar { display:none; position:fixed; left:0; right:0; top:0; z-index:50;
+            background:var(--rec); color:#fff; padding:8px 12px; text-align:center;
+            font-size:12px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; }
+  body.onair { padding-top:56px; }
+  body.onair .airbar { display:block; }
+  body.onair #airwrap { border-color:var(--rec); }
+  .airdot { display:inline-block; width:9px; height:9px; border-radius:50%;
+            background:#fff; margin-right:8px; vertical-align:baseline;
+            animation:airpulse 1.2s ease-in-out infinite; }
+  /* by name, not by a wildcard - a * rule has never reached a pseudo-element
+     here and this is a real one either way */
+  @media (prefers-reduced-motion: reduce) { .airdot { animation:none; } }
+  @keyframes airpulse { 50% { opacity:.2; } }
+  #airbtn { flex:1 1 auto; font-weight:600; }
+  #airbtn.on { background:var(--rec); border-color:var(--rec); color:#fff; }
+  #airlevel { margin-top:12px; }
 </style>
 </head>
 <body>
+<div class="airbar" id="airbar" role="status" aria-live="assertive"><span class="airdot"></span>On air &mdash; everyone listening can hear this microphone</div>
 <div class="wrap">
 
   <h1>Wild n Loyal Radio &middot; Host</h1>
@@ -175,6 +207,30 @@
     <div class="meter"><i id="vu"></i></div>
     <div class="status" id="status">ready</div>
     <div class="err" id="err"></div>
+  </div>
+
+  <!-- Going live. The other way of hosting, and the opposite of the button
+       above it in every respect worth stating out loud: Start talking records
+       a whole note and puts it on the air when it ends, this opens the
+       microphone and everything said into it leaves immediately. Neither
+       replaces the other - a note is still the better way to say something
+       once, and this is the only way to say something WITH the music.
+
+       It is a panel of its own, and not another button in the monitor below,
+       because the monitor is the one thing on this console that has already
+       been mistaken for transmitting. -->
+  <div class="panel" id="airwrap">
+    <div class="btns">
+      <button class="tbtn" id="airbtn">Go on air</button>
+    </div>
+    <div class="status">This opens your microphone and sends it to the station as you speak, mixed over
+      the music, which dips for you. It is <span class="when">not</span> the monitor below &mdash; Hear my
+      mic there only reaches your own headphones. While you are on air the top of this page turns red and
+      the tab says so.</div>
+    <div class="meter" id="airlevel"><i id="airvu"></i></div>
+    <div class="status" id="airstat">off air</div>
+    <div class="status" id="airmsg"></div>
+    <div class="err" id="airerr"></div>
   </div>
 
   <details class="panel" id="musicpanel" open>
@@ -219,6 +275,10 @@
       <label class="lbl" for="micmonvol">mic</label>
       <input id="micmonvol" type="range" min="0" max="100" value="60">
     </div>
+    <!-- Said here as well as in the panel above, because this is the button
+         that has been mistaken for the air. -->
+    <div class="status">Hear my mic is <span class="when">your headphones only</span>. Nothing in this panel
+      reaches anybody else. To transmit, use <span class="when">Go on air</span> at the top of the page.</div>
     <div class="status"><span class="when">The bed comes straight from liquidsoap and skips icecast, which hands every new listener four seconds of backlog. Your own mic is added here in the browser, at no delay at all &mdash; the station deliberately does not send your voice back, because hearing yourself a second late does not just distract, it breaks the sentence you are saying.</span></div>
     <div class="status" id="monmsg"></div>
   </details>
@@ -654,7 +714,7 @@
     micMonOff();
     try { mon.pause(); mon.removeAttribute('src'); mon.load(); } catch (e) {}
   });
-  const SAY_ELS = ['monmsg', 'presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr'];
+  const SAY_ELS = ['monmsg', 'presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr', 'airmsg'];
   function say(id, msg) {
     const el = $(id);
     if (!el) return;
@@ -2949,6 +3009,295 @@
 
   loadPlaylists();
   qWatch();
+
+  // --- going live ------------------------------------------------------------
+  // The microphone open and audio leaving as it is spoken, rather than a whole
+  // note uploaded when it stops.
+  //
+  // This does NOT replace the recorder above it and nothing about the recorder
+  // changed to make room for it. A note is still one recording, sent as one
+  // file with a length, and that is still the reliable path. This is the other
+  // thing a host has always wanted and could not have from a page: talking OVER
+  // the music, live, with the bed dipping while you speak.
+  //
+  // WHAT IT SPEAKS. `webcast`, which is savonet's own websocket protocol for
+  // pushing audio out of a browser - the same people who write liquidsoap, and
+  // documented at github.com/webcast/webcast.js. It is not much: open the
+  // socket with "webcast" as the subprotocol, send one text frame
+  // { type: "hello", data: { mime, audio } }, then send the audio as ordinary
+  // binary frames. Nothing here is invented, which means webcaster or anything
+  // else speaking webcast can point at /host/onair unchanged, and the wire
+  // format has a written definition instead of one to be read out of this file.
+  //
+  // The hello frame may also carry `user` and `password`. This page sends
+  // NEITHER, and the bridge would ignore them if it did: the credential is the
+  // one the browser already holds for /host/, and the station's source password
+  // stays on the station.
+  //
+  // Liquidsoap implements webcast in its own harbor, and this build has it -
+  // measured, a websocket straight to 8005/live is answered 101 and decodes
+  // webm/opus. So the bridge is not there to make a browser a source; the
+  // station could take this page directly. It is there because that password
+  // would have to be in this file for it to, and it never will be. That is a
+  // permanent arrangement, not a temporary one.
+  //
+  // Nothing is transcoded anywhere on the path: webm/opus is what the browser
+  // makes and what the harbor decodes.
+  //
+  // THE ORDER MATTERS AND IS NOT NEGOTIABLE. Socket, hello, and only then the
+  // microphone - the recorder is not started until the bridge answers `ready`.
+  // MediaRecorder puts the whole webm header in its FIRST blob and never again,
+  // so a page that started recording while the mount was still being waited for
+  // would have to either lose that blob - leaving the station decoding a stream
+  // with no header, which reads as a codec fault and is not one - or hold it,
+  // and every second held is a second the broadcast runs late for the rest of
+  // its life. The bridge does hold it, because webcaster and anything else that
+  // does not wait would otherwise break; this page waits instead, and pays
+  // nothing, because the mount is normally granted in tens of milliseconds.
+  const AIR_CHUNK_MS = 300;
+  // Small on purpose. This is the page's own contribution to the delay between
+  // a word and the air: MediaRecorder hands over what it has every AIR_CHUNK_MS
+  // and not before, so this number is a floor under the latency. A whole note
+  // uses 1000ms because there nothing is waiting on it. Below about 200ms the
+  // webm clusters get small enough that the container overhead starts to show
+  // and there is nothing to win, since the harbor's own input buffer is 200ms.
+  const AIR_STALL_MS = 3000;
+
+  let airWS = null, airRec = null, airStream = null, airOn = false;
+  let airStartedAt = 0, airBytes = 0, airSrvBytes = 0, airTick = 0, airLastData = 0;
+  let airAC = null, airAnalyser = null, airRaf = 0;
+  const airSay = t => say('airmsg', t);
+  const airFail = m => { $('airerr').textContent = m; };
+  const AIR_TITLE = document.title;
+
+  // Only webm. The Streaming panel can ask for mp4 or ogg for a note, and both
+  // are fine for a file, but the source connection announces one content type
+  // and the one this was measured on is audio/webm - ffmpeg's webm/opus into
+  // the harbor gave "[live:3] Decoding..." and a clean exit before any of this
+  // existed. Rather than send whatever the panel says and hope, this asks for
+  // webm explicitly and says so when the panel wanted something else.
+  function airMime() {
+    for (const m of ['audio/webm;codecs=opus', 'audio/webm']) {
+      try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch {}
+    }
+    return '';
+  }
+
+  function airLook() {
+    document.body.classList.toggle('onair', airOn);
+    $('airbtn').classList.toggle('on', airOn);
+    $('airbtn').textContent = airOn ? 'Leave the air' : 'Go on air';
+    // The tab, for a console behind another window. A host who has walked away
+    // from the screen still has this.
+    document.title = airOn ? '● ON AIR · ' + AIR_TITLE : AIR_TITLE;
+    // Two microphones open at once would send the same voice twice: once live,
+    // and again as a note a minute later. Refused rather than explained
+    // afterwards.
+    $('rec').disabled = airOn;
+    $('rec').title = airOn ? 'You are on air. Leave the air to record a note.' : '';
+    $('dev').disabled = airOn || recording;
+    if (!airOn) { $('airvu').style.width = '0%'; }
+  }
+
+  function airStat() {
+    if (!airOn) { $('airstat').textContent = 'off air'; return; }
+    const s = Math.floor((Date.now() - airStartedAt) / 1000);
+    let t = 'on air · ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') +
+            ' · ' + (airBytes / 1024).toFixed(0) + ' kB spoken, ' +
+            (airSrvBytes / 1024).toFixed(0) + ' kB into the station';
+    // What the socket has NOT managed to send yet. On a house wifi this is zero
+    // every time it is read; on a bad uplink it is the number that explains why
+    // the station is behind, and it is the only honest place to see it.
+    const q = airWS ? airWS.bufferedAmount : 0;
+    if (q > 64 * 1024) t += ' · ' + (q / 1024).toFixed(0) + ' kB waiting on your connection';
+    // The encoder handing over nothing for three seconds means the tab has been
+    // frozen or the device was taken away. Silence on the air looks identical
+    // to a working broadcast from in here, so it is worth saying.
+    if (airLastData && Date.now() - airLastData > AIR_STALL_MS)
+      t += ' · no audio has left this page for ' +
+           Math.round((Date.now() - airLastData) / 1000) + 's';
+    $('airstat').textContent = t;
+  }
+
+  function airMeter() {
+    if (!airAnalyser) return;
+    const buf = new Uint8Array(airAnalyser.fftSize);
+    airAnalyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    $('airvu').style.width = Math.min(100, Math.sqrt(sum / buf.length) * 300) + '%';
+    airRaf = requestAnimationFrame(airMeter);
+  }
+
+  // Called when the bridge says it holds the mount, and not one moment before.
+  async function airOpenMic(mime) {
+    const c = captureConstraints();
+    const devId = $('dev').value;
+    if (devId) c.deviceId = { exact: devId };
+    airStream = await navigator.mediaDevices.getUserMedia({ audio: c });
+    airAC = new (window.AudioContext || window.webkitAudioContext)();
+    airAnalyser = airAC.createAnalyser();
+    airAnalyser.fftSize = 1024;
+    airAC.createMediaStreamSource(airStream).connect(airAnalyser);
+    airMeter();
+    airRec = new MediaRecorder(airStream, recorderOpts(mime));
+    airRec.ondataavailable = e => {
+      if (!e.data || !e.data.size) return;
+      airLastData = Date.now();
+      if (!airWS || airWS.readyState !== WebSocket.OPEN) return;
+      // The Blob goes to send() directly rather than being read into an
+      // ArrayBuffer first. Reading it is asynchronous, and two reads resolving
+      // out of order would interleave two webm clusters into something the
+      // station cannot decode - a corruption that would show up as an
+      // occasional bad broadcast and nothing else. send() takes a Blob and
+      // queues in call order, which is the guarantee this needs.
+      airWS.send(e.data);
+      airBytes += e.data.size;
+    };
+    // The last blob arrives during stop(), so the socket is closed from here
+    // rather than from the click. Closing it first would cut the final word.
+    airRec.onstop = () => { if (airWS && airWS.readyState <= WebSocket.OPEN) airWS.close(1000, 'off air'); };
+    airRec.start(AIR_CHUNK_MS);
+    airOn = true;
+    airStartedAt = Date.now();
+    airLastData = Date.now();
+    airBytes = 0;
+    airLook();
+    airStat();
+    airTick = setInterval(airStat, 1000);
+  }
+
+  function airTeardown() {
+    clearInterval(airTick); airTick = 0;
+    try { airRec && airRec.state !== 'inactive' && airRec.stop(); } catch {}
+    airRec = null;
+    try { airStream && airStream.getTracks().forEach(t => t.stop()); } catch {}
+    airStream = null;
+    cancelAnimationFrame(airRaf); airRaf = 0;
+    try { airAC && airAC.close(); } catch {}
+    airAC = null; airAnalyser = null;
+    airOn = false;
+    airLook();
+    airStat();
+  }
+
+  function airDown(why) {
+    const was = airOn;
+    airWS = null;
+    airTeardown();
+    $('airbtn').classList.remove('busy');
+    $('airbtn').disabled = false;
+    if (was) airSay(why || 'off air');
+  }
+
+  function airGo() {
+    $('airerr').textContent = '';
+    if (recording) return airFail('Stop the note you are recording first - one microphone, one destination.');
+    if (!window.isSecureContext) return airFail('Needs https to use the microphone.');
+    if (!navigator.mediaDevices || !window.MediaRecorder) return airFail('This browser cannot capture audio.');
+    if (!('WebSocket' in window)) return airFail('This browser has no WebSocket, so it cannot be a source.');
+    const mime = airMime();
+    if (!mime) return airFail('This browser cannot encode webm/opus, which is what the station takes live. ' +
+                              'Recording a note still works.');
+    if ($('cap_mime').value && $('cap_mime').value.indexOf('webm') === -1)
+      airSay('Going live in webm/opus - the format in the Streaming panel applies to notes, not to the air.');
+
+    // Same origin, same path, so the browser sends the credential it already
+    // holds for /host/. There is nothing to authenticate with here: a
+    // WebSocket cannot carry an Authorization header any more than an <audio>
+    // element can, which is why the route lives under /host/ and not at /onair.
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/host/onair';
+    $('airbtn').classList.add('busy');
+    $('airbtn').disabled = true;
+    let ws;
+    // "webcast" is the subprotocol, and it is not decoration: a server that
+    // does not agree to it makes the browser fail the connection itself.
+    try { ws = new WebSocket(url, 'webcast'); }
+    catch (e) { $('airbtn').classList.remove('busy'); $('airbtn').disabled = false; return airFail('Could not open the socket: ' + e.message); }
+    airWS = ws;
+    ws.onopen = () => {
+      $('airbtn').disabled = false;
+      // The hello frame MUST be the first frame on a webcast socket. `audio` is
+      // what this page asked the encoder for rather than what it necessarily
+      // got - the Streaming panel prints the difference - and no server here
+      // acts on it, but the protocol has a place for it and a wrong number
+      // would be worse than none.
+      ws.send(JSON.stringify({
+        type: 'hello',
+        data: {
+          mime: mime.split(';')[0],
+          audio: {
+            channels: capNum('cap_ch') || 1,
+            samplerate: capNum('cap_srate') || 48000,
+            bitrate: Math.round((capNum('cap_bitrate') || 96000) / 1000),
+            encoder: 'opus'
+          }
+        }
+      }));
+    };
+    ws.onmessage = async ev => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      const d = m.data || {};
+      if (m.type === 'ready') {
+        $('airbtn').classList.remove('busy');
+        try { await airOpenMic(mime); }
+        catch (e) {
+          airFail('Microphone refused: ' + e.name + '. The station gave you the air and nothing is going out.');
+          try { ws.close(1000, 'no microphone'); } catch {}
+        }
+        return;
+      }
+      if (m.type === 'waiting') {
+        // An early "already taken" is almost always this same host's last
+        // broadcast: the station holds the mount for five seconds after audio
+        // stops, by design. Saying "wait" is the truth; saying "error" would
+        // not be.
+        airSay(d.why + ' ...');
+        return;
+      }
+      if (m.type === 'error') { airFail(d.why); return; }
+      if (m.type === 'warn') { airSay(d.why); return; }
+      if (m.type === 'tally') {
+        // What the bridge has actually written to the station, which is not the
+        // same question as what this page has handed to the socket. They match
+        // on a house wifi and diverge on a bad uplink, and the difference is
+        // the only thing that says which end is struggling - so both are shown
+        // rather than one being trusted.
+        airSrvBytes = d.bytes;
+        return;
+      }
+    };
+    ws.onerror = () => {};   // onclose always follows, and says more
+    ws.onclose = ev => {
+      if (ws !== airWS && !airOn) return;
+      airDown(airOn
+        ? 'off air' + (ev.code !== 1000 ? ' - the connection dropped (' + ev.code + ')' : '')
+        : '');
+      $('airbtn').classList.remove('busy');
+      $('airbtn').disabled = false;
+    };
+  }
+
+  function airLeave() {
+    // Stop the recorder and let ITS onstop close the socket, so the last blob
+    // is on the wire before the socket goes. The station will hold the mount
+    // for another five seconds afterwards; going straight back on air inside
+    // that window is expected and the bridge waits it out rather than failing.
+    airSay('leaving the air');
+    if (airRec && airRec.state !== 'inactive') { try { airRec.stop(); } catch {} }
+    else if (airWS) { try { airWS.close(1000, 'off air'); } catch {} }
+    else airDown('');
+  }
+
+  $('airbtn').addEventListener('click', () => { if (airOn || airWS) airLeave(); else airGo(); });
+
+  // A tab closed while on air would otherwise hold the mount until the harbor
+  // timed it out, with the microphone still lit.
+  window.addEventListener('pagehide', () => {
+    if (airOn || airWS) { try { airWS && airWS.close(1000, 'page closed'); } catch {} airTeardown(); }
+  });
+
+  airLook();
 
 })();
   // Basic auth never tells a page who is using it, so the server does: /whoami
