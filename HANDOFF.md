@@ -58,8 +58,11 @@ tuning: `config/desk.json` is read at startup.
 ```
 /                            the station                        public
 /stream                      raw audio                          public
-/likes/now                   likes, elapsed and duration        public
+/likes/now                   likes, elapsed, duration, and the
+                             skip counter                       public
 /likes/add                   like the current track             public
+/tug/skip  /tug/keep         push the skip counter up, or pull
+                             it back down                       public
 /live/narrator.json          what the narrator just said        public
 /host/                       the console                        hosts
 /host/upload/*               a host's own voice notes           hosts
@@ -215,9 +218,6 @@ they are the first-class way to host a show.
 - **Multiple language streams.** One liquidsoap can feed several mounts; the
   music is decoded once and shared, and only the narrator differs. Costs one
   encode and each stream's own listener bandwidth.
-- **Skip tug of war.** Designed in full, not built. Held until there are enough
-  listeners for the arithmetic to mean anything — 60% of two is one person with
-  a veto.
 - **Time-aware overlap** of notes, so several hosts sound like a conversation
   rather than a queue. The lanes already sum; what is missing is playing a note
   at the time it was recorded.
@@ -242,6 +242,18 @@ they are the first-class way to host a show.
   second source behind a fallback. A fallback puts a source on air that
   `library.current()`, `skip`, `previous` and the outro cannot see.
 - **The relay route, not a password store.** See above.
+- **The skip counter is asymmetric, and 0 is only a floor.** One counter per
+  track, 0 to 12, shared by everybody; a skip click adds one, a keep click takes
+  one away, at 12 the track goes. The obvious tidy-up is to make the bottom mean
+  something too - a saved track, a veto, a rope with two ends. Don't. Keeping a
+  song is meant to be EFFORT, not a veto: you have to keep clicking it back down
+  while others push it up, so a brief loud opinion cannot win and nobody holds a
+  block for the rest of the song. There is no percentage, no quorum and no
+  per-person budget, which is what makes it work with two listeners in the room.
+  One person clicking twelve times can skip, on purpose. The minimum gap between
+  clicks in the page and caddy's rate limit on `/tug/*` bound the RATE against a
+  held key or a script; neither is a vote budget and neither should grow into
+  one.
 - **Flat is the default for a new host.** Not a guess at a good sound — the
   absence of one, which is the only honest default for a microphone the station
   has never heard.

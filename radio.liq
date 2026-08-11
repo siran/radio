@@ -1005,6 +1005,113 @@ harbor.http.register(port = 8005, method = "POST", "/control/queue/move",
   queue_endpoint(fun (r) ->
     queue_move(r.query["id"], int_of_string(default = -1, r.query["to"]))))
 
+# --- the skip tug of war ---------------------------------------------------
+# Public, like the likes below and for the same reason: there is nobody to log
+# in as here, and there was never meant to be. The difference between the two
+# is the one that matters, and it is why this has its own block in the
+# caddyfile as well: a like cannot change what is on the air and a pull can.
+#
+# ONE counter per track, an integer from 0 to 12. Not a tally per listener, not
+# two opposing totals - one number that everybody in the room pushes and pulls.
+# A skip click adds one, a keep click takes one away, and at 12 the track goes.
+#
+# The range is deliberately ASYMMETRIC. Only the top of it does anything: 0 is
+# the floor and nothing more, and a keep click at 0 is simply a click that does
+# nothing. There is no state at the bottom, no "this track has been saved", and
+# that absence is the design rather than an omission.
+#
+# What that buys is the whole point of the thing, and it is easy to design away
+# by accident, so it is written down here: KEEPING A SONG IS NOT A VETO, IT IS
+# EFFORT. Somebody who does not want the skip has to keep clicking the counter
+# back down while the others push it up. They cannot object once and be done,
+# and they cannot hold a block that lasts the rest of the song. So the loudest
+# brief opinion does not win, and nobody owns the track.
+#
+# Everything a threshold would have given us is absent for the same reason.
+# There is no percentage, no quorum and no unanimity anywhere in this, and that
+# is what makes it work on a station with two listeners, where "sixty percent
+# of the audience" is one person with a casting vote. Twelve is not a majority
+# of anything; it is friction. You have to want it, and anybody at all can pull
+# it back.
+#
+# There is no per-person budget either, and that is the reading this was built
+# to: a determined listener who is alone CAN click twelve times and skip. That
+# has to be true or "a single person not wanting the skip must keep the counter
+# down" describes nothing. What stops a held key or a script running it to 12
+# in a second is metering - caddy's rate limit on /tug/*, and a minimum gap
+# between clicks in the page - and metering is not a vote budget: it bounds the
+# rate, never the total.
+#
+# Nothing here is written to disk. The likes ledger exists because a like is
+# meant to outlive the song; the counter is the opposite - it is per play, and
+# the right thing for it to lose in a restart is all of it.
+tug_span = 12
+
+# The counter, and the song it belongs to. `tug_track` is held as the path,
+# which is what /likes/now already keys on - it hands the page a digest of this
+# same string, so the page needs no second notion of what is playing.
+#
+# Resetting is done by COMPARING that key on the way in rather than by a hook
+# at the track boundary, and that is worth the sentence it costs. A boundary
+# hook does exist and is tempting: forward_meta at the foot of this file
+# already runs once per track. It would reset the counter against
+# `m["filename"]`, while every read and write here asks current_file() - a
+# different question of a different object - so a click arriving in the window
+# between the two would land on a song that has already gone. Compared here
+# there is no window at all: the call that decides which track this is, is the
+# same call that decides whether the counter belongs to it. It also adds
+# nothing whatever to the audio path, which in this file is a rule and not a
+# preference: a gate() added there typechecked, started, played for an hour and
+# then killed the audio clock with a stack overflow.
+tug_track = ref("")
+tug_pull  = ref(0)
+
+def tug_sync(p) =
+  if p != tug_track() then
+    tug_track := p
+    tug_pull  := 0
+  end
+end
+
+# One click, +1 for skip and -1 for keep, clamped into 0..tug_span.
+#
+# The skip fires on the click that ARRIVES at 12 and only on that one, because
+# a click that does not move the counter does nothing at all - which is the
+# same line that makes a keep click at 0 a no-op, rather than two rules. That
+# matters for more than tidiness: it is what stops an overrun skipping a second
+# track, and the clamp is doing real work there rather than covering a case
+# that cannot happen. Measured, fifteen clicks fired at one track in a single
+# burst: they came back 1..12, then 12, 12, then 1. The thirteenth and
+# fourteenth arrived while current_file() still named the outgoing track and
+# were held at 12 by the clamp; only by the fifteenth had library.skip() moved
+# the station on, and that one started the new track's counter honestly at 1.
+# Without the clamp the thirteenth would have read 13, cleared the threshold a
+# second time, and cut off a song nobody had voted on. The log for that burst
+# has exactly one "reached 12" in it.
+#
+# The operator's own skip, POST /control/skip behind the speaker credential, is
+# deliberately untouched by all of this. The counter is what the room can do;
+# it was never meant to take the console away from whoever is hosting.
+#
+# library.skip() is the same call /control/skip has always made, from the same
+# harbor thread - no new source, no new operator, nothing new in the audio
+# path. Skipping was already possible here; this only gives the room a way to
+# ask for it.
+def tug(dir) =
+  p = current_file()
+  tug_sync(p)
+  v = tug_pull() + dir
+  n = if v < 0 then 0 elsif v > tug_span then tug_span else v end
+  if p != "" and n != tug_pull() then
+    tug_pull := n
+    log.important(label = "tug", "#{n}/#{tug_span} on #{p}")
+    if n >= tug_span then
+      log.important(label = "tug", "the counter reached #{tug_span}: skipping")
+      library.skip()
+    end
+  end
+end
+
 # --- likes -----------------------------------------------------------------
 # Public, and deliberately with no notion of who is listening: a like is one
 # number against one song, not a row belonging to an account. A host is a
@@ -1123,11 +1230,29 @@ end
 # is passed through as it comes rather than turned into a zero. A zero would be
 # a duration this station was confident about and wrong, where a negative is
 # the source saying it does not know.
+#
+# `pull` and `rope` ride along here for the same reason `elapsed` and
+# `duration` do, and it is the stronger argument of the two. A /tug/now of its
+# own was the obvious shape and is the wrong one: the page would then be
+# holding two answers, fetched a moment apart, about which song is on - and at
+# a track boundary they would disagree for as long as a poll takes, so the page
+# would draw one song's counter beside another song's likes and have no way to
+# know it. One response is what every other endpoint in this file already
+# answers with, for this reason. `rope` is the top of the range rather than
+# something the page hardcodes, so twelve lives in exactly one place.
+#
+# The sync is a write on the way out of a READ, which is unusual enough to say
+# out loud: it is the lazy reset described up at the counter, and this is one
+# of its two doors. Doing it here is also what makes a page that is merely
+# watching see the counter go back to nought the instant the song changes.
 def likes_state() =
   p = current_file()
+  tug_sync(p)
   { id       = if p == "" then "" else string.digest(p) end,
     likes    = like_count(p),
     total    = list.fold(fun (n, kv) -> n + snd(kv), 0, likes()),
+    pull     = tug_pull(),
+    rope     = tug_span,
     elapsed  = source.elapsed(library),
     duration = source.duration(library) }
 end
@@ -1149,6 +1274,19 @@ harbor.http.register(port = 8005, method = "POST", "/likes/add",
       record_like(p)
     end
   end))
+
+# The two directions, registered down here rather than beside the counter
+# itself because they answer with likes_state - the one object a page with no
+# password may ask for, and the one it redraws all of this from. Two endpoints
+# rather than one with a direction in the query: this file already has two
+# ways to read a flag and does not need a third, and /control/ makes the same
+# call for the same reason - skip and previous are two endpoints, not
+# move?dir=. like_endpoint is reused rather than copied; it is not about likes,
+# it is "do the thing, then answer with the public state".
+harbor.http.register(port = 8005, method = "POST", "/tug/skip",
+  like_endpoint(fun () -> tug(1)))
+harbor.http.register(port = 8005, method = "POST", "/tug/keep",
+  like_endpoint(fun () -> tug(-1)))
 
 # Whether a live source is connected. Asking the source itself is not
 # reliable - a dropped one goes on looking alive for a while - so track the

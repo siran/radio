@@ -995,6 +995,38 @@ import relays.caddy
 			reverse_proxy 127.0.0.1:8005
 		}
 	}
+	# The skip tug of war. That block again with a different path, public for
+	# the same reason - there is no account to have - and separate from it
+	# because of the one line above that stops being true here: this CAN change
+	# what is on the air.
+	#
+	# It is safe with no credential because of a property of the mechanism
+	# rather than a property of the network. There is one counter per track, it
+	# runs 0 to 12, a skip click adds one and a keep click takes one away, and
+	# the most a stranger can do is push it up while anybody at all pushes it
+	# back down. There is no percentage and no quorum in it, and so nothing that
+	# turns two listeners into one person with a casting vote. The host's own
+	# skip is elsewhere, under /control/, behind the speaker credential, and
+	# unaffected.
+	#
+	# Metered like every other public write. This is the SERVER half of what
+	# stops a script running the counter to twelve in a second - the page keeps
+	# a minimum gap between its own clicks, and that is the half a script simply
+	# would not run. Sixty a minute is still far more than any human clicking,
+	# and it is a bound on the RATE and never on the total: there is no vote
+	# budget here, on purpose.
+	handle /tug/* {
+		route {
+			rate_limit {
+				zone tug_pulls {
+					key {remote_host}
+					events 60
+					window 1m
+				}
+			}
+			reverse_proxy 127.0.0.1:8005
+		}
+	}
 	handle /stream* {
 		reverse_proxy 127.0.0.1:8000 {
 			flush_interval -1

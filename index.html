@@ -599,6 +599,21 @@
   /* the like pill reuses button.vote below; this only centres it */
   .likerow { display: flex; justify-content: center; margin: -6px 0 18px; }
   .likerow[hidden] { display: none; }
+  /* The tug of war: two buttons with the counter drawn between them. The
+     buttons are button.vote again, so the thing you press to move a number
+     looks the same here as it does on the heart and in the guestbook.
+
+     One pip per click, filled from the left. That is the rope AND the figure in
+     one object rather than a bar with a number beside it: you can see how far
+     it has got and you can count how many are left, and there are not two
+     copies of one number a hundred pixels apart to wonder about. */
+  .tugrow { display: flex; justify-content: center; align-items: center; gap: 9px;
+            margin: -10px 0 18px; }
+  .tugrow[hidden] { display: none; }
+  .rope { display: flex; align-items: center; gap: 3px; }
+  .rope .pip { width: 5px; height: 5px; border-radius: 50%; background: var(--line);
+               transition: background-color .18s ease; }
+  .rope .pip.on { background: var(--accent); }
   .recent { margin-top: 20px; }
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
@@ -659,6 +674,20 @@
       </div>
       <div class="likerow" id="likerow" hidden>
         <button type="button" class="vote" id="likeBtn" title="like this song" aria-label="like this song"><span id="likeHeart">&#9825;</span> <span id="likeCount">0</span></button>
+      </div>
+      <!-- The tug of war. No words anywhere in it, deliberately: the anchor
+           pulls the counter down, the skip glyph pushes it up, and the pips
+           between them are the counter. Every one of those is a symbol or a
+           countable thing, so there is nothing here to translate - the same
+           rule the play button follows. The variation selector on both glyphs
+           asks for the text form rather than the colour emoji, so they sit
+           beside the hollow heart instead of shouting over it.
+           The pips are built by the script, not written here: how many there
+           are is the station's number and the page is told it. -->
+      <div class="tugrow" id="tugrow" hidden>
+        <button type="button" class="vote" id="tugKeep" title="pull the skip counter back down" aria-label="pull the skip counter back down">&#9875;&#65038;</button>
+        <div class="rope" id="rope"></div>
+        <button type="button" class="vote" id="tugSkip" title="push the skip counter up" aria-label="push the skip counter up">&#9197;&#65038;</button>
       </div>
       <div class="controls">
         <div class="deck">
@@ -1321,7 +1350,7 @@
   // station, which is a different subject.
   function showLikes(j) {
     likeId = (j && j.id) || '';
-    if (!likeId) { $('likerow').hidden = true; return; }
+    if (!likeId) { $('likerow').hidden = true; $('tugrow').hidden = true; return; }
     const mine = liked.includes(likeId);
     $('likeCount').textContent = j.likes;
     $('likeHeart').textContent = mine ? '\u2665' : '\u2661';
@@ -1334,12 +1363,14 @@
       trackTotal = typeof j.duration === 'number' ? j.duration : 0;
       trackAt = Date.now();
     }
+    showTug(j);
   }
 
   async function pollLikes() {
     try { showLikes(await (await fetch('/likes/now', { cache: 'no-store' })).json()); }
     catch {
       $('likerow').hidden = true;
+      $('tugrow').hidden = true;
       // Stop rather than keep counting from the last thing it was told. A
       // position that goes on climbing after the station stopped answering is
       // a number this page has no right to.
@@ -1355,6 +1386,70 @@
     try { showLikes(await (await fetch('/likes/add', { method: 'POST' })).json()); }
     catch { pollLikes(); }
   });
+
+  // --- the skip tug of war -----------------------------------------------
+  // Same standard as the likes above: no login, no account, no identity. One
+  // counter per track, from 0 to 12, shared by everybody listening - the skip
+  // glyph adds one, the anchor takes one away, and at 12 the station skips.
+  //
+  // There is no per-browser budget here and that is not an oversight. A
+  // listener who is alone can click twelve times and skip the song; that has to
+  // be possible, or "somebody who does not want the skip has to keep the
+  // counter down" is about nothing. Keeping a song is not a veto, it is effort,
+  // and the effort is the feature: you cannot object once and be done, so a
+  // brief loud opinion does not win and nobody holds the track.
+  //
+  // Nothing is stored. There is no localStorage key, because there is nothing
+  // per-browser worth remembering - the counter belongs to the room, not to
+  // this browser, and it arrives fresh in every response.
+  //
+  // GAP is the one piece of per-browser bookkeeping, and it is metering rather
+  // than a budget: it bounds how fast this page can click, never how many times
+  // it may. Without it a held Enter key or a double-tap runs the counter up
+  // several notches from one intention. Twelve deliberate clicks still take
+  // under five seconds. Caddy meters the same path from the other side, for the
+  // script that would not be running this code at all.
+  //
+  // No poller of its own. The counter arrives on /likes/now, which pollLikes
+  // already asks for and which only runs while sound is coming out. A second
+  // timer here would be the exact bug that block was written to fix.
+  const GAP = 400;
+  let rope = 0, lastPull = 0;
+
+  // One pip per click, so the picture and the figure are the same object. The
+  // page is told how many there are rather than knowing, so twelve lives in
+  // exactly one place and that place is the station.
+  function showTug(j) {
+    if (typeof j.pull !== 'number' || typeof j.rope !== 'number' || j.rope <= 0) {
+      $('tugrow').hidden = true; return;
+    }
+    const el = $('rope');
+    if (rope !== j.rope) {
+      rope = j.rope;
+      el.textContent = '';
+      for (let i = 0; i < rope; i++) el.appendChild(document.createElement('i')).className = 'pip';
+    }
+    [...el.children].forEach((p, i) => p.classList.toggle('on', i < j.pull));
+    // Nought is the floor and nothing else - no saved state, no veto, just a
+    // click with nowhere to go. Saying so with the button is kinder than taking
+    // the click and doing nothing with it.
+    $('tugKeep').disabled = j.pull === 0;
+    $('tugrow').hidden = false;
+  }
+
+  // The answer is the whole public state, so one response redraws the counter,
+  // the heart and the clock together and none of them can be caught disagreeing
+  // with the others.
+  async function tugPull(path) {
+    const now = Date.now();
+    if (!likeId || now - lastPull < GAP) return;
+    lastPull = now;
+    try { showLikes(await (await fetch(path, { method: 'POST' })).json()); }
+    catch { pollLikes(); }
+  }
+
+  $('tugSkip').addEventListener('click', () => tugPull('/tug/skip'));
+  $('tugKeep').addEventListener('click', () => tugPull('/tug/keep'));
 
   // Everything on a timer, in one place, because "is sound coming out" is now
   // the only question that decides whether this page talks to the station at
