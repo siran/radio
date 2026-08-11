@@ -1047,6 +1047,34 @@ harbor.http.register(port = 8005, method = "POST", "/control/queue/move",
 # the right thing for it to lose in a restart is all of it.
 tug_span = 12
 
+# How long after a track starts the counter refuses every click.
+#
+# It is here because of something the operator noticed on air: "sometimes the
+# title changes and the old sound is not yet gone". There is no crossfade in
+# this file - tracks cut - so that overlap is not the mix. It is DISTANCE. The
+# page reads current_file() live at the station while the audio reaching a
+# listener is several seconds behind, through icecast's burst and then their
+# own player's jitter buffer. The page is ahead of the ear.
+#
+# The consequence is the thing that matters, and it is not cosmetic: for the
+# first seconds of a new track anybody clicking is voting on a song THEY HAVE
+# NOT HEARD YET. Usually against the one they are still hearing. So the window
+# is closed rather than the display delayed - the title arriving early is a
+# feature, and a vote arriving early is not a vote.
+#
+# It applies to every track change and not only the ones the counter caused: a
+# natural boundary carries exactly the same lag. It applies to keep as well as
+# skip, which costs nothing - keep is already a no-op at 0 - and makes this one
+# rule instead of two, the same economy as the clamp below.
+#
+# FIVE SECONDS IS A GUESS AND NOT A MEASUREMENT. It is the operator's number,
+# chosen against the overlap he could hear, and the true figure is per listener
+# and unknowable from here - burst-size is measured elsewhere in this repo at
+# 484ms to first audio, but a phone on a train buffers what it likes on top of
+# that. Anybody who measures a real distribution should change this number; it
+# is a constant so that is one edit.
+tug_cool = 5.0
+
 # The counter, and the song it belongs to. `tug_track` is held as the path,
 # which is what /likes/now already keys on - it hands the page a digest of this
 # same string, so the page needs no second notion of what is playing.
@@ -1073,7 +1101,37 @@ def tug_sync(p) =
   end
 end
 
-# One click, +1 for skip and -1 for keep, clamped into 0..tug_span.
+# How much of the cool-off is left, in seconds, and 0.0 once it is over.
+#
+# Taken from how far into the track we are, NOT from a timestamp written when
+# the change was noticed. A timestamp was the obvious way and it is worse here
+# for one reason: tug_sync only runs when somebody asks, so on a station nobody
+# is polling the clock would start whenever the next request happened to
+# arrive, and the first click after a quiet spell would be refused for five
+# seconds no matter how long the song had been playing. source.elapsed is the
+# quantity actually wanted - "this track has been on for less than five
+# seconds" - it is already read one line below for the page's own clock, it
+# resets itself at a boundary with nothing to arm and nothing to drift, and it
+# holds no state at all. Nothing is added to the audio path either way; this
+# just adds less.
+#
+# A negative elapsed is a source saying it does not know, and it opens the
+# window rather than closing it forever. The same rule the duration comment
+# below states: a negative is not a small number, it is an absence, and an
+# absence must not be able to lock the counter for the rest of a track.
+def tug_cool_left(e) =
+  if e >= 0.0 and e < tug_cool then tug_cool - e else 0.0 end
+end
+
+# One click, +1 for skip and -1 for keep, clamped into 0..tug_span, and refused
+# outright inside the cool-off.
+#
+# Refused, and NOT held to be applied when the window lifts. That distinction is
+# the whole safety of it: a queue of clicks cast in the first five seconds is a
+# queue of votes about the PREVIOUS song, and releasing them the moment the
+# window opened would chain-skip the new one on the strength of them. A click
+# during the cool-off is not deferred, it is not counted, it does not exist. The
+# counter is 0 when the window opens because it was 0 all the way through.
 #
 # The skip fires on the click that ARRIVES at 12 and only on that one, because
 # a click that does not move the counter does nothing at all - which is the
@@ -1100,9 +1158,12 @@ end
 def tug(dir) =
   p = current_file()
   tug_sync(p)
+  left = tug_cool_left(source.elapsed(library))
   v = tug_pull() + dir
   n = if v < 0 then 0 elsif v > tug_span then tug_span else v end
-  if p != "" and n != tug_pull() then
+  if left > 0.0 then
+    log.important(label = "tug", "too early: #{left} s of the cool-off left")
+  elsif p != "" and n != tug_pull() then
     tug_pull := n
     log.important(label = "tug", "#{n}/#{tug_span} on #{p}")
     if n >= tug_span then
@@ -1241,6 +1302,25 @@ end
 # answers with, for this reason. `rope` is the top of the range rather than
 # something the page hardcodes, so twelve lives in exactly one place.
 #
+# `cool` goes out as the LENGTH of the window and not as what is left of it -
+# the same shape as `rope`, a constant the page is told rather than one it
+# hardcodes. What is left is then `cool` minus `elapsed`, and `elapsed` is in
+# this same answer, so the page works it out from the same two numbers this file
+# does and the two cannot drift apart by arithmetic.
+#
+# Sending the remainder was the first shape and it was measurably not enough.
+# Measured in a headless browser against the live station: the page went dim
+# 3672 ms after the click that caused the skip and cleared 1052 ms later. It had
+# been told "0 seconds left" in the answer to that very click - correctly, since
+# library.skip() had not moved current_file() yet - and then believed it until
+# its next poll. Four of the five seconds were spent looking live while every
+# click was being refused, which is the void this window exists to prevent.
+#
+# Handing over the length instead lets the page arm the window itself the
+# instant it has proof one has started, without waiting to be told: the answer
+# that says the counter reached `rope` IS that proof, because nothing else can
+# take it there. A boolean could have done neither of these things.
+#
 # The sync is a write on the way out of a READ, which is unusual enough to say
 # out loud: it is the lazy reset described up at the counter, and this is one
 # of its two doors. Doing it here is also what makes a page that is merely
@@ -1248,12 +1328,14 @@ end
 def likes_state() =
   p = current_file()
   tug_sync(p)
+  e = source.elapsed(library)
   { id       = if p == "" then "" else string.digest(p) end,
     likes    = like_count(p),
     total    = list.fold(fun (n, kv) -> n + snd(kv), 0, likes()),
     pull     = tug_pull(),
     rope     = tug_span,
-    elapsed  = source.elapsed(library),
+    cool     = tug_cool,
+    elapsed  = e,
     duration = source.duration(library) }
 end
 

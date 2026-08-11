@@ -58,8 +58,8 @@ tuning: `config/desk.json` is read at startup.
 ```
 /                            the station                        public
 /stream                      raw audio                          public
-/likes/now                   likes, elapsed, duration, and the
-                             skip counter                       public
+/likes/now                   likes, elapsed, duration, the skip
+                             counter and its cool-off           public
 /likes/add                   like the current track             public
 /tug/skip  /tug/keep         push the skip counter up, or pull
                              it back down                       public
@@ -144,6 +144,15 @@ everything rides configuration"; this is the outstanding half of that.**
 - The accepted extension list exists in two programs that cannot share config.
   One statement per program is the floor; `radio.liq`'s `exts` is authoritative
   and the Caddyfile says so.
+- **The chat panel can list its messages and cannot read any of them.** Found
+  while testing something else, not fixed, and not caused by it. `@docs` 404s
+  every `*.md` on the site bar the relay route, and `/chat/` has no `handle` of
+  its own ahead of it - so `GET /chat/` returns a listing of 21 files and every
+  one of the 21 bodies behind it answers 404. `/messages/` is unaffected because
+  its own block runs first and is terminal: those `.md` files answer 200.
+  Measured on the live site. The fix is presumably one more exception on `@docs`
+  or a `/chat/*` block above it, but which of those is right is a question about
+  what chat is meant to be, so it is left for a ruling.
 - `messages/voice/announcer/settings.json` still carries a three-band `eq` from
   before the seven-band change. Harmless, stale.
 - `mmss` has no hours branch, so a long listening session would read `181:05`.
@@ -182,6 +191,12 @@ Measured on this machine. Several contradict what was assumed.
   failure log.
 - **`@(ConvertFrom-Json $raw)` is wrong for a JSON array.** PowerShell 5.1 writes
   a top-level array to the pipeline as ONE object. Assign first, then wrap.
+- **PowerShell variable names are CASE-INSENSITIVE.** `$b` and `$B` are one
+  variable. A test script held its base url in `$B` and used `$b` as a loop
+  accumulator; every request after the first went to a url with no host, and the
+  error said "the hostname could not be parsed" rather than anything about
+  scope. Nothing warns. Give one-letter names a wide berth in a script that also
+  holds configuration.
 - **`request.resolve` returns TRUE for a file the account cannot read.**
   `content_type = library` is what makes it fail honestly.
 - **`playlist.set_queue` DROPS requests already in the queue**, and empties
@@ -253,7 +268,11 @@ they are the first-class way to host a show.
   One person clicking twelve times can skip, on purpose. The minimum gap between
   clicks in the page and caddy's rate limit on `/tug/*` bound the RATE against a
   held key or a script; neither is a vote budget and neither should grow into
-  one.
+  one. The five-second cool-off after every track change is a separate rule and
+  is about latency, not voting: the page reads the station live while the ear is
+  several seconds behind the stream, so clicks in that window would be votes on
+  a song not yet heard. Clicks in it are REFUSED, never queued - releasing them
+  when the window lifts would chain-skip the new song on the old song's votes.
 - **Flat is the default for a new host.** Not a guess at a good sound — the
   absence of one, which is the only honest default for a microphone the station
   has never heard.

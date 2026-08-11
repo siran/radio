@@ -612,8 +612,14 @@
   .tugrow[hidden] { display: none; }
   .rope { display: flex; align-items: center; gap: 3px; }
   .rope .pip { width: 5px; height: 5px; border-radius: 50%; background: var(--line);
-               transition: background-color .18s ease; }
+               transition: background-color .18s ease, opacity .18s ease; }
   .rope .pip.on { background: var(--accent); }
+  /* The cool-off after a track change, while the counter refuses every click.
+     The pips go faint and both buttons disable themselves, which is the whole
+     message: not yet. No word for it and no countdown - a figure ticking down
+     would be a second clock on a page that already has one, about a wait of
+     five seconds. */
+  .rope.cool .pip { opacity: .3; }
   .recent { margin-top: 20px; }
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
@@ -818,6 +824,10 @@
       ? NOTIME + ' / ' + NOTIME
       : mmss(trackElapsed + (Date.now() - trackAt) / 1000) + ' / ' +
         (trackTotal > 0 ? mmss(trackTotal) : NOTIME);
+    // The tug's cool-off ends between polls, and this is the second hand that
+    // already exists. It rides here rather than on a timer of its own for the
+    // reason the whole PULSE block exists.
+    drawTug();
   }
 
   // Three states, one place, and the place is still here. 'loading' is set by the
@@ -1414,7 +1424,7 @@
   // already asks for and which only runs while sound is coming out. A second
   // timer here would be the exact bug that block was written to fix.
   const GAP = 400;
-  let rope = 0, lastPull = 0;
+  let rope = 0, pullNow = 0, lastPull = 0, coolUntil = 0;
 
   // One pip per click, so the picture and the figure are the same object. The
   // page is told how many there are rather than knowing, so twelve lives in
@@ -1429,20 +1439,60 @@
       el.textContent = '';
       for (let i = 0; i < rope; i++) el.appendChild(document.createElement('i')).className = 'pip';
     }
-    [...el.children].forEach((p, i) => p.classList.toggle('on', i < j.pull));
+    pullNow = j.pull;
+    // The cool-off after a track change, during which the station refuses every
+    // click, because the audio a listener is hearing is several seconds behind
+    // what this page has already been told is playing - so a click now is a
+    // vote on a song they have not reached yet.
+    //
+    // A deadline of our own, in two parts. The station hands over the LENGTH of
+    // the window and its own position in the track, so what is left is the one
+    // minus the other, worked out from the same two numbers the station uses.
+    //
+    // And then the part that is not arithmetic: the answer to the click that
+    // takes the counter to the top is the answer to a skip that has just been
+    // ordered but has not landed yet, so it still reports the OLD track's
+    // position and truthfully says the window has not started. Believing it
+    // leaves the buttons live until the next poll - measured at 3672 ms of a
+    // 5000 ms window spent looking live while every click was refused. Nothing
+    // but a click can take the counter to the top, so seeing it there IS proof
+    // that a change has this moment happened, and the window is armed whole
+    // from here rather than waiting to be told about it.
+    const cool = typeof j.cool === 'number' ? j.cool : 0;
+    const into = typeof j.elapsed === 'number' ? j.elapsed : 0;
+    const left = pullNow >= rope ? cool
+               : (into >= 0 && into < cool) ? cool - into
+               : 0;
+    coolUntil = Date.now() + left * 1000;
+    [...el.children].forEach((p, i) => p.classList.toggle('on', i < pullNow));
+    drawTug();
+    $('tugrow').hidden = false;
+  }
+
+  // Split out of showTug because the cool-off ends between polls. tick() calls
+  // this every second - the timer that already runs, and only while sound is
+  // coming out - so the buttons come back when the wait is actually over
+  // instead of at the next poll. Nothing new is on a timer.
+  function drawTug() {
+    const cool = Date.now() < coolUntil;
+    $('rope').classList.toggle('cool', cool);
+    $('tugSkip').disabled = cool;
     // Nought is the floor and nothing else - no saved state, no veto, just a
     // click with nowhere to go. Saying so with the button is kinder than taking
     // the click and doing nothing with it.
-    $('tugKeep').disabled = j.pull === 0;
-    $('tugrow').hidden = false;
+    $('tugKeep').disabled = cool || pullNow === 0;
   }
 
   // The answer is the whole public state, so one response redraws the counter,
   // the heart and the clock together and none of them can be caught disagreeing
   // with the others.
+  //
+  // The cool-off is checked here as well as drawn, because a click can arrive
+  // between the button disabling and the eye noticing - and because the station
+  // refuses it anyway. This only saves the round trip; it is not the rule.
   async function tugPull(path) {
     const now = Date.now();
-    if (!likeId || now - lastPull < GAP) return;
+    if (!likeId || now < coolUntil || now - lastPull < GAP) return;
     lastPull = now;
     try { showLikes(await (await fetch(path, { method: 'POST' })).json()); }
     catch { pollLikes(); }
