@@ -1162,7 +1162,16 @@ live = input.harbor(
   password      = environment.get("RADIO_HARBOR_PASSWORD"),
   buffer        = 1.0,
   max           = 10.0,
-  timeout       = 20.0,
+  # Five, not twenty. This is how long the harbor keeps the mount after audio
+  # stops, and it costs twice over: it is silence before the music comes back,
+  # and it is a reconnect inside that window being refused with 403. Measured
+  # on the first real broadcast - stop, try again, "cannot connect", wait,
+  # works. That was never a fault, it was this number.
+  #
+  # The trade is real: a phone that loses signal for longer than this is
+  # dropped rather than ridden through. Five is chosen for a host who starts
+  # and stops often, which is what the first session actually looked like.
+  timeout       = 5.0,
   on_connect    = fun (_) -> connected := true,
   on_disconnect = fun () -> connected := false
 )
