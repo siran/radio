@@ -275,11 +275,26 @@
       <label class="lbl" for="micmonvol">mic</label>
       <input id="micmonvol" type="range" min="0" max="100" value="60">
     </div>
+    <div class="row">
+      <label class="lbl" for="monsync">sync</label>
+      <input id="monsync" type="range" min="0" max="2" step="0.05" value="0">
+      <span class="when" id="monsyncval"></span>
+    </div>
+    <div class="status">If your voice lands LATE against the music on the radio, raise
+      <span class="when">sync</span> until it lands where you meant it to. It holds this bed further
+      behind the station, which is the same thing as sending your voice further ahead: what you hear is
+      older, so what you say is newer, and the two meet. It moves the moment you let go of it, and only
+      in your headphones &mdash; nothing about the air changes.
+      <br>It can only work if the station is holding the music back for you: that is
+      <span class="when">Music held for the air</span> on the mixing desk, and it needs a restart to
+      change. Sync can spend that hold; it cannot create it. With the desk at 0 there is nothing to
+      spend and raising this only makes you later.</div>
     <!-- Said here as well as in the panel above, because this is the button
          that has been mistaken for the air. -->
     <div class="status">Hear my mic is <span class="when">your headphones only</span>. Nothing in this panel
       reaches anybody else. To transmit, use <span class="when">Go on air</span> at the top of the page.</div>
     <div class="status"><span class="when">The bed comes straight from liquidsoap and skips icecast, which hands every new listener four seconds of backlog. Your own mic is added here in the browser, at no delay at all &mdash; the station deliberately does not send your voice back, because hearing yourself a second late does not just distract, it breaks the sentence you are saying.</span></div>
+    <div class="status">behind the live edge: <span id="mondrift">&mdash;</span></div>
     <div class="status" id="monmsg"></div>
   </details>
   <audio id="mon" preload="none"></audio>
@@ -474,6 +489,11 @@
       <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
       <input id="glide" type="range" disabled>
     </div>
+    <label for="air_delay"><span class="band">Music held for the air</span> &mdash; seconds the station sits on the music before sending it, so a host talking over it lands on the beat they heard; costs every listener that much delay, and takes effect at the next restart &mdash; <span id="air_delayval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockair_delay" aria-pressed="true">&#128274;</button>
+      <input id="air_delay" type="range" disabled>
+    </div>
     <!-- Not a mixing control, and it is here anyway. This is the station's own
          machinery rather than one host's sound, and the only other place it
          could sit is beside Skip, where a press meant for the next track would
@@ -657,23 +677,44 @@
   mon.volume = $('monvol').value / 100;
   $('monvol').addEventListener('input', () => { mon.volume = $('monvol').value / 100; });
 
-  $('monbtn').addEventListener('click', () => {
-    if (mon.paused) {
-      // ?t= so it always joins live rather than resuming a stale buffer, the
-      // same trick the listener page uses on /stream.
-      mon.src = '/host/monitor?t=' + Date.now();
-      mon.load();
-      mon.play().then(() => { $('monbtn').textContent = 'Stop'; monSay(''); })
-                .catch(e => monSay('Could not start the monitor: ' + e.message));
-    } else {
-      // Tear the connection down rather than pausing it. A paused <audio> on a
-      // live stream goes on downloading, which cost the listener page 69
-      // requests a minute before anybody noticed.
-      mon.pause(); mon.removeAttribute('src'); mon.load();
-      $('monbtn').textContent = 'Listen';
-    }
-  });
+  // Starting and stopping are a pair of functions rather than two branches of
+  // the button, because pagehide has to be able to stop it too, and a monitor
+  // left running is an open socket, a claimed decoder and a download that never
+  // ends.
+  let monOn = false;
 
+  function monStart() {
+    monOn = true;
+    $('monbtn').textContent = 'Stop';
+    monSay('');
+    mon.preload = 'auto';
+    monFeed = monCanMSE ? monFeedMSE() : monFeedElement();
+    // play() HERE, inside the click, and not later when the first bytes land: a
+    // browser grants playback to a user gesture and the fetch that follows one
+    // is not itself one. On the MSE path the element simply has nothing to play
+    // yet and waits, which is what we want anyway.
+    mon.play().catch(e => {
+      monSay('Could not start the monitor: ' + e.message);
+      monStop();
+    });
+    monWatchOn();
+  }
+
+  function monStop() {
+    monOn = false;
+    monWatchOff();
+    if (monFeed) { monFeed.close(); monFeed = null; }
+    // Tear the connection down rather than pausing it. A paused <audio> on a
+    // live stream goes on downloading, which cost the listener page 69
+    // requests a minute before anybody noticed.
+    try { mon.pause(); mon.removeAttribute('src'); mon.load(); } catch (e) {}
+    mon.playbackRate = 1;
+    $('monbtn').textContent = 'Listen';
+  }
+
+  $('monbtn').addEventListener('click', () => {
+    if (monOn) monStop(); else monStart();
+  });
   // The same microphone, asked for the same way the recorder asks - same device,
   // same constraints - so what you hear is what the station is being sent and
   // not some other capture of the room with different processing on it.
@@ -704,6 +745,292 @@
       monSay('Microphone refused: ' + e.name);
     }
   });
+  // --- keeping the monitor at the station's PRESENT --------------------------
+  //
+  // What this panel is for is hearing the bed as it is going out RIGHT NOW, and
+  // for a long time it did not: a host pressed Listen and heard something level
+  // with the public stream, several seconds old. The station was never the
+  // problem and it is worth writing down where the seconds actually were,
+  // because every one of these was measured and two of them were surprises.
+  //
+  //   harbor, straight off 8005      0.53s of cushion, steady over 10s
+  //   the same through caddy         0.60s - caddy costs 0.06s, flush_interval
+  //                                  -1 is doing its job and is not the problem
+  //   an <audio src=stream> element  8.4s, and STAYING there
+  //
+  // So the browser held all of it. Chrome's own network log says the bytes
+  // arrive on time - the 8192-byte burst 140ms in, then real time, exactly as
+  // the harbor sends them - and then the element sits on them: no
+  // loadedmetadata until 7.84s, playback at 7.97s, and it starts at the OLDEST
+  // byte it holds. That is how it ends up eight seconds late and simply stays
+  // eight seconds late for as long as it plays.
+  //
+  // TWO THINGS THAT LOOKED LIKE THE ANSWER AND ARE NOT:
+  //
+  // buffered.end - currentTime, which is what this code used to read and print,
+  // IS NOT THE LAG. Measured: it sat at 2.30s for ninety seconds without moving
+  // while the true lag went from 8.4s down to 4.9s. An element reports a window
+  // around the playhead, not everything it is holding, so that difference is
+  // very nearly a constant - and both the readout and the catch-up that steered
+  // on it were steering on nothing.
+  //
+  // Seeking an <audio src=stream> does not move it either. currentTime accepts
+  // the write and `seeked` fires, and half a second later the lag is what it
+  // was: buffered.end had moved along with the playhead. Playing FAST does move
+  // it, exactly and linearly - 1.10 takes off 0.1s per second - which is the
+  // one lever that path has.
+  //
+  // WHAT ACTUALLY FIXES IT is not to let the element load the stream at all.
+  // MediaSource takes the bytes from a fetch and we append them ourselves, so
+  // the buffer is one we own: we can start the playhead at the NEWEST audio
+  // instead of the oldest, and after that buffered.end really is the live edge
+  // and a seek really lands. Measured on this stream, same page, same machine:
+  // 0.24s to first sound and a true lag of 0.45s held for 45s, 0.58s held for
+  // 90s at a wider cushion, one stall, at the start.
+  //
+  // Not every browser has it. audio/mpeg in MediaSource is Chrome's; Safari and
+  // Firefox fall through to the element and the old floor, and the readout will
+  // say so rather than pretend.
+  const MON_MS = window.ManagedMediaSource || window.MediaSource;
+  const monCanMSE = !!(MON_MS && MON_MS.isTypeSupported &&
+                       MON_MS.isTypeSupported('audio/mpeg'));
+
+  // The cushion we choose to carry. 0.30 measured out at 0.45s of real lag -
+  // the difference is the size of the lumps caddy hands over, about 0.15s - and
+  // played 45s without a stall.
+  let MON_TARGET = 0.30;
+  const MON_TARGET_MAX = 1.2;
+
+  // What the host adds on purpose, on top of the cushion above: how far behind
+  // the station this bed deliberately sits.
+  //
+  // A host talks over what they HEAR, and it reaches the mix later than they
+  // said it - capture, a 300ms recorder slice, the socket, the harbor. So a
+  // word aimed at a beat lands after it, by the monitor lag plus that trip.
+  // The station can hold the music back to compensate (air_delay on the desk),
+  // and this spends that hold from the other end: play the bed further behind
+  // and what a host hears is older, so what they say is newer against it.
+  //
+  // One sum, two halves: monitor lag + voice trip - air_delay = 0 is aligned.
+  // This half moves live and the other needs a restart, which is the entire
+  // reason the by-ear control is this one.
+  //
+  // Per device, in localStorage, not in desk.json: it belongs to this browser
+  // on this machine on this network. The same host on a phone needs a
+  // different number, and neither should overwrite the other.
+  const SYNC_KEY = 'talk.sync';
+  let MON_HOLD = 0;
+  try { MON_HOLD = Math.min(2, Math.max(0, parseFloat(localStorage.getItem(SYNC_KEY)) || 0)); }
+  catch (e) { MON_HOLD = 0; }
+
+  // Every threshold and every seek measures from here, so moving the slider
+  // moves the whole ladder together instead of setting the catch-up against
+  // the cushion. MON_TARGET alone still absorbs stalls; this rides on top.
+  const monTarget = () => MON_TARGET + MON_HOLD;
+
+  // The slider itself. `input` only redraws the number; the move happens on
+  // `change`, on release, the same two-step as every other slider here.
+  const showSync = () => {
+    const v = parseFloat($('monsync').value);
+    $('monsyncval').textContent = v > 0 ? '+' + v.toFixed(2) + 's behind' : 'no extra hold';
+  };
+  $('monsync').value = MON_HOLD;
+  showSync();
+  $('monsync').addEventListener('input', showSync);
+  $('monsync').addEventListener('change', () => {
+    MON_HOLD = parseFloat($('monsync').value) || 0;
+    try { localStorage.setItem(SYNC_KEY, String(MON_HOLD)); } catch (e) {}
+    showSync();
+    // Move there now rather than gliding, because tuning by ear means moving
+    // it and listening, and a twenty-second glide to the new position is not
+    // something anybody can judge. The audio is already in our own buffer -
+    // monTrim keeps six seconds behind the playhead and this reaches at most
+    // two - so this is a seek within what we hold, not a refetch.
+    if (monFeed && monFeed.kind === 'mse' && monFeed.sb && monFeed.sb.buffered.length) {
+      const sb = monFeed.sb;
+      try {
+        mon.currentTime = Math.max(sb.buffered.start(0),
+                                   sb.buffered.end(sb.buffered.length - 1) - monTarget());
+        mon.playbackRate = 1;
+      } catch (e) {}
+    } else if (monFeed && monFeed.kind === 'element') {
+      monSay('Sync needs the low-latency path, which this browser does not have.');
+    }
+  });
+  // Thresholds are ABOVE the target, not absolute: widen the cushion and the
+  // whole ladder moves with it instead of the catch-up fighting the cushion.
+  // MON_LOW is where the catch-up lets go, and therefore where the monitor
+  // rests after any catch-up: it settles just under target+MON_LOW. Left
+  // alone the feed sits at about 0.45s, so letting go at 0.55 rests near the
+  // floor instead of a quarter-second above it. Lower than that and 1.04
+  // would run permanently, chasing a mark the stream cannot reach.
+  const MON_JUMP = 2.0, MON_HIGH = 0.9, MON_LOW = 0.25;
+  const MON_RATE = 1.04, MON_RATE_FAR = 1.15;
+  // Slowing down to fall further behind, the mirror of the two above.
+  const MON_SLOW = 0.96, MON_SLOW_FAR = 0.87;
+  const MON_BURST = 8192 / 16000;   // the harbor's burst, in seconds of audio
+  let monFeed = null, monTimer = null;
+
+  // The MSE feed: the bytes come from fetch, we hand them to the decoder, and
+  // the playhead starts at the end of them.
+  function monFeedMSE() {
+    const ms = new MON_MS();
+    const ctl = new AbortController();
+    const q = [];
+    let busy = false;
+    const feed = {
+      kind: 'mse', sb: null, seeked: false, dead: false,
+      close() { this.dead = true; try { ctl.abort(); } catch (e) {} }
+    };
+    // ManagedMediaSource, which is the one Safari may some day answer with,
+    // hands the stream to the system unless the element says it is staying.
+    if ('disableRemotePlayback' in mon) mon.disableRemotePlayback = true;
+    mon.src = URL.createObjectURL(ms);
+    ms.addEventListener('sourceopen', () => {
+      if (feed.sb || feed.dead) return;
+      const sb = feed.sb = ms.addSourceBuffer('audio/mpeg');
+      // sequence, because mp3 carries no timestamps of its own: each append
+      // continues the last, so a frame split across two reads - and reads split
+      // wherever caddy chunked them - does not open a gap.
+      sb.mode = 'sequence';
+      const pump = () => {
+        if (busy || feed.dead || sb.updating || !q.length) return;
+        busy = true;
+        try { sb.appendBuffer(q.shift()); }
+        catch (e) { busy = false; feed.dead = true; monSay('The monitor buffer failed: ' + e.message); }
+      };
+      sb.addEventListener('updateend', () => {
+        busy = false;
+        // The one seek that matters, taken the first moment there is anything
+        // to seek within: start at the newest audio rather than the oldest.
+        // This single line is the difference between 8.4s and half a second.
+        if (!feed.seeked && sb.buffered.length) {
+          feed.seeked = true;
+          try { mon.currentTime = Math.max(0, sb.buffered.end(sb.buffered.length - 1) - monTarget()); }
+          catch (e) {}
+        }
+        monTrim(feed);
+        pump();
+      });
+      feed.push = b => { q.push(b); pump(); };
+      monPull(feed, ctl);
+    }, { once: true });
+    return feed;
+  }
+
+  // MSE keeps everything ever appended, and this stream has no end. Six seconds
+  // of history is more than anything here ever reads back.
+  function monTrim(feed) {
+    const sb = feed.sb;
+    if (!sb || sb.updating || !sb.buffered.length) return;
+    const t = mon.currentTime;
+    if (t > 12 && sb.buffered.start(0) < t - 10) {
+      try { sb.remove(0, t - 6); } catch (e) {}
+    }
+  }
+
+  async function monPull(feed, ctl) {
+    let res;
+    try {
+      // credentials: the speaker credential the browser already cached for
+      // /host/ - the same one the <audio> element used to lean on, and the
+      // reason this mount is under /host/ at all. Nothing here can set an
+      // Authorization header of its own.
+      res = await fetch('/host/monitor?t=' + Date.now(),
+                        { credentials: 'include', cache: 'no-store', signal: ctl.signal });
+    } catch (e) {
+      if (!feed.dead) monSay('The monitor could not connect: ' + e.message);
+      return;
+    }
+    if (!res.ok) { feed.dead = true; monSay('The monitor was refused: ' + res.status); return; }
+    const rd = res.body.getReader();
+    while (!feed.dead) {
+      let r;
+      try { r = await rd.read(); } catch (e) { break; }
+      if (r.done) break;
+      feed.push(r.value);
+    }
+    if (!feed.dead && monOn) monSay('The monitor stream ended - press Listen again.');
+  }
+
+  // No MediaSource for mp3 here, so the element loads the stream itself and we
+  // are back under its rules and its eight seconds. All this path can do is
+  // grind the gap down by playing fast, and say honestly how far down it has
+  // got.
+  function monFeedElement() {
+    mon.src = '/host/monitor?t=' + Date.now();
+    mon.load();
+    return { kind: 'element', t0: performance.now(), dead: false,
+             close() { this.dead = true; } };
+  }
+
+  // How far behind the station the ear is, in seconds.
+  //
+  // On the MSE path we appended the buffer ourselves, so buffered.end really is
+  // the newest audio the station has sent and the subtraction means what it
+  // says. On the element path it does not, so the wall clock answers instead:
+  // the stream is constant bitrate, so (time since the request) plus the
+  // harbor's burst is how many seconds of audio exist, and currentTime is how
+  // many of them have been played.
+  function monLag() {
+    if (!monFeed) return null;
+    if (monFeed.kind === 'mse') {
+      const sb = monFeed.sb;
+      if (!sb || !sb.buffered.length) return null;
+      return sb.buffered.end(sb.buffered.length - 1) - mon.currentTime;
+    }
+    if (!mon.currentTime) return null;
+    return (performance.now() - monFeed.t0) / 1000 + MON_BURST - mon.currentTime;
+  }
+
+  function monWatch() {
+    const lag = monLag();
+    if (lag === null) { $('mondrift').textContent = "—"; return; }
+    $('mondrift').textContent = lag.toFixed(2) + 's' +
+      (mon.playbackRate !== 1 ? ' (catching up)' : '') +
+      (monFeed.kind === 'element' ? ' - this browser has no low-latency path' : '');
+    if (monFeed.kind === 'mse' && lag > monTarget() + MON_JUMP) {
+      // Here a seek lands, because the audio it seeks into is audio we put
+      // there. This is the stall backstop: one tick, against a gap no amount of
+      // 4% would close before the host gave up on it.
+      const sb = monFeed.sb;
+      try { mon.currentTime = sb.buffered.end(sb.buffered.length - 1) - monTarget(); } catch (e) {}
+      mon.playbackRate = 1;
+      return;
+    }
+    // Two thresholds and not one, so it commits to a catch-up instead of
+    // toggling on a boundary. 1.04 is about two semitones if you hold a note
+    // against it and inaudible on speech and music for the seconds it runs.
+    const t = monTarget();
+    if (lag > t + MON_HIGH) {
+      mon.playbackRate = lag > t + 3 ? MON_RATE_FAR : MON_RATE;
+    } else if (lag < t - MON_HIGH) {
+      // The other direction, which only exists because of the sync slider:
+      // to sit FURTHER behind, play slower and let the stream run ahead.
+      // Unreachable with sync at 0 - the feed floor is about 0.45s and this
+      // asks for less than nothing - so a station nobody has tuned behaves
+      // exactly as it did before.
+      mon.playbackRate = lag < t - 3 ? MON_SLOW_FAR : MON_SLOW;
+    } else if (mon.playbackRate > 1 && lag < t + MON_LOW) {
+      mon.playbackRate = 1;
+    } else if (mon.playbackRate < 1 && lag > t - MON_LOW) {
+      mon.playbackRate = 1;
+    }
+  }
+
+  // A cushion sized for the link it is actually on. Every stall widens it a
+  // little and nothing narrows it again within a session, because a connection
+  // that broke up once will do it again and a host should not have to find that
+  // out repeatedly. The first `waiting` is the element waiting for its first
+  // bytes rather than a stall, hence the currentTime guard.
+  mon.addEventListener('waiting', () => {
+    if (monOn && mon.currentTime > 2 && MON_TARGET < MON_TARGET_MAX) MON_TARGET += 0.15;
+  });
+
+  function monWatchOn()  { if (!monTimer) monTimer = setInterval(monWatch, 500); }
+  function monWatchOff() { if (monTimer) { clearInterval(monTimer); monTimer = null; }
+                           mon.playbackRate = 1;
+                           $('mondrift').textContent = "—"; }
   $('micmonvol').addEventListener('input', () => {
     if (micGain) micGain.gain.value = $('micmonvol').value / 100;
   });
@@ -712,7 +1039,7 @@
   // open: the tab keeps the recording indicator lit and the device claimed.
   window.addEventListener('pagehide', () => {
     micMonOff();
-    try { mon.pause(); mon.removeAttribute('src'); mon.load(); } catch (e) {}
+    try { monStop(); } catch (e) {}
   });
   const SAY_ELS = ['monmsg', 'presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr', 'airmsg'];
   function say(id, msg) {
@@ -1243,7 +1570,13 @@
     comp_gain:  { unit: ' dB',    min: 0,    max: 24,  step: 0.5,  val: 17.5 },
     duck_to:    { unit: '\u00d7', min: 0,    max: 1,   step: 0.05, val: 0.45 },
     hold:       { unit: ' s',     min: 0,    max: 30,  step: 0.5,  val: 3    },
-    glide:      { unit: '',       min: 0.01, max: 0.5, step: 0.01, val: 0.01 }
+    glide:      { unit: '',       min: 0.01, max: 0.5, step: 0.01, val: 0.01 },
+    // Not live, and alone among these in that. delay_line reads its value
+    // when the graph is built and never again - measured on a throwaway
+    // instance, where pushing it from 0 to 1.2 moved nothing and starting
+    // at 1.2 moved exactly 1.202s. So this writes desk.json and waits for a
+    // restart, and `sync` in the monitor panel is what tunes by ear.
+    air_delay:  { unit: ' s',     min: 0,    max: 4,   step: 0.05, val: 0    }
   };
   const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k].unit; };
 

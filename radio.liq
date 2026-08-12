@@ -103,13 +103,14 @@ def desk_cfg() =
       comp_gain  : float?,
       duck_to    : float?,
       hold       : float?,
-      glide      : float?
+      glide      : float?,
+      air_delay  : float?
     } ) = file.contents(desk_config)
     c
   catch _ do
     { mic_gain = null, voice_gain = null, hp_freq = null, comp_thr = null,
       comp_ratio = null, comp_gain = null, duck_to = null, hold = null,
-      glide = null }
+      glide = null, air_delay = null }
   end
 end
 
@@ -163,6 +164,39 @@ hold       = interactive.float("hold",
 glide      = interactive.float("glide",
   description = "How fast the music fader moves. Smaller is slower and smoother.",
   unit = "", min = 0.01, max = 0.5, step = 0.01, (dcfg.glide ?? 0.01))
+
+# --- talking in time with the music ----------------------------------------
+# How far the music is held back before it goes to air, so that a host talking
+# over it lands where they meant to.
+#
+# A host hears the bed through their monitor a little late, and their voice
+# takes a little longer again to travel back - browser capture, a 300ms
+# recorder slice, the socket, this harbor's own input buffer. Both of those
+# are behind them by the time they speak, so a word aimed at a beat lands
+# after it. Neither trip can be made shorter. Holding the MUSIC back by the
+# same total puts the word back on its beat.
+#
+# What a host is really setting is one sum: monitor lag + voice trip - this.
+# Zero is aligned. Two of those three are theirs and one is here.
+#
+# THIS DIAL IS NOT LIVE, and that was measured rather than assumed.
+# delay_line takes a getter, so it looks live, and the value on the dial does
+# change - but the audio does not follow it. On a throwaway instance: started
+# at 0.0 and pushed to 1.2, the delay stayed put; started at 1.2, it was
+# 1.202s. It reads its getter once, when the graph is built. So this is the
+# value at the NEXT RESTART, like every other line in desk.json, and the
+# by-ear tuning lives in the console, which holds the monitor back instead -
+# same sum, and a browser CAN change that live.
+#
+# Set it generously rather than exactly: the console can only make the sum
+# BIGGER, by holding the bed back further, so this has to leave room. Around
+# 1.75 suits a browser on the LAN, where the two trips come to roughly 1.1.
+#
+# 0.0 is the default and is exactly the old behaviour - it costs every listener
+# whatever it is set to, and a station nobody talks on has nothing to align.
+air_delay  = interactive.float("air_delay",
+  description = "Holds the music back so a host's voice lands on the beat they heard. Takes effect at the next restart; tune by ear with the console's sync slider.",
+  unit = "s", min = 0.0, max = 4.0, step = 0.05, (dcfg.air_delay ?? 0.0))
 
 # the announcer
 # Two switches, not a count. There are exactly two moments a host can speak at
@@ -953,6 +987,7 @@ def knobs() =
     ("duck_to",        duck_to()),
     ("hold",           hold()),
     ("glide",          glide()),
+    ("air_delay",      air_delay()),
     # The two switches ride in the same (string * float) shape as everything
     # else - 1.0 for on, 0.0 for off - rather than giving this endpoint a
     # second response type for two values. The console renders a checkbox for
@@ -1825,7 +1860,25 @@ def duck_gain() =
   music_gain()
 end
 
-music = amplify(duck_gain, music)
+# The bed a host monitors on: the music as it is RIGHT NOW, before the delay
+# below holds it back for the air. That is the whole point of the delay - the
+# host hears the present, talks to it, and the station waits for the words.
+#
+# It reads music_gain rather than calling duck_gain, and that distinction is
+# load-bearing: duck_gain is not a reading, it MUTATES - it advances the fader
+# one glide step, and logs. Called from two amplifies it would run twice per
+# frame, so the fade would move at double speed and every "music down" would
+# be logged twice. duck_gain is called in exactly one place, on the air path
+# below, and this reads the value it left behind.
+monitor_bed = amplify(fun () -> music_gain(), music)
+
+# Delay FIRST, then duck. The other order is wrong in a way that is easy to
+# miss: ducking before the delay bakes the dip into the audio at the moment it
+# was decided, and then holds it back too, so a voice note would start and the
+# music would dip a second and a half later. Ducking after the delay applies
+# the dip to whatever is leaving for the air right now, which is what a
+# listener hears alongside the voice.
+music = amplify(duck_gain, delay_line(air_delay, music))
 
 # Music first, so the track title still shows while you are talking over it.
 # normalize=false so levels do not jump when the live source connects.
@@ -1845,8 +1898,10 @@ radio = add(id = "mix", normalize = false, [music, talk])
 # merely annoy - it breaks the sentence you are in. A host monitors their own
 # voice locally at zero delay; the station sends them everything else.
 #
-# Tapped AFTER duck_gain, so the bed dips in the headphones exactly as it dips
-# on air and the host hears what they are doing to the mix.
+# Tapped BEFORE the air delay and after the ducking, so the bed dips in the
+# headphones exactly as it dips on air, while staying ahead of what listeners
+# hear by whatever the air_delay dial is set to. That gap is the point: it is
+# the room a host's voice needs to travel back and still land on the beat.
 #
 # MP3, and this was measured rather than chosen. Ogg/Opus was built first and
 # had lower coder delay - but a client joining a live ogg stream mid-flight
@@ -1857,10 +1912,12 @@ radio = add(id = "mix", normalize = false, [music, talk])
 # bottleneck anyway - a browser buffers to its own taste and that dwarfs the
 # difference between coders.
 #
-# ONE extra consumer of `music`, not two. A build with an mp3 and an opus
-# monitor side by side typechecked cleanly, started, and died at once with
-# "no more sources to process, global stop". A clean --check does not prove a
-# graph will run; this file has learned that before, from a gate().
+# ONE extra consumer, not two. A build with an mp3 and an opus monitor side by
+# side typechecked cleanly, started, and died at once with "no more sources to
+# process, global stop". A clean --check does not prove a graph will run; this
+# file has learned that before, from a gate(). The delayed air path and this
+# undelayed bed are the two branches off the music, and that pair was run on a
+# throwaway instance on its own ports before it was run here.
 #
 # Port 8005, the harbor already up, with a mount of its own - no new port, no
 # firewall rule, no layer4 branch. Caddy puts it behind the speaker credential:
@@ -1872,7 +1929,18 @@ output.harbor(
   id    = "monitor",
   port  = 8005,
   mount = "monitor",
-  music
+  # 8192 bytes - half a second at 128kbps. Not the 65534 DEFAULT, which is
+  # 4.1 seconds and is exactly the delay this output exists to avoid: icecast
+  # was taken out of the path and liquidsoap supplied the same figure from its
+  # own default, so the monitor came out level with the public stream.
+  #
+  # And not zero, which was the first correction and overshot. With no burst
+  # the browser starts holding nothing and every scrap of jitter becomes an
+  # underrun; it sounded, in the operator's words, very bad. A burst is a
+  # cushion. A listener needs a big one, a host needs a small one, and nobody
+  # needs none.
+  burst = 8192,
+  monitor_bed
 )
 
 # --- the announcer ---------------------------------------------------------
