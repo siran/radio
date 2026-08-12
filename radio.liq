@@ -202,7 +202,7 @@ glide      = interactive.float("glide",
 # whatever it is set to, and a station nobody talks on has nothing to align.
 air_delay  = interactive.float("air_delay",
   description = "Holds the music back so a host's voice lands on the beat they heard. Takes effect at the next restart; tune by ear with the console's sync slider.",
-  unit = "s", min = 0.0, max = 4.0, step = 0.05, (dcfg.air_delay ?? 0.0))
+  unit = "s", min = 0.0, max = 8.0, step = 0.05, (dcfg.air_delay ?? 0.0))
 
 # the announcer
 # Two switches, not a count. There are exactly two moments a host can speak at

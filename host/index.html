@@ -1582,7 +1582,7 @@
     // instance, where pushing it from 0 to 1.2 moved nothing and starting
     // at 1.2 moved exactly 1.202s. So this writes desk.json and waits for a
     // restart, and `sync` in the monitor panel is what tunes by ear.
-    air_delay:  { unit: ' s',     min: 0,    max: 4,   step: 0.05, val: 0    }
+    air_delay:  { unit: ' s',     min: 0,    max: 8,   step: 0.05, val: 0    }
   };
   const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k].unit; };
 
