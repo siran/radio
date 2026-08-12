@@ -176,8 +176,13 @@ glide      = interactive.float("glide",
 # after it. Neither trip can be made shorter. Holding the MUSIC back by the
 # same total puts the word back on its beat.
 #
-# What a host is really setting is one sum: monitor lag + voice trip - this.
-# Zero is aligned. Two of those three are theirs and one is here.
+# What a host is really setting is one sum:
+#
+#     how late a word lands = monitor lag + voice trip - this
+#
+# Zero is aligned. Two of those three are theirs and one is here, and this is
+# the ONLY one that can cure a late voice - the console can add to the monitor
+# lag but never subtract from it, so from the browser late is uncorrectable.
 #
 # THIS DIAL IS NOT LIVE, and that was measured rather than assumed.
 # delay_line takes a getter, so it looks live, and the value on the dial does
@@ -188,9 +193,10 @@ glide      = interactive.float("glide",
 # by-ear tuning lives in the console, which holds the monitor back instead -
 # same sum, and a browser CAN change that live.
 #
-# Set it generously rather than exactly: the console can only make the sum
-# BIGGER, by holding the bed back further, so this has to leave room. Around
-# 1.75 suits a browser on the LAN, where the two trips come to roughly 1.1.
+# Set it generously rather than exactly, and that is not sloppiness: the
+# console can only make the sum BIGGER. Overshoot here so the host lands
+# EARLY, and let them trim back live with the sync slider. Around 1.75 suits a
+# browser on the LAN, where the two trips come to roughly 1.1.
 #
 # 0.0 is the default and is exactly the old behaviour - it costs every listener
 # whatever it is set to, and a station nobody talks on has nothing to align.

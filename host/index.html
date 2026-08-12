@@ -280,15 +280,17 @@
       <input id="monsync" type="range" min="0" max="2" step="0.05" value="0">
       <span class="when" id="monsyncval"></span>
     </div>
-    <div class="status">If your voice lands LATE against the music on the radio, raise
-      <span class="when">sync</span> until it lands where you meant it to. It holds this bed further
-      behind the station, which is the same thing as sending your voice further ahead: what you hear is
-      older, so what you say is newer, and the two meet. It moves the moment you let go of it, and only
-      in your headphones &mdash; nothing about the air changes.
-      <br>It can only work if the station is holding the music back for you: that is
-      <span class="when">Music held for the air</span> on the mixing desk, and it needs a restart to
-      change. Sync can spend that hold; it cannot create it. With the desk at 0 there is nothing to
-      spend and raising this only makes you later.</div>
+    <div class="status">Use this when your voice lands <span class="when">EARLY</span> &mdash; ahead of the beat
+      you were aiming at. It holds this bed further behind the station, so you hear each beat later and
+      therefore say your word later, which walks you back onto it. It moves the moment you let go, and
+      only in your headphones &mdash; nothing about the air changes.
+      <br>If your voice lands <span class="when">LATE</span>, this is the wrong control and will make it
+      worse. Late is fixed by <span class="when">Music held for the air</span> on the mixing desk, which
+      holds the music back for everybody and needs a restart. The arithmetic is one line:
+      <br><span class="when">how late you land = your monitor lag + your voice&rsquo;s trip to the station
+      &minus; music held for the air</span>
+      <br>So set the desk knob PAST what you need, until you land early, and bring yourself back with
+      this. Overshooting is the point: this slider can only add.</div>
     <!-- Said here as well as in the panel above, because this is the button
          that has been mistaken for the air. -->
     <div class="status">Hear my mic is <span class="when">your headphones only</span>. Nothing in this panel
@@ -807,13 +809,17 @@
   // A host talks over what they HEAR, and it reaches the mix later than they
   // said it - capture, a 300ms recorder slice, the socket, the harbor. So a
   // word aimed at a beat lands after it, by the monitor lag plus that trip.
-  // The station can hold the music back to compensate (air_delay on the desk),
-  // and this spends that hold from the other end: play the bed further behind
-  // and what a host hears is older, so what they say is newer against it.
   //
-  // One sum, two halves: monitor lag + voice trip - air_delay = 0 is aligned.
-  // This half moves live and the other needs a restart, which is the entire
-  // reason the by-ear control is this one.
+  //     how late a word lands = monitor lag + voice trip - air_delay
+  //
+  // Mind the sign, which was shipped backwards once: this ADDS to the monitor
+  // lag, so it makes a late voice LATER. It is not the cure for late - only
+  // air_delay is, and air_delay needs a restart. What this corrects is the
+  // overshoot: air_delay set past what a rig needs lands the voice early, and
+  // holding the bed back walks it home.
+  //
+  // That is the whole workflow. Set the desk knob too high on purpose, land
+  // early, and trim here by ear, live, while the station stays up.
   //
   // Per device, in localStorage, not in desk.json: it belongs to this browser
   // on this machine on this network. The same host on a phone needs a
