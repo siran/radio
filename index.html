@@ -132,6 +132,12 @@
   .panel h2 { text-align: left; margin-bottom: 12px; }
   .np { text-align: center; font-size: 1.02rem; font-weight: 550; margin: 6px 0 22px;
         min-height: 1.6em; overflow-wrap: anywhere; }
+  /* Held, not playing. The track stays on the panel - it is still the one the
+     station will come back to, and the operator asked to be able to see it -
+     but it stops looking like sound coming out. Dimmed to the weight of the
+     label above it, which is the page's existing shade for "this is context
+     rather than the thing itself". */
+  .np.hold { color: var(--dim); font-weight: 500; }
 
   .controls { display: flex; align-items: center; gap: 16px; }
   button.play { flex: none; width: var(--lp); height: var(--lp); border-radius: 50%; cursor: pointer;
@@ -786,7 +792,7 @@
    <div class="col">
     <!-- player -->
     <div class="panel">
-      <div class="np-label">NOW PLAYING</div>
+      <div class="np-label" id="npLabel">NOW PLAYING</div>
       <div class="np" id="np">—</div>
       <div class="findrow" id="findrow" hidden>
         <a id="findLink" target="_blank" rel="noopener" title="find this song in the library">♫ find this song</a>
@@ -1508,12 +1514,33 @@
     $('showwrap').hidden  = !on;
   }
 
+  // A paused station is not playing the track it is showing, and for the
+  // length of a bucket set that is every listener seeing a name for something
+  // they cannot hear. The operator caught this one on the live page.
+  //
+  // The label loses its words rather than gaining different ones. Every
+  // control on this page is wordless on purpose - the tug is two glyphs and a
+  // row of dots - because it has to work for somebody who reads no English,
+  // and swapping one English phrase for another English phrase would have
+  // made this the one piece of state that only reads in one language. The
+  // pause glyph is the same character the tug row uses for skip, from the
+  // same block, and it needs no translation.
+  //
+  // The title itself is deliberately kept. It is still the track the station
+  // is standing on and will resume, and showing nothing would lose that.
+  function showHold(j) {
+    const held = !!(j && j.paused);
+    $('npLabel').textContent = held ? '\u23F8\uFE0F' : 'NOW PLAYING';
+    $('np').classList.toggle('hold', held);
+  }
+
   function showLikes(j) {
     // Before the early return below, because the two are about different
     // things: that one is "is a track on", and a host can be live over a
     // station playing nothing at all - which is exactly what the music being
     // paused for a bucket set looks like from here.
     showShow(j && j.show);
+    showHold(j);
     likeId = (j && j.id) || '';
     if (!likeId) { $('likerow').hidden = true; $('tugrow').hidden = true; return; }
     const mine = liked.includes(likeId);
@@ -1540,6 +1567,7 @@
       // before the station stopped answering is not a show it may keep
       // drawing.
       showShow(null);
+      showHold(null);
       // Stop rather than keep counting from the last thing it was told. A
       // position that goes on climbing after the station stopped answering is
       // a number this page has no right to.

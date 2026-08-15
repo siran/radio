@@ -1552,6 +1552,19 @@ def likes_state() =
     cool     = tug_cool,
     elapsed  = e,
     duration = source.duration(library),
+    # Whether the playlist is being pulled at all. The public page showed the
+    # frozen track under the words NOW PLAYING for as long as a bucket set
+    # lasted, because everything it had said a track and said a position and
+    # nothing said whether either was moving. `elapsed` cannot stand in for
+    # this: a paused source is never asked for a frame, so its position simply
+    # stops changing, and a page cannot tell that apart from a poll it has not
+    # had yet.
+    #
+    # `paused` and not `music_on`, and they are not the same question. Music
+    # off is a gain of zero over a record that keeps turning; paused stops
+    # pulling the playlist. Only the second one means the track on the panel is
+    # standing still, which is what the panel is now claiming.
+    paused   = paused(),
     show     = show_state() }
 end
 
