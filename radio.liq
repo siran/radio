@@ -1112,9 +1112,15 @@ tug_span = 12
 # chosen against the overlap he could hear, and the true figure is per listener
 # and unknowable from here - burst-size is measured elsewhere in this repo at
 # 484ms to first audio, but a phone on a train buffers what it likes on top of
-# that. Anybody who measures a real distribution should change this number; it
-# is a constant so that is one edit.
-tug_cool = 5.0
+# that. Anybody who measures a real distribution should change this number.
+#
+# air_delay is ADDED to it rather than left out, because it is the same
+# distance by a different name: whatever the music is held back before the mix
+# is time the page has already moved on and the ear has not. Written as a sum
+# so that tuning air_delay cannot silently leave this behind - which it did
+# for one evening, and the symptom was the old song still sounding after a
+# skip that the counter said had happened.
+tug_cool = 5.0 + air_delay()
 
 # The counter, and the song it belongs to. `tug_track` is held as the path,
 # which is what /likes/now already keys on - it hands the page a digest of this

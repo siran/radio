@@ -1415,15 +1415,26 @@
   //
   // GAP is the one piece of per-browser bookkeeping, and it is metering rather
   // than a budget: it bounds how fast this page can click, never how many times
-  // it may. Without it a held Enter key or a double-tap runs the counter up
-  // several notches from one intention. Twelve deliberate clicks still take
-  // under five seconds. Caddy meters the same path from the other side, for the
-  // script that would not be running this code at all.
+  // it may. Without it a held Enter key, whose auto-repeat runs at about thirty
+  // a second, walks the counter to twelve from one press nobody meant as twelve.
+  //
+  // 400 WAS WRONG AND WAS WRONG IN THE DIRECTION THAT HURTS. It is slower than
+  // anybody taps a button they want something to happen on - deliberate tapping
+  // sits near 300ms - so roughly every second click was swallowed here and
+  // never sent. Reported as "it is taking me two clicks to do one click", which
+  // is precisely what a 400ms floor does to a 300ms hand. The old comment
+  // claimed twelve clicks took under five seconds; that was arithmetic at
+  // exactly 400ms apart, and no hand is a metronome.
+  //
+  // 120 bounds this page to about eight clicks a second: still far under a key
+  // repeat, and now comfortably above a hand. The cost of getting it wrong this
+  // way is one dropped click out of an accident; the cost of the other way was
+  // half of every honest click.
   //
   // No poller of its own. The counter arrives on /likes/now, which pollLikes
   // already asks for and which only runs while sound is coming out. A second
   // timer here would be the exact bug that block was written to fix.
-  const GAP = 400;
+  const GAP = 120;
   let rope = 0, pullNow = 0, lastPull = 0, coolUntil = 0;
 
   // One pip per click, so the picture and the figure are the same object. The
