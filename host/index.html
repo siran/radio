@@ -248,6 +248,11 @@
       <button class="tbtn" id="airbtn">Go on air</button>
       <button class="tbtn" id="airtalk" hidden disabled>Talk over it</button>
     </div>
+    <div class="btns" id="airhprow" hidden>
+      <button class="tbtn" id="airtabmon" disabled>Tab in my headphones</button>
+      <button class="tbtn" id="airmicmon" disabled>My mic in my headphones</button>
+    </div>
+    <div class="status" id="airhpnote" hidden></div>
     <!-- The show. Three boxes that are never disabled, and that is the whole
          point of them: everything else in this panel locks while the air is
          up because changing it means rebuilding the stream, and none of
@@ -763,7 +768,7 @@
   // stream an endless response and needs no decoding here; the mic is Web Audio
   // because a gain knob is the whole feature. They never meet in code.
   const mon = $('mon');
-  let micCtx = null, micStream = null, micGain = null;
+  let micCtx = null, micStream = null, micGain = null, micEq = null;
   const monSay = t => say('monmsg', t);
 
   mon.volume = $('monvol').value / 100;
@@ -818,10 +823,19 @@
     micCtx = new (window.AudioContext || window.webkitAudioContext)();
     micGain = micCtx.createGain();
     micGain.gain.value = $('micmonvol').value / 100;
-    micCtx.createMediaStreamSource(micStream).connect(micGain);
+    // Through the EQ, so this is a rehearsal of the voice that will go out
+    // rather than of the bare capture. Checking a setting on a signal that
+    // does not carry it is worse than not checking it.
+    micEq = eqChain(micCtx);
+    micEq.ac = micCtx;
+    eqChains.push(micEq);
+    micCtx.createMediaStreamSource(micStream).connect(micEq.input);
+    micEq.output.connect(micGain);
     micGain.connect(micCtx.destination);
   }
   function micMonOff() {
+    eqChains = eqChains.filter(c => c !== micEq);
+    micEq = null;
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (micCtx) { micCtx.close(); micCtx = null; }
     micGain = null;
@@ -2221,6 +2235,52 @@
   // because liquidsoap reads it that way; only the label is conventional.
   const HZ = { f100: '100 Hz', f200: '200 Hz', f400: '400 Hz', f800: '800 Hz',
                f1600: '1.6 kHz', f3150: '3.15 kHz', f6300: '6.3 kHz' };
+  const EQ_HZ = { f100: 100, f200: 200, f400: 400, f800: 800,
+                  f1600: 1600, f3150: 3150, f6300: 6300 };
+
+  // The same seven bands, applied HERE, in this browser, before the encoder.
+  //
+  // They had to be. These sliders are annotated onto a voice NOTE and applied
+  // by liquidsoap on that note's own lane; the live source passes through
+  // mic_gain, a high-pass and the shared compressor and never goes near them.
+  // So until now the EQ did nothing to a broadcast and nothing to Hear my mic,
+  // which is exactly what the operator noticed.
+  //
+  // BEFORE the encoder and not after is the only place it can go: once the
+  // opus frames are made, this page has no signal left to shape, and the
+  // station cannot do it either without applying one host's taste to every
+  // source that ever connects.
+  //
+  // An HONEST CAVEAT, because it would be easy to imply otherwise: this is a
+  // seven-band peaking EQ at the same centre frequencies and the same dB, and
+  // it is NOT bit-for-bit the curve liquidsoap draws on a note. The Q here is
+  // ours. A note and a live voice at the same settings will sound alike and
+  // will not measure identical.
+  const EQ_Q = 1.0;
+  function eqChain(ac) {
+    const nodes = BANDS.map(b => {
+      const f = ac.createBiquadFilter();
+      f.type = 'peaking';
+      f.frequency.value = EQ_HZ[b];
+      f.Q.value = EQ_Q;
+      f.gain.value = parseFloat(settings.eq[b]) || 0;
+      return f;
+    });
+    for (let i = 0; i < nodes.length - 1; i++) nodes[i].connect(nodes[i + 1]);
+    return { input: nodes[0], output: nodes[nodes.length - 1], nodes: nodes };
+  }
+  // Every chain that is currently carrying audio, so moving a slider is heard
+  // now rather than at the next broadcast. Ramped, because a filter gain
+  // stepped on a live voice is a click on the air.
+  let eqChains = [];
+  function eqPush() {
+    for (const c of eqChains) {
+      if (!c || !c.ac) continue;
+      BANDS.forEach((b, i) => {
+        c.nodes[i].gain.setTargetAtTime(parseFloat(settings.eq[b]) || 0, c.ac.currentTime, 0.02);
+      });
+    }
+  }
   const settings = { gain: 12, duck: true, eq: flatEq() };
   const showGain = () => { $('gainval').textContent = $('gain').value; };
   const showBand = b => { $('eq' + b + 'val').textContent = $('eq' + b).value; };
@@ -2294,6 +2354,7 @@
     $('eq' + b).addEventListener('input', () => showBand(b));
     $('eq' + b).addEventListener('change', () => {
       settings.eq[b] = parseFloat($('eq' + b).value);
+      eqPush();
       saveSettings(HZ[b] + ' saved: ' + settings.eq[b] + ' dB');
     });
   }
@@ -3540,6 +3601,15 @@
   let airSrcStreams = [], airTab = null;
   // The talkover graph, alive only while a tab is the source.
   let airTabGain = null, airMicGain = null, airMicFn = null, airTalking = false;
+  // The two headphone taps, and the EQ chain feeding the air.
+  let airTabMon = null, airMicMon = null, airEq = null;
+  // Whether the browser agreed to stop playing the captured tab itself. Only
+  // when it has can this page offer a headphone switch: otherwise the browser
+  // is playing the tab, we cannot reach that, and adding a second playback of
+  // our own would simply double it.
+  let airSuppressed = false;
+  const canSuppress = !!(navigator.mediaDevices && navigator.mediaDevices.getSupportedConstraints &&
+                         navigator.mediaDevices.getSupportedConstraints().suppressLocalAudioPlayback);
   // Whether the autoDJ was ALREADY paused before this broadcast borrowed it,
   // so leaving the air puts it back rather than deciding for the next host.
   // null means nothing was borrowed and nothing is owed: either the box was
@@ -3584,6 +3654,7 @@
     // Live only while the air is, and only over a tab: with the microphone as
     // the source it is already everything going out.
     $('airtalk').disabled = !airOn || $('airsrc').value === 'mic';
+    airHpLook();
     if (!airOn) { $('airvu').style.width = '0%'; }
   }
 
@@ -3632,9 +3703,17 @@
   async function airGrabTab() {
     if (!navigator.mediaDevices.getDisplayMedia)
       throw new Error('This browser cannot share a tab.');
+    // suppressLocalAudioPlayback asked for only where it is supported. It stops
+    // the BROWSER playing the captured tab through the speakers while still
+    // capturing it, which is what lets this page own the headphone feed and
+    // put a switch on it. Requested blind on a browser without it, the
+    // constraint is ignored and the page would end up playing a second copy
+    // over the browser's own.
+    const aud = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    if (canSuppress) aud.suppressLocalAudioPlayback = true;
     const st = await navigator.mediaDevices.getDisplayMedia({
       video: true,          // not optional: audio-only capture is refused
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      audio: aud
     });
     // The video track is stopped immediately. It is asked for because the API
     // demands it, it is never read, and leaving it running would keep the
@@ -3646,6 +3725,11 @@
       throw new Error(
         'That share has no sound in it. Pick a tab and tick "Share tab audio" in the dialog - and note that Firefox and Safari drop the audio whatever you tick.');
     }
+    // Asked for is not granted, and only the track knows which. A browser
+    // without it ignores the constraint silently and goes on playing the tab.
+    const t0 = st.getAudioTracks()[0];
+    const setg = t0.getSettings ? t0.getSettings() : {};
+    airSuppressed = !!setg.suppressLocalAudioPlayback;
     return st;
   }
 
@@ -3664,8 +3748,25 @@
       return st;
     }
 
+    const dest = airAC.createMediaStreamDestination();
+    airMicGain = airAC.createGain();
+    airMicMon  = airAC.createGain();
+
     if (src === 'mic') {
-      airStream = await mic();
+      // Through the graph, where it used to go straight to the encoder. That
+      // shortcut is what made the EQ unreachable on a live voice, and it
+      // bought nothing: an AudioContext quantum is 128 samples, under 3ms at
+      // 48k, against the 300ms slice the recorder already hands over.
+      const st = await mic();
+      airEq = eqChain(airAC);
+      airEq.ac = airAC;
+      eqChains.push(airEq);
+      airMicGain.gain.value = 1;
+      airMicMon.gain.value = 0;
+      airAC.createMediaStreamSource(st).connect(airEq.input);
+      airEq.output.connect(airMicGain).connect(dest);
+      airMicGain.connect(airMicMon).connect(airAC.destination);
+      airStream = dest.stream;
     } else {
       // Grabbed in the click, up in airGo, and only used here.
       const tab = airTab;
@@ -3687,16 +3788,18 @@
       // The gains are the whole mechanism: the tab runs at 1, the microphone
       // sits at 0 until Talk is pressed, and nothing is ever connected or
       // disconnected mid-broadcast - only turned up and down.
-      const dest = airAC.createMediaStreamDestination();
       airTabGain = airAC.createGain();
-      airMicGain = airAC.createGain();
+      airTabMon  = airAC.createGain();
       airTabGain.gain.value = 1;
       airMicGain.gain.value = 0;
+      // The headphone feed is tapped AFTER the duck, so what a host hears is
+      // what the room hears rather than an undipped copy of it.
+      airTabMon.gain.value = airSuppressed ? 1 : 0;
       airAC.createMediaStreamSource(tab).connect(airTabGain).connect(dest);
+      airTabGain.connect(airTabMon).connect(airAC.destination);
       airMicGain.connect(dest);
-      // The microphone is NOT connected to airAC.destination, here or later:
-      // hearing yourself out of your own speakers a moment late is what the
-      // monitor below exists to avoid, and this is the same trap by another door.
+      airMicGain.connect(airMicMon).connect(airAC.destination);
+      airMicMon.gain.value = 0;
       airStream = dest.stream;
       airMicFn = mic;
     }
@@ -3772,7 +3875,14 @@
     if (!airMicGain || !airAC) return;
     if (!airTalking) {
       try {
-        if (!airMicFn.opened) { airAC.createMediaStreamSource(await airMicFn()).connect(airMicGain); airMicFn.opened = true; }
+        if (!airMicFn.opened) {
+          airEq = eqChain(airAC);
+          airEq.ac = airAC;
+          eqChains.push(airEq);
+          airAC.createMediaStreamSource(await airMicFn()).connect(airEq.input);
+          airEq.output.connect(airMicGain);
+          airMicFn.opened = true;
+        }
       } catch (e) {
         return airSay('The microphone would not open: ' + e.name);
       }
@@ -3789,6 +3899,42 @@
     $('airtalk').textContent = airTalking ? 'Stop talking' : 'Talk over it';
   }
   $('airtalk').addEventListener('click', airTalkToggle);
+
+  // The two headphone taps. Neither is on the air - they are gains into this
+  // browser's own output and nothing else - and both are ramped rather than
+  // switched, because a gain stepped on a live signal is a click in the ears
+  // of the person wearing the headphones.
+  //
+  // The tab tap only exists when the browser agreed to stop playing the tab
+  // itself. Where it did not, the browser IS the playback, this page cannot
+  // reach it, and turning our own tap up would play the tab twice rather than
+  // louder. So the switch is disabled and says which of the two is happening.
+  function airHpLook() {
+    const tab = airOn && !!airTabMon;
+    $('airhprow').hidden = !airOn;
+    $('airhpnote').hidden = !airOn;
+    $('airtabmon').hidden = !tab;
+    $('airtabmon').disabled = !tab || !airSuppressed;
+    $('airmicmon').disabled = !airOn || !airMicMon;
+    if (!airOn) return;
+    $('airhpnote').textContent = !tab
+      ? 'Your microphone is what is going out, so hearing it here is a rehearsal of it, at no delay.'
+      : (airSuppressed
+        ? 'Your browser has stopped playing this tab through your speakers, so what you hear is this switch.'
+        : 'Your browser is playing the tab itself and will not let this page take it over, so the switch is off. Chrome and Edge allow it; the tab is audible either way.');
+  }
+
+  function airTapToggle(node, btn, onText, offText) {
+    if (!node || !airAC) return;
+    const on = node.gain.value < 0.5;
+    node.gain.setTargetAtTime(on ? 1 : 0, airAC.currentTime, 0.02);
+    $(btn).classList.toggle('on', on);
+    $(btn).textContent = on ? onText : offText;
+  }
+  $('airtabmon').addEventListener('click', () =>
+    airTapToggle(airTabMon, 'airtabmon', 'Tab: in my headphones', 'Tab: muted here'));
+  $('airmicmon').addEventListener('click', () =>
+    airTapToggle(airMicMon, 'airmicmon', 'My mic: in my headphones', 'My mic: muted here'));
   // Moving the dip while talking should be audible now, not at the next press.
   $('airduck').addEventListener('change', () => {
     if (!airTabGain || !airAC) return;
@@ -3808,6 +3954,13 @@
     try { airTab && airTab.getTracks().forEach(t => t.stop()); } catch {}
     airTab = null;
     airTabGain = null; airMicGain = null; airTalking = false;
+    // Off the live list, or a slider moved later would ramp a filter belonging
+    // to a context that has been closed.
+    eqChains = eqChains.filter(c => c !== airEq);
+    airEq = null; airTabMon = null; airMicMon = null; airSuppressed = false;
+    for (const b of ['airtabmon', 'airmicmon']) $(b).classList.remove('on');
+    $('airtabmon').textContent = 'Tab in my headphones';
+    $('airmicmon').textContent = 'My mic in my headphones';
     if (airMicFn) airMicFn.opened = false;
     airMicFn = null;
     $('airtalk').classList.remove('on');
