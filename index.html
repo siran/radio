@@ -31,8 +31,32 @@
        made as large as that clearance leaves room for: sixteen pixels of ink where
        it was fourteen, on paper that goes from thirty and a half per cent of the
        diameter to thirty-five. The grooves pay for the paper, because the paper
-       has nowhere else to grow into, and the price is one ring out of seventeen. */
-    --lp: 84px;
+       has nowhere else to grow into, and the price is one ring out of seventeen.
+
+       Eighty-four became a hundred and twelve because the red was asked to be
+       bigger, and the red is a fraction of this. Growing the fraction alone would
+       have been the wrong lever twice over: the paper is already at the largest
+       share the groove field could pay for at eighty-four, and a label that takes
+       more of a disc that stays the same size is a label crowding a record rather
+       than a bigger label. Growing the disc pays for both at once, because the
+       groove pitch below is in pixels and does not scale - so a wider disc simply
+       has more rings to spend, and the paper can take a larger share of it and
+       still leave more of them showing than before. Nineteen now, against sixteen.
+
+       --ctl and --hole are the two things here that are NOT a fraction of the
+       diameter, and that is the whole shape of this change. They are the control:
+       the symbol somebody presses and the hole it is printed around. A control is
+       the size a control is, on a small pressing or a large one, so both hold the
+       exact measurements they were cut to at eighty-four - 20.41px of symbol and
+       4.61px of hole - and the red grows around them instead of with them. Every
+       clearance the round below them was spent on survives untouched: 2.39px of
+       white inside the triangle, 1.51px of red between the hole and each pause
+       bar. Scale them with the disc and the bars grow by a third too, and the
+       label ends up exactly as full as it started, which is what was asked to
+       change. */
+    --lp: 112px;
+    --ctl: 20.41px;
+    --hole: 4.61px;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
@@ -210,8 +234,19 @@
      outermost sits at 40.99px and clears the rim by a whole one. A label of
      thirty-five and a half per cent was rendered and measured as well, and that is
      where the second ring goes: it puts the run-out's outer edge past 16.90px and
-     the count falls to fifteen. Thirty-five is therefore the largest label this
-     groove field gives up only one ring for.
+     the count falls to fifteen. Thirty-five was therefore the largest label that
+     groove field gave up only one ring for - AT EIGHTY-FOUR PIXELS, which is the
+     half of the sentence that mattered and the half that was easy to lose.
+
+     The disc is a hundred and twelve now and the arithmetic is not close. The
+     pitch is in pixels and does not scale, so the rings available are set by the
+     radius alone: light rings fall at 0.805px, 2.415px and every 1.61px outward
+     whatever is printed over them, the paper at forty-two per cent puts the
+     run-out's outer edge at 26.04px, and the rings from there to the 56px rim are
+     the ones at k=16 through k=34. Nineteen, against the sixteen a smaller disc
+     showed under a smaller label. Growing the disc is what buys a bigger label
+     without the grooves paying for it, which is why the diameter moved and not
+     the fraction on its own.
 
      The white is left at the weight it was already carrying, because the band's
      average brightness follows that weight and hardly notices the pitch, so leaving
@@ -245,7 +280,7 @@
     position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     background:
-      radial-gradient(circle closest-side, transparent 0 35%, #0f0f14 35% 39.5%, transparent 39.5%),
+      radial-gradient(circle closest-side, transparent 0 42%, #0f0f14 42% 46.5%, transparent 46.5%),
       repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0,
                                 rgba(255,255,255,.12) .805px, rgba(0,0,0,.86) 1.61px),
       radial-gradient(circle closest-side, #26262f 0 26%, #16161c 60%, #08080b 100%);
@@ -292,8 +327,8 @@
     background: conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.34) 15deg,
                                rgba(255,255,255,.08) 29deg, rgba(255,255,255,0) 44deg,
                                rgba(255,255,255,0) 360deg);
-    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 35%, #000 36%);
-    mask-image: radial-gradient(circle closest-side, transparent 0 35%, #000 36%);
+    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 42%, #000 43%);
+    mask-image: radial-gradient(circle closest-side, transparent 0 42%, #000 43%);
   }
   /* The lip. A pressed record is not flat at its edge: there is a raised smooth
      rim outside the last groove, and being smooth it is the one part of the black
@@ -421,11 +456,16 @@
      little under nine tenths of a pixel is the wider gap and the rest is the larger
      bars.
 
-     The hairline round the paper is --lp divided by the diameter --lp is set to,
-     so it is one pixel at the size this is drawn at and thickens with the record
-     rather than staying a hair on a much larger pressing. */
+     The hairline round the paper is --lp divided by EIGHTY-FOUR, which is the
+     diameter it was cut at and not the diameter it is drawn at now: one pixel on
+     an eighty-four pixel pressing, and 1.33px on the hundred and twelve this is
+     set to. That is the formula doing what it was written to do rather than
+     drifting - a hairline that stayed at one pixel while the record grew by a
+     third would read as a finer line on a bigger object, which is not what a cut
+     paper edge does. Divide by the current diameter instead and it would be
+     pinned at a pixel for ever, which is the version this deliberately is not. */
   .lp-label {
-    width: calc(var(--lp) * .35); height: calc(var(--lp) * .35); border-radius: 50%;
+    width: calc(var(--lp) * .42); height: calc(var(--lp) * .42); border-radius: 50%;
     display: grid; grid-template: 1fr / 1fr;
     justify-items: center; align-items: center;
     line-height: 1; color: #fff4ef;
@@ -465,7 +505,7 @@
      noticeable in any of the others, which is what an edge that is a cut rather
      than a shading should do. */
   .lp-hole { grid-area: 1 / 1; position: relative;
-             width: calc(var(--lp) * .055); height: calc(var(--lp) * .055);
+             width: var(--hole); height: var(--hole);
              border-radius: 50%; background: var(--panel);
              box-shadow: inset 0 0 0 1px rgba(0,0,0,.9); }
   /* The symbol is the one thing on this button that was not free to be whatever
@@ -517,8 +557,8 @@
      If --lp is ever changed, this is the number to re-read first; it is also the
      reason the ink is measured off the raster in both states every round rather
      than being taken on trust from the font size. */
-  .lp-sym { grid-area: 1 / 1; font-size: calc(var(--lp) * .243); transform: translate(.1211em, .0087em); }
-  button.play.spinning .lp-sym { font-size: calc(var(--lp) * .271);
+  .lp-sym { grid-area: 1 / 1; font-size: var(--ctl); transform: translate(.1211em, .0087em); }
+  button.play.spinning .lp-sym { font-size: calc(var(--ctl) * 1.1152);
                                  letter-spacing: .1513em; transform: translate(.07565em, 0); }
   /* The record is the whole face of the button turning with a symbol printed on
      it, which is a great deal of motion, so under reduced-motion it stops
