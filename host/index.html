@@ -220,13 +220,26 @@
        because the monitor is the one thing on this console that has already
        been mistaken for transmitting. -->
   <div class="panel" id="airwrap">
+    <label for="airsrc">What goes out</label>
+    <select id="airsrc">
+      <option value="mic">My microphone</option>
+      <option value="bucket">A browser tab &mdash; whatever is playing in it</option>
+      <option value="both">A browser tab and my microphone together</option>
+    </select>
     <div class="btns">
       <button class="tbtn" id="airbtn">Go on air</button>
     </div>
-    <div class="status">This opens your microphone and sends it to the station as you speak, mixed over
-      the music, which dips for you. It is <span class="when">not</span> the monitor below &mdash; Hear my
-      mic there only reaches your own headphones. While you are on air the top of this page turns red and
-      the tab says so.</div>
+    <div class="status">This sends what you pick above to the station, mixed over the music, which dips
+      for you. It is <span class="when">not</span> the monitor below &mdash; Hear my mic there only reaches
+      your own headphones. While you are on air the top of this page turns red and the tab says so.</div>
+    <div class="status" id="airbucketnote" hidden>Picking a tab: your browser asks which one, and you must
+      tick <span class="when">Share tab audio</span> in that dialog &mdash; without it you share a picture and
+      nothing else, and the station gets silence. Chrome and Edge only; Firefox and Safari accept the request
+      and drop the sound. Nothing is watched or recorded: the picture is thrown away the instant it arrives
+      and only the sound leaves this page.
+      <br>The station&rsquo;s own music keeps playing underneath you, ducked. If you are bringing your own,
+      turn it off in <span class="when">Now playing</span> first, or listeners hear two records at once.
+      <br>Use headphones. On speakers the tab feeds your microphone and the microphone feeds the tab.</div>
     <div class="meter" id="airlevel"><i id="airvu"></i></div>
     <div class="status" id="airstat">off air</div>
     <div class="status" id="airmsg"></div>
@@ -3403,6 +3416,12 @@
   const AIR_STALL_MS = 3000;
 
   let airWS = null, airRec = null, airStream = null, airOn = false;
+  // Whatever was opened to build airStream, so teardown can close all of it.
+  // airStream is not always one of these: mixing a tab with a microphone makes
+  // a THIRD stream out of a MediaStreamDestination, and stopping its tracks
+  // stops nothing - the tab would go on being captured, with the browser still
+  // showing this page as sharing, after the host thought they had left.
+  let airSrcStreams = [], airTab = null;
   let airStartedAt = 0, airBytes = 0, airSrvBytes = 0, airTick = 0, airLastData = 0;
   let airAC = null, airAnalyser = null, airRaf = 0;
   const airSay = t => say('airmsg', t);
@@ -3435,6 +3454,9 @@
     $('rec').disabled = airOn;
     $('rec').title = airOn ? 'You are on air. Leave the air to record a note.' : '';
     $('dev').disabled = airOn || recording;
+    // Changing the source mid-broadcast would mean rebuilding the stream under
+    // a running MediaRecorder, which is a reconnection wearing a dropdown.
+    $('airsrc').disabled = airOn || !!airWS;
     if (!airOn) { $('airvu').style.width = '0%'; }
   }
 
@@ -3468,13 +3490,84 @@
     airRaf = requestAnimationFrame(airMeter);
   }
 
+  // The tab is asked for in the CLICK, and the microphone is not, and that
+  // difference is forced rather than chosen. getDisplayMedia needs transient
+  // user activation, which Chrome gives for about five seconds after a click.
+  // Everything else here happens after the socket has opened and the bridge has
+  // answered "ready", and that round trip is usually 40ms - but when the mount
+  // is still held by the last broadcast the bridge retries for five seconds, and
+  // 3761ms of retry has been logged on this station. Asking then would throw
+  // InvalidStateError on exactly the attempts that already went badly.
+  //
+  // Asking first is better anyway: cancel the picker and nothing has happened
+  // yet. Asked afterwards, a cancel means the station handed over the air and
+  // got silence, which is the one state this panel most needs never to reach.
+  async function airGrabTab() {
+    if (!navigator.mediaDevices.getDisplayMedia)
+      throw new Error('This browser cannot share a tab.');
+    const st = await navigator.mediaDevices.getDisplayMedia({
+      video: true,          // not optional: audio-only capture is refused
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    // The video track is stopped immediately. It is asked for because the API
+    // demands it, it is never read, and leaving it running would keep the
+    // browser announcing that this page is watching a tab when it is only
+    // listening to one.
+    st.getVideoTracks().forEach(t => t.stop());
+    if (!st.getAudioTracks().length) {
+      st.getTracks().forEach(t => t.stop());
+      throw new Error(
+        'That share has no sound in it. Pick a tab and tick "Share tab audio" in the dialog - and note that Firefox and Safari drop the audio whatever you tick.');
+    }
+    return st;
+  }
+
   // Called when the bridge says it holds the mount, and not one moment before.
   async function airOpenMic(mime) {
-    const c = captureConstraints();
-    const devId = $('dev').value;
-    if (devId) c.deviceId = { exact: devId };
-    airStream = await navigator.mediaDevices.getUserMedia({ audio: c });
+    const src = $('airsrc').value;
+    airSrcStreams = [];
     airAC = new (window.AudioContext || window.webkitAudioContext)();
+
+    async function mic() {
+      const c = captureConstraints();
+      const devId = $('dev').value;
+      if (devId) c.deviceId = { exact: devId };
+      const st = await navigator.mediaDevices.getUserMedia({ audio: c });
+      airSrcStreams.push(st);
+      return st;
+    }
+
+    if (src === 'mic') {
+      airStream = await mic();
+    } else {
+      // Grabbed in the click, up in airGo, and only used here.
+      const tab = airTab;
+      airTab = null;
+      if (!tab) throw new Error('The tab share was lost before the station was ready.');
+      airSrcStreams.push(tab);
+      // Chrome puts a "Stop sharing" bar on the screen and it is not this
+      // page. Pressing it ends the track and nothing else - the socket stays
+      // open and the station goes on being fed a stream with no sound in it,
+      // which is worse than an error because the red bar up top still says ON
+      // AIR. So the track ending takes the whole broadcast down with it.
+      tab.getAudioTracks()[0].addEventListener('ended', () => {
+        if (airOn) airLeave();
+        airSay('The tab stopped sharing, so the broadcast ended.');
+      });
+      if (src === 'both') {
+        // One graph, two inputs, one output. The microphone is deliberately
+        // NOT connected to airAC.destination: hearing yourself out of your own
+        // speakers a moment late is the thing the monitor below exists to
+        // avoid, and this is the same trap by another door.
+        const dest = airAC.createMediaStreamDestination();
+        airAC.createMediaStreamSource(tab).connect(dest);
+        airAC.createMediaStreamSource(await mic()).connect(dest);
+        airStream = dest.stream;
+      } else {
+        airStream = tab;
+      }
+    }
+
     airAnalyser = airAC.createAnalyser();
     airAnalyser.fftSize = 1024;
     airAC.createMediaStreamSource(airStream).connect(airAnalyser);
@@ -3511,6 +3604,12 @@
     try { airRec && airRec.state !== 'inactive' && airRec.stop(); } catch {}
     airRec = null;
     try { airStream && airStream.getTracks().forEach(t => t.stop()); } catch {}
+    // And the sources behind it, which are not the same tracks when a tab and
+    // a microphone were mixed into a third stream.
+    airSrcStreams.forEach(st => { try { st.getTracks().forEach(t => t.stop()); } catch {} });
+    airSrcStreams = [];
+    try { airTab && airTab.getTracks().forEach(t => t.stop()); } catch {}
+    airTab = null;
     airStream = null;
     cancelAnimationFrame(airRaf); airRaf = 0;
     try { airAC && airAC.close(); } catch {}
@@ -3529,7 +3628,7 @@
     if (was) airSay(why || 'off air');
   }
 
-  function airGo() {
+  async function airGo() {
     $('airerr').textContent = '';
     if (recording) return airFail('Stop the note you are recording first - one microphone, one destination.');
     if (!window.isSecureContext) return airFail('Needs https to use the microphone.');
@@ -3540,6 +3639,26 @@
                               'Recording a note still works.');
     if ($('cap_mime').value && $('cap_mime').value.indexOf('webm') === -1)
       airSay('Going live in webm/opus - the format in the Streaming panel applies to notes, not to the air.');
+
+    // Before the socket, for the activation reason set out at airGrabTab, and
+    // so that cancelling the picker costs nothing at all.
+    if ($('airsrc').value !== 'mic') {
+      try {
+        // Held down while the picker is up. The dialog is the browser's, not
+        // this page's, and it can sit there as long as the host likes - a live
+        // button underneath it is a second picker one click away.
+        $('airbtn').disabled = true;
+        airSay('Pick the tab, and tick Share tab audio ...');
+        airTab = await airGrabTab();
+        $('airbtn').disabled = false;
+        airSay('');
+      } catch (e) {
+        $('airbtn').disabled = false;
+        return airFail(e.name === 'NotAllowedError'
+          ? 'No tab was shared, so nothing happened - you are still off air.'
+          : e.message);
+      }
+    }
 
     // Same origin, same path, so the browser sends the credential it already
     // holds for /host/. There is nothing to authenticate with here: a
@@ -3581,8 +3700,9 @@
         $('airbtn').classList.remove('busy');
         try { await airOpenMic(mime); }
         catch (e) {
-          airFail('Microphone refused: ' + e.name + '. The station gave you the air and nothing is going out.');
-          try { ws.close(1000, 'no microphone'); } catch {}
+          airFail('Could not open the source: ' + (e.message || e.name) +
+                  '. The station gave you the air and nothing is going out.');
+          try { ws.close(1000, 'no source'); } catch {}
         }
         return;
       }
@@ -3629,6 +3749,12 @@
   }
 
   $('airbtn').addEventListener('click', () => { if (airOn || airWS) airLeave(); else airGo(); });
+
+  function airSrcLook() {
+    $('airbucketnote').hidden = $('airsrc').value === 'mic';
+  }
+  $('airsrc').addEventListener('change', airSrcLook);
+  airSrcLook();
 
   // A tab closed while on air would otherwise hold the mount until the harbor
   // timed it out, with the microphone still lit.
