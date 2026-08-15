@@ -1001,9 +1001,20 @@ import relays.caddy
 	# every .md on the site including that one, and the note came back 404 while
 	# the identical .txt landed 201 - the same code the relay uses for an unknown
 	# speaker, which is exactly the confusion the relay was built to avoid.
+	# The exceptions are NOT decoration. This matcher has no path prefix, so it
+	# reaches every .md on the site, and the two features that store one small
+	# .md per line both live under it. Measured just now: /chat/<line>.md
+	# answered 404 while the guestbook's /messages/<line>.md answered 200 - and
+	# the guestbook was surviving by accident, not by design. handle blocks are
+	# ordered by how specific their matcher is rather than by where they sit in
+	# this file, and "/messages/*" is a longer string than "*.markdown" while
+	# "/chat/*" is shorter. That is the whole reason one worked and one did not.
+	# So both are named here, and neither depends on counting characters again.
 	@docs {
 		path *.md *.markdown
 		not path /host/relay/*
+		not path /chat/*
+		not path /messages/*
 	}
 	handle @docs {
 		respond 404

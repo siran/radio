@@ -1046,6 +1046,48 @@ harbor.http.register(port = 8005, method = "POST", "/control/queue/move",
   queue_endpoint(fun (r) ->
     queue_move(r.query["id"], int_of_string(default = -1, r.query["to"]))))
 
+# --- the station speaking in the chat --------------------------------------
+# One line in the room's own chat, written the same way a listener's browser
+# writes one: a small .md per line in RADIO_HOME/chat, with the timestamp and
+# the name in front matter. No new endpoint, no new store, nothing for a page
+# to learn - whatever is already reading the chat reads this too.
+#
+# svc-radio can write there. It holds Modify on that one folder, which was
+# checked rather than assumed, and the source tree is read-only to it
+# otherwise. A failed write is caught: a line in the chat is not worth taking
+# the station off the air for, exactly as with the likes ledger.
+#
+# LF and not CRLF, deliberately. The page parses the front matter with
+# /^---\n([\s\S]*?)\n---/ - literal \n - so a CRLF file would not match and
+# the whole line would fall back to "anonymous" with the front matter left
+# sitting in the message body.
+#
+# The filename carries the timestamp because the page sorts by it before it
+# has read a single file, and shows the last sixty. Same shape the browser
+# uses, so the station's lines and the listeners' interleave correctly.
+def pad2(n) =
+  if n < 10 then "0#{n}" else "#{n}" end
+end
+
+def chat_say(name, text) =
+  t    = time.utc()
+  ymd  = "#{t.year}-#{pad2(t.month)}-#{pad2(t.day)}"
+  hms  = "#{pad2(t.hour)}#{pad2(t.min)}#{pad2(t.sec)}"
+  iso  = "#{ymd}T#{pad2(t.hour)}:#{pad2(t.min)}:#{pad2(t.sec)}.000Z"
+  # Four hex characters off a digest of the clock, which is what the browser's
+  # four random characters are for: two lines written inside one second want
+  # two different names.
+  seed = "#{time()}#{name}"
+  tag  = string.sub(string.digest(seed), start = 0, length = 4)
+  try
+    file.write(
+      data = "---\nat: #{iso}\nname: #{name}\n---\n\n#{text}\n",
+      "#{radio_home}/chat/#{ymd}T#{hms}000Z-#{tag}.md")
+  catch _ do
+    log.important(label = "chat", "could not write a line")
+  end
+end
+
 # --- the skip tug of war ---------------------------------------------------
 # Public, like the likes below and for the same reason: there is nobody to log
 # in as here, and there was never meant to be. The difference between the two
@@ -1215,6 +1257,21 @@ def tug(dir) =
     log.important(label = "tug", "#{n}/#{tug_span} on #{p}")
     if n >= tug_span then
       log.important(label = "tug", "the counter reached #{tug_span}: skipping")
+      # Said BEFORE the skip, because after it the metadata belongs to the
+      # next track and the line would name the wrong song.
+      # Literal UTF-8 rather than \u escapes: liquidsoap strings are bytes, and
+      # a surrogate pair is a javascript convention this parser owes nobody.
+      # These are the only non-ascii characters in this file.
+      np = now_playing()
+      msg =
+        if np.title == "" then
+          "⏭️ twelve pulls and it is gone 🪢"
+        elsif np.artist == "" then
+          "⏭️ twelve pulls - #{np.title} is out 🎶"
+        else
+          "⏭️ twelve pulls - #{np.title} by #{np.artist} is out 🎶"
+        end
+      chat_say("the rope 🪢", msg)
       library.skip()
     end
   end
