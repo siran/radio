@@ -27,6 +27,13 @@
   /* the picker is locked while the mic is open, and the colour set above
      would otherwise hide the browser's own disabled styling */
   select:disabled { opacity:.5; }
+  /* A checkbox and its words are one target, so the words are the label and
+     the box sits inside it rather than beside it with a `for` between them. */
+  .chk { display:flex; align-items:center; gap:8px; text-transform:none;
+         letter-spacing:0; font-size:13px; margin:0 0 10px; cursor:pointer; }
+  .chk input { width:auto; margin:0; flex:0 0 auto; }
+  /* Live, and it says so the way the air bar does rather than with a word. */
+  #airtalk.on { background:var(--rec); border-color:var(--rec); color:#fff; }
   #setup > select { margin:10px 0 0; }
   /* the text-input padding above makes a slider look sunken and cramped */
   input[type=range] { padding:0; margin-bottom:4px; accent-color:var(--on); }
@@ -224,21 +231,32 @@
     <select id="airsrc">
       <option value="mic">My microphone</option>
       <option value="bucket">A browser tab &mdash; whatever is playing in it</option>
-      <option value="both">A browser tab and my microphone together</option>
     </select>
     <div class="btns">
       <button class="tbtn" id="airbtn">Go on air</button>
+      <button class="tbtn" id="airtalk" hidden disabled>Talk over it</button>
     </div>
+    <label class="chk" id="airduckwrap" hidden>
+      <input type="checkbox" id="airduck" checked> Dip the tab while I talk
+    </label>
+    <label class="chk">
+      <input type="checkbox" id="airmute"> Pause the station&rsquo;s own music while I am on air
+    </label>
     <div class="status">This sends what you pick above to the station, mixed over the music, which dips
       for you. It is <span class="when">not</span> the monitor below &mdash; Hear my mic there only reaches
       your own headphones. While you are on air the top of this page turns red and the tab says so.</div>
+    <div class="status" id="airtalknote" hidden><span class="when">Talk over it</span> opens your microphone
+      and mixes it into what the tab is playing, and it works while you are on air &mdash; press it when you
+      have something to say and press it again when you are done. The first press may ask for the microphone.
+      Once granted it stays open, silent, until you leave the air.</div>
     <div class="status" id="airbucketnote" hidden>Picking a tab: your browser asks which one, and you must
       tick <span class="when">Share tab audio</span> in that dialog &mdash; without it you share a picture and
       nothing else, and the station gets silence. Chrome and Edge only; Firefox and Safari accept the request
       and drop the sound. Nothing is watched or recorded: the picture is thrown away the instant it arrives
       and only the sound leaves this page.
-      <br>The station&rsquo;s own music keeps playing underneath you, ducked. If you are bringing your own,
-      turn it off in <span class="when">Now playing</span> first, or listeners hear two records at once.
+      <br>The station&rsquo;s own music would otherwise keep playing underneath you, ducked, and listeners
+      would hear two records at once &mdash; so the box above ticks itself when you pick a tab. Untick it if
+      you meant to play over the station rather than instead of it.
       <br>Use headphones. On speakers the tab feeds your microphone and the microphone feeds the tab.</div>
     <div class="meter" id="airlevel"><i id="airvu"></i></div>
     <div class="status" id="airstat">off air</div>
@@ -3422,6 +3440,11 @@
   // stops nothing - the tab would go on being captured, with the browser still
   // showing this page as sharing, after the host thought they had left.
   let airSrcStreams = [], airTab = null;
+  // The talkover graph, alive only while a tab is the source.
+  let airTabGain = null, airMicGain = null, airMicFn = null, airTalking = false;
+  // What the station's music was doing before this broadcast borrowed it, so
+  // leaving the air puts it back rather than deciding for the next host.
+  let airMusicWas = null;
   let airStartedAt = 0, airBytes = 0, airSrvBytes = 0, airTick = 0, airLastData = 0;
   let airAC = null, airAnalyser = null, airRaf = 0;
   const airSay = t => say('airmsg', t);
@@ -3457,6 +3480,10 @@
     // Changing the source mid-broadcast would mean rebuilding the stream under
     // a running MediaRecorder, which is a reconnection wearing a dropdown.
     $('airsrc').disabled = airOn || !!airWS;
+    $('airmute').disabled = airOn || !!airWS;
+    // Live only while the air is, and only over a tab: with the microphone as
+    // the source it is already everything going out.
+    $('airtalk').disabled = !airOn || $('airsrc').value === 'mic';
     if (!airOn) { $('airvu').style.width = '0%'; }
   }
 
@@ -3554,18 +3581,24 @@
         if (airOn) airLeave();
         airSay('The tab stopped sharing, so the broadcast ended.');
       });
-      if (src === 'both') {
-        // One graph, two inputs, one output. The microphone is deliberately
-        // NOT connected to airAC.destination: hearing yourself out of your own
-        // speakers a moment late is the thing the monitor below exists to
-        // avoid, and this is the same trap by another door.
-        const dest = airAC.createMediaStreamDestination();
-        airAC.createMediaStreamSource(tab).connect(dest);
-        airAC.createMediaStreamSource(await mic()).connect(dest);
-        airStream = dest.stream;
-      } else {
-        airStream = tab;
-      }
+      // ALWAYS through the graph, even with no microphone in it yet, because
+      // the microphone can arrive at any moment during the broadcast and a
+      // MediaRecorder cannot be handed a different stream once it is running.
+      // The gains are the whole mechanism: the tab runs at 1, the microphone
+      // sits at 0 until Talk is pressed, and nothing is ever connected or
+      // disconnected mid-broadcast - only turned up and down.
+      const dest = airAC.createMediaStreamDestination();
+      airTabGain = airAC.createGain();
+      airMicGain = airAC.createGain();
+      airTabGain.gain.value = 1;
+      airMicGain.gain.value = 0;
+      airAC.createMediaStreamSource(tab).connect(airTabGain).connect(dest);
+      airMicGain.connect(dest);
+      // The microphone is NOT connected to airAC.destination, here or later:
+      // hearing yourself out of your own speakers a moment late is what the
+      // monitor below exists to avoid, and this is the same trap by another door.
+      airStream = dest.stream;
+      airMicFn = mic;
     }
 
     airAnalyser = airAC.createAnalyser();
@@ -3591,6 +3624,22 @@
     airRec.onstop = () => { if (airWS && airWS.readyState <= WebSocket.OPEN) airWS.close(1000, 'off air'); };
     airRec.start(AIR_CHUNK_MS);
     airOn = true;
+
+    // ?on=false EXPLICITLY. /control/music is not a toggle - it reads the query
+    // and a bare POST means off - so the state is always spelled out here, and
+    // what it was is remembered first so leaving the air can put it back.
+    if ($('airmute').checked) {
+      try {
+        const r = await fetch('/control/now', { credentials: 'same-origin', cache: 'no-store' });
+        const j = await r.json();
+        airMusicWas = !!j.music;
+        if (airMusicWas) await control('music?on=false', 'POST');
+        else airMusicWas = null;   // already off; nothing borrowed, nothing to return
+      } catch (e) {
+        airMusicWas = null;
+        airSay('Could not pause the station music: ' + e.message);
+      }
+    }
     airStartedAt = Date.now();
     airLastData = Date.now();
     airBytes = 0;
@@ -3598,6 +3647,42 @@
     airStat();
     airTick = setInterval(airStat, 1000);
   }
+
+  // Pressed during a broadcast, which is the entire point of it. The first
+  // press opens the microphone and may prompt; after that it is a gain going
+  // up and down, so it is instant and silent and can be used as a cough button.
+  //
+  // The stream is left open once granted rather than being stopped between
+  // turns. Re-opening it costs a device acquisition each time - tens of
+  // milliseconds at best, a permission prompt at worst - and the top of a
+  // sentence is exactly where that lands. It is stopped at teardown.
+  async function airTalkToggle() {
+    if (!airMicGain || !airAC) return;
+    if (!airTalking) {
+      try {
+        if (!airMicFn.opened) { airAC.createMediaStreamSource(await airMicFn()).connect(airMicGain); airMicFn.opened = true; }
+      } catch (e) {
+        return airSay('The microphone would not open: ' + e.name);
+      }
+    }
+    airTalking = !airTalking;
+    const t = airAC.currentTime;
+    // Ramped rather than switched. A gain that jumps from 0 to 1 on a live
+    // signal is a click on everybody's speakers, and the dip needs to be
+    // slower than the voice it is making room for or it pumps.
+    airMicGain.gain.setTargetAtTime(airTalking ? 1 : 0, t, 0.015);
+    const dip = $('airduck').checked && airTalking ? 0.3 : 1;
+    airTabGain.gain.setTargetAtTime(dip, t, 0.08);
+    $('airtalk').classList.toggle('on', airTalking);
+    $('airtalk').textContent = airTalking ? 'Stop talking' : 'Talk over it';
+  }
+  $('airtalk').addEventListener('click', airTalkToggle);
+  // Moving the dip while talking should be audible now, not at the next press.
+  $('airduck').addEventListener('change', () => {
+    if (!airTabGain || !airAC) return;
+    airTabGain.gain.setTargetAtTime($('airduck').checked && airTalking ? 0.3 : 1,
+                                    airAC.currentTime, 0.08);
+  });
 
   function airTeardown() {
     clearInterval(airTick); airTick = 0;
@@ -3610,6 +3695,20 @@
     airSrcStreams = [];
     try { airTab && airTab.getTracks().forEach(t => t.stop()); } catch {}
     airTab = null;
+    airTabGain = null; airMicGain = null; airTalking = false;
+    if (airMicFn) airMicFn.opened = false;
+    airMicFn = null;
+    $('airtalk').classList.remove('on');
+    $('airtalk').textContent = 'Talk over it';
+    // Whatever the music was doing before this broadcast, put it back. Done
+    // here rather than at the button, because the air can end without anybody
+    // pressing anything - a dropped socket, a tab that stopped sharing - and
+    // leaving the station silent after that would be the worst of the three.
+    if (airMusicWas !== null) {
+      const back = airMusicWas;
+      airMusicWas = null;
+      control('music?on=' + (back ? 'true' : 'false'), 'POST');
+    }
     airStream = null;
     cancelAnimationFrame(airRaf); airRaf = 0;
     try { airAC && airAC.close(); } catch {}
@@ -3751,7 +3850,17 @@
   $('airbtn').addEventListener('click', () => { if (airOn || airWS) airLeave(); else airGo(); });
 
   function airSrcLook() {
-    $('airbucketnote').hidden = $('airsrc').value === 'mic';
+    const tab = $('airsrc').value !== 'mic';
+    $('airbucketnote').hidden = !tab;
+    $('airtalknote').hidden = !tab;
+    $('airtalk').hidden = !tab;
+    $('airduckwrap').hidden = !tab;
+    // The default follows the source rather than being remembered, because the
+    // two sources want opposite answers and neither is a preference: talking
+    // over the station's music is the point of the microphone, and playing a
+    // record over the station's record is nobody's intention. Set at the
+    // moment of choosing, and visibly, so the host can disagree with it.
+    if (!airOn && !airWS) $('airmute').checked = tab;
   }
   $('airsrc').addEventListener('change', airSrcLook);
   airSrcLook();
