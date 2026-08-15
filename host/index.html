@@ -352,19 +352,24 @@
     <summary>Your monitor <span class="when">&mdash; the music without you in it, so you can talk over it without hearing yourself a second late. Use headphones: on speakers this feeds straight back into the mic.</span></summary>
     <div class="row">
       <button class="tbtn" id="monbtn">Listen</button>
-      <label class="lbl" for="monvol">bed</label>
+      <label class="lbl" for="monvol">bed &mdash; my ears</label>
       <input id="monvol" type="range" min="0" max="100" value="80">
     </div>
     <div class="row">
       <button class="tbtn" id="micmonbtn">Hear my mic</button>
-      <label class="lbl" for="micmonvol">mic</label>
+      <label class="lbl" for="micmonvol">my mic &mdash; my ears</label>
       <input id="micmonvol" type="range" min="0" max="100" value="60">
     </div>
     <div class="row">
-      <label class="lbl" for="monsync">sync</label>
+      <label class="lbl" for="monsync">sync &mdash; my ears</label>
       <input id="monsync" type="range" min="0" max="2" step="0.05" value="0">
       <span class="when" id="monsyncval"></span>
     </div>
+    <div class="status" id="monsyncgate"></div>
+    <div class="status">All three of these are <span class="when">this browser&rsquo;s headphones</span>.
+      None of them touches what anybody else hears. The volume listeners hear you at is
+      <span class="when">Mic volume</span> on the mixing desk, which is a different control on a different
+      panel and is on the air the moment it moves.</div>
     <div class="status">Use this when your voice lands <span class="when">EARLY</span> &mdash; ahead of the beat
       you were aiming at. It holds this bed further behind the station, so you hear each beat later and
       therefore say your word later, which walks you back onto it. It moves the moment you let go, and
@@ -918,6 +923,45 @@
   // moves the whole ladder together instead of setting the catch-up against
   // the cushion. MON_TARGET alone still absorbs stalls; this rides on top.
   const monTarget = () => MON_TARGET + MON_HOLD;
+
+  // Sync spends a hold the STATION is making; it cannot create one. With
+  // air_delay at 0 there is nothing to spend, and every notch of this makes a
+  // host land later - which is the exact complaint the whole delay mechanism
+  // was built to answer. Found set to its maximum against an air_delay of 0,
+  // which is the worst combination the two can be in.
+  //
+  // So it is not merely warned about, it is disabled and cleared. A slider
+  // that can only make things worse should not be draggable, and a stored
+  // value from a session when the station WAS holding music back should not
+  // quietly survive into one where it is not.
+  async function monSyncGate() {
+    let d = NaN;
+    try {
+      const r = await fetch('/control/knobs', { credentials: 'same-origin', cache: 'no-store' });
+      if (r.ok) {
+        const m = new Map(await r.json());
+        d = parseFloat(m.get('air_delay'));
+      }
+    } catch (e) { /* leave it alone rather than guess */ }
+    if (!isFinite(d)) return;
+    const usable = d > 0;
+    $('monsync').disabled = !usable;
+    if (!usable) {
+      if (MON_HOLD !== 0) {
+        MON_HOLD = 0;
+        $('monsync').value = 0;
+        showSync();
+        try { localStorage.removeItem(SYNC_KEY); } catch (e) {}
+      }
+      $('monsyncgate').textContent = 'Sync is off because the station is not holding the music back for you. That is Music held for the air on the mixing desk, and it is at 0 - until it is set, holding this bed back can only make your voice land later.';
+    } else {
+      $('monsyncgate').textContent = 'The station is holding the music back ' + d.toFixed(2) + 's. Sync spends that: raise it until your voice sits on the beat.';
+    }
+  }
+  monSyncGate();
+  // Re-checked when the panel is opened, because the desk knob can have moved
+  // and been restarted into effect since this page was loaded.
+  $('monwrap').addEventListener('toggle', () => { if ($('monwrap').open) monSyncGate(); });
 
   // The slider itself. `input` only redraws the number; the move happens on
   // `change`, on release, the same two-step as every other slider here.
