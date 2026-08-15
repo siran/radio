@@ -34,6 +34,18 @@
   .chk input { width:auto; margin:0; flex:0 0 auto; }
   /* Live, and it says so the way the air bar does rather than with a word. */
   #airtalk.on { background:var(--rec); border-color:var(--rec); color:#fff; }
+  /* The show. The only textarea on this page, so it is styled by id rather
+     than by widening the input/select rule above onto a third element that
+     wants a different height and a resize handle. */
+  .showbox { margin-top:14px; }
+  #shownote { width:100%; padding:11px 12px; margin-bottom:12px; background:#101013;
+              border:1px solid var(--line); border-radius:8px; color:var(--fg);
+              font:inherit; font-size:16px; resize:vertical; }
+  #shownote:focus { outline:none; border-color:#4a4a55; }
+  /* left, under the boxes it is about, and not through say(): this is
+     written on a debounce and a line that flashes as you type is a line
+     nobody reads - the same reason qNote has one of its own. */
+  #showstat { margin-top:0; text-align:left; }
   #setup > select { margin:10px 0 0; }
   /* the text-input padding above makes a slider look sunken and cramped */
   input[type=range] { padding:0; margin-bottom:4px; accent-color:var(--on); }
@@ -236,12 +248,57 @@
       <button class="tbtn" id="airbtn">Go on air</button>
       <button class="tbtn" id="airtalk" hidden disabled>Talk over it</button>
     </div>
+    <!-- The show. Three boxes that are never disabled, and that is the whole
+         point of them: everything else in this panel locks while the air is
+         up because changing it means rebuilding the stream, and none of
+         these touches audio at all. A host names a show before pressing
+         anything, renames it halfway through, and changes the middle line
+         every few minutes if they are playing records through a tab.
+
+         The middle line exists because nothing else can produce it. A
+         shared tab reaches the station as sound and nothing more - no
+         title, no artist, no metadata of any kind - so what a listener is
+         told they are hearing is whatever is typed here and otherwise
+         nothing at all.
+
+         It goes out on the public /likes/now the listener page already
+         polls, and the station drops all three the moment the source
+         disconnects, so a finished show does not sit there looking live.
+         Nothing is stored anywhere: next broadcast starts empty.
+
+         maxlength matches the station's own caps of 60, 120 and 240. It
+         counts UTF-16 units where the station counts characters, which for
+         an emoji is two against one - so this bound is always the tighter
+         of the two and the station's cut never lands on text a host could
+         see themselves typing. The station keeps its cap regardless,
+         because a browser is not the only thing that can reach it. -->
+    <div class="showbox">
+      <label for="showname">Show name</label>
+      <input id="showname" maxlength="60" autocomplete="off"
+             placeholder="what to call this broadcast">
+      <label for="showtitle">What is going out</label>
+      <input id="showtitle" maxlength="120" autocomplete="off"
+             placeholder="title / artist &mdash; nobody but you can see inside a shared tab">
+      <label for="shownote">Anything else</label>
+      <textarea id="shownote" maxlength="240" rows="2"
+                placeholder="a line for whoever is listening"></textarea>
+      <div class="status" id="showstat"></div>
+    </div>
     <label class="chk" id="airduckwrap" hidden>
       <input type="checkbox" id="airduck" checked> Dip the tab while I talk
     </label>
     <label class="chk">
-      <input type="checkbox" id="airmute"> Pause the station&rsquo;s own music while I am on air
+      <input type="checkbox" id="airmute" checked> Pause the station&rsquo;s autoDJ while I am on air
     </label>
+    <!-- Ticked in the markup and not by airSrcLook, because it no longer
+         depends on the source: a host talking and a host playing records
+         both want the autoDJ out of the way, and re-ticking it on a source
+         change would silently undo a host who had unticked it. -->
+    <div class="status" id="airmutenote">Ticked whichever source you pick. Pausing stops the autoDJ
+      pulling the playlist at all, so it resumes on the note it stopped on rather than however far into
+      the library half an hour of talking would have carried it. Untick it to go out over the station
+      instead of in place of it. This is not the dip &mdash; the music sinking under your voice is the
+      desk&rsquo;s own <span class="when">duck</span> knob and is unaffected either way.</div>
     <div class="status">This sends what you pick above to the station, mixed over the music, which dips
       for you. It is <span class="when">not</span> the monitor below &mdash; Hear my mic there only reaches
       your own headphones. While you are on air the top of this page turns red and the tab says so.</div>
@@ -254,9 +311,6 @@
       nothing else, and the station gets silence. Chrome and Edge only; Firefox and Safari accept the request
       and drop the sound. Nothing is watched or recorded: the picture is thrown away the instant it arrives
       and only the sound leaves this page.
-      <br>The station&rsquo;s own music would otherwise keep playing underneath you, ducked, and listeners
-      would hear two records at once &mdash; so the box above ticks itself when you pick a tab. Untick it if
-      you meant to play over the station rather than instead of it.
       <br>Use headphones. On speakers the tab feeds your microphone and the microphone feeds the tab.</div>
     <div class="meter" id="airlevel"><i id="airvu"></i></div>
     <div class="status" id="airstat">off air</div>
@@ -3442,9 +3496,11 @@
   let airSrcStreams = [], airTab = null;
   // The talkover graph, alive only while a tab is the source.
   let airTabGain = null, airMicGain = null, airMicFn = null, airTalking = false;
-  // What the station's music was doing before this broadcast borrowed it, so
-  // leaving the air puts it back rather than deciding for the next host.
-  let airMusicWas = null;
+  // Whether the autoDJ was ALREADY paused before this broadcast borrowed it,
+  // so leaving the air puts it back rather than deciding for the next host.
+  // null means nothing was borrowed and nothing is owed: either the box was
+  // unticked, or the station was already paused when this got here.
+  let airPausedWas = null;
   let airStartedAt = 0, airBytes = 0, airSrvBytes = 0, airTick = 0, airLastData = 0;
   let airAC = null, airAnalyser = null, airRaf = 0;
   const airSay = t => say('airmsg', t);
@@ -3625,19 +3681,31 @@
     airRec.start(AIR_CHUNK_MS);
     airOn = true;
 
-    // ?on=false EXPLICITLY. /control/music is not a toggle - it reads the query
-    // and a bare POST means off - so the state is always spelled out here, and
-    // what it was is remembered first so leaving the air can put it back.
+    // PAUSE, not music off, and radio.liq is explicit that the two are not one
+    // thing: with the music off the record keeps turning, so half an hour of
+    // talking returns the station half an hour deeper into the library and in
+    // the middle of a track nobody heard the start of. Pause stops pulling the
+    // playlist at all, and a liquidsoap source only advances when something
+    // asks it for a frame - so it resumes on the note it stopped on, which is
+    // what a host means and what the operator does by hand. That switch is
+    // track_sensitive = false, so it takes hold now and not at the end of
+    // whatever happens to be playing.
+    //
+    // ?on=true EXPLICITLY. /control/pause is no more a toggle than
+    // /control/music was: it reads on_flag off the query the same way, so a
+    // bare POST is an explicit UNPAUSE and sending it twice does not undo it.
+    // Spelled out at both ends, and what it was is read first so leaving the
+    // air can put it back.
     if ($('airmute').checked) {
       try {
         const r = await fetch('/control/now', { credentials: 'same-origin', cache: 'no-store' });
         const j = await r.json();
-        airMusicWas = !!j.music;
-        if (airMusicWas) await control('music?on=false', 'POST');
-        else airMusicWas = null;   // already off; nothing borrowed, nothing to return
+        airPausedWas = !!j.paused;
+        if (!airPausedWas) await control('pause?on=true', 'POST');
+        else airPausedWas = null;   // already paused; nothing borrowed, nothing to return
       } catch (e) {
-        airMusicWas = null;
-        airSay('Could not pause the station music: ' + e.message);
+        airPausedWas = null;
+        airSay('Could not pause the station: ' + e.message);
       }
     }
     airStartedAt = Date.now();
@@ -3700,14 +3768,14 @@
     airMicFn = null;
     $('airtalk').classList.remove('on');
     $('airtalk').textContent = 'Talk over it';
-    // Whatever the music was doing before this broadcast, put it back. Done
-    // here rather than at the button, because the air can end without anybody
-    // pressing anything - a dropped socket, a tab that stopped sharing - and
-    // leaving the station silent after that would be the worst of the three.
-    if (airMusicWas !== null) {
-      const back = airMusicWas;
-      airMusicWas = null;
-      control('music?on=' + (back ? 'true' : 'false'), 'POST');
+    // However the autoDJ was found, put it back. Done here rather than at the
+    // button, because the air can end without anybody pressing anything - a
+    // dropped socket, a tab that stopped sharing - and leaving the station
+    // frozen after that would be the worst of the three.
+    if (airPausedWas !== null) {
+      const back = airPausedWas;
+      airPausedWas = null;
+      control('pause?on=' + (back ? 'true' : 'false'), 'POST');
     }
     airStream = null;
     cancelAnimationFrame(airRaf); airRaf = 0;
@@ -3797,6 +3865,13 @@
       const d = m.data || {};
       if (m.type === 'ready') {
         $('airbtn').classList.remove('busy');
+        // The station drops the show when a source disconnects, so the last
+        // broadcast's name is gone from it while it is still sitting in the
+        // boxes here. This is what puts what the host typed on the air with
+        // the audio, rather than at whatever their next keystroke happens to
+        // be - including the case where they typed it and pressed Go on air
+        // inside the debounce.
+        showPush();
         try { await airOpenMic(mime); }
         catch (e) {
           airFail('Could not open the source: ' + (e.message || e.name) +
@@ -3855,12 +3930,12 @@
     $('airtalknote').hidden = !tab;
     $('airtalk').hidden = !tab;
     $('airduckwrap').hidden = !tab;
-    // The default follows the source rather than being remembered, because the
-    // two sources want opposite answers and neither is a preference: talking
-    // over the station's music is the point of the microphone, and playing a
-    // record over the station's record is nobody's intention. Set at the
-    // moment of choosing, and visibly, so the host can disagree with it.
-    if (!airOn && !airWS) $('airmute').checked = tab;
+    // Nothing about the pause box is decided here any more. It used to be set
+    // at the moment of choosing a source, because the two sources were thought
+    // to want opposite answers; they do not. Whether a host is talking or
+    // playing records, the autoDJ carrying on underneath is the thing nobody
+    // wants, so it is ticked in the markup for both and the box is left as what
+    // it now only is: the override.
   }
   $('airsrc').addEventListener('change', airSrcLook);
   airSrcLook();
@@ -3872,6 +3947,92 @@
   });
 
   airLook();
+
+  // --- the show ----------------------------------------------------------
+  // Saved as you type rather than behind a button, because a button here has
+  // one failure mode and it is the expensive one: the host types the new
+  // track, does not press it, and the station tells the room the wrong thing
+  // for the rest of the side. The debounce is what stops that costing one
+  // request per keystroke.
+  //
+  // Nothing here reads the answer back into the boxes. The station caps the
+  // three fields and would hand back a shortened one, and writing that into
+  // a field somebody is still typing in is a race this page cannot win - so
+  // the maxlength attributes are set to the same numbers instead, which
+  // makes the cut impossible from here rather than tidied up afterwards.
+  // The one read is at load, below, where nothing is being typed yet.
+  const SHOW_FIELDS = ['showname', 'showtitle', 'shownote'];
+  let showTimer = 0, showSending = false, showAgain = false;
+
+  function showFill(d) {
+    if (!d) return;
+    $('showname').value  = d.name  || '';
+    $('showtitle').value = d.title || '';
+    $('shownote').value  = d.note  || '';
+  }
+
+  // All three every time: the station takes the whole show in one call, where
+  // a parameter left out means an empty field and not an unchanged one.
+  //
+  // One in flight at a time, with the last one queued behind it. Two POSTs
+  // racing would settle in whatever order the network chose, and the loser
+  // would be the newer text.
+  async function showPush() {
+    showTimer = 0;
+    if (showSending) { showAgain = true; return; }
+    showSending = true;
+    const q = 'name='   + encodeURIComponent($('showname').value.trim()) +
+              '&title=' + encodeURIComponent($('showtitle').value.trim()) +
+              '&note='  + encodeURIComponent($('shownote').value.trim());
+    try {
+      const res = await fetch('/control/show?' + q,
+        { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      // `live` is the station's own answer to whether a source is connected -
+      // the same one it ducks the music off - so this line says whether what
+      // was just saved is being shown to anybody yet.
+      $('showstat').textContent =
+        (d.name || d.title || d.note)
+          ? (d.live ? 'saved, and on the listener page now'
+                    : 'saved - it reaches the listener page when you go on air')
+          : 'nothing set';
+    } catch (e) {
+      $('showstat').textContent = 'not saved: ' + e.message;
+    } finally {
+      showSending = false;
+      if (showAgain) { showAgain = false; showPush(); }
+    }
+  }
+
+  for (const id of SHOW_FIELDS) {
+    $(id).addEventListener('input', () => {
+      clearTimeout(showTimer);
+      $('showstat').textContent = 'typing ...';
+      showTimer = setTimeout(showPush, 600);
+    });
+    // A field left mid-debounce because the host tabbed away or reached for
+    // something else would otherwise wait out the rest of the six hundred
+    // milliseconds. Only when one is actually pending, so tabbing through
+    // three untouched boxes does not send three requests.
+    $(id).addEventListener('blur', () => { if (showTimer) { clearTimeout(showTimer); showPush(); } });
+  }
+
+  // What the station already has, so a console reloaded in the middle of a
+  // broadcast shows the show that is on the air instead of three empty boxes
+  // inviting somebody to type it again. Silent on failure: the boxes are then
+  // empty, which is what they would have been anyway.
+  async function showLoad() {
+    try {
+      const r = await fetch('/control/show', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      showFill(d);
+      if (d.name || d.title || d.note)
+        $('showstat').textContent = d.live ? 'on the listener page now' : 'saved, not yet on air';
+    } catch (e) {}
+  }
+  showLoad();
 
 })();
   // Basic auth never tells a page who is using it, so the server does: /whoami

@@ -1277,6 +1277,108 @@ def tug(dir) =
   end
 end
 
+# --- the show --------------------------------------------------------------
+# What a broadcast is, in the host's own words: a name for it, what is going
+# out, and anything they want said beside the two. None of the three can be
+# derived here, and the middle one is the reason this exists at all - a bucket
+# set is playing inside somebody else's browser tab and reaches this station
+# as audio and nothing else, so the only way the room can be told what it is
+# hearing is for the host to type it.
+#
+# Held in memory and written nowhere. A show is one broadcast, and the right
+# thing for it to lose in a restart is all of it - the same call the tug
+# counter makes, and the opposite of the likes ledger, which is about the
+# library rather than about this afternoon.
+#
+# `connected` moved up here out of input.harbor below, because it is now read
+# by two things rather than one: the ducking, which is what it was written
+# for, and the public state, which has to give the same answer. It is still
+# set from nothing but the harbor's own two callbacks - asking the source
+# itself is not reliable, a dropped one goes on looking alive for a while -
+# and a second flag beside it would be a second answer to "is anybody live"
+# that could be caught disagreeing with the first at exactly the boundary
+# where it matters.
+connected = ref(false)
+
+show_name  = ref("")
+show_title = ref("")
+show_note  = ref("")
+
+# Characters, not bytes, and which of the two has to be said out loud because
+# they differ for every host who names a show in Spanish. Measured on this
+# build: ten e-acutes are 10 characters and 20 bytes, and cutting at 8
+# characters gives 16 bytes with no character cut in half.
+#
+# The catch is not decoration. A byte sequence that is not UTF-8 at all -
+# which no browser sends and curl will - makes string.length throw, and a
+# throw inside a harbor handler answers 500. Measured: ten raw 0xFF bytes land
+# in the catch and come back empty, while one 0xFF inside otherwise valid text
+# never reaches it and leaves the json encoder as U+FFFD.
+def show_clip(n, s) =
+  try
+    if string.length(encoding = "utf8", s) > n then
+      string.sub(encoding = "utf8", s, start = 0, length = n)
+    else
+      s
+    end
+  catch _ do
+    ""
+  end
+end
+
+# `live` is connected() rather than a fourth ref, for the reason given above
+# it. The three strings are answered as they were typed: the json encoder
+# escapes them, and the page that receives them builds its DOM with
+# textContent, which is what makes it safe for a listener to be shown words
+# somebody else wrote.
+def show_state() =
+  { live  = connected(),
+    name  = show_name(),
+    title = show_title(),
+    note  = show_note() }
+end
+
+# One call carries the whole show, and a parameter left out means an empty
+# one. Deliberately not a partial update: three fields that may each be
+# present or absent is eight meanings for one endpoint where "this is the
+# show" is one, and the console has all three of them in front of it every
+# time it asks. Clearing is then a POST with no parameters at all, which the
+# harbor answers - a bare trailing `?` with nothing after it is the one shape
+# it does not, and comes back 404.
+def show_set(req) =
+  show_name  := show_clip(60,  req.query["name"])
+  show_title := show_clip(120, req.query["title"])
+  show_note  := show_clip(240, req.query["note"])
+  log.important(label = "show",
+    if show_name() == "" and show_title() == "" and show_note() == "" then
+      "cleared"
+    else
+      "#{show_name()} | #{show_title()} | #{show_note()}"
+    end)
+end
+
+# Behind the speaker credential because /control/ is: caddy's `handle
+# /control/*` imports speakers, and this path falls inside that block with
+# nothing to add. A listener must never be able to name somebody else's show,
+# and /likes/*, the block that has no credential on purpose, stays a read.
+#
+# The GET is what a console reloaded mid-broadcast reads back, so a host who
+# refreshes does not find three empty boxes and retype what is already on the
+# air. Both answer with show_state, the same object the public gets, for the
+# reason endpoint() and queue_endpoint() already give: act and redraw from one
+# response.
+#
+# Registered here rather than up with the rest of /control/ because they
+# answer with this state and have to come after it - the same call /tug/ makes
+# by sitting beside the likes it answers with.
+harbor.http.register(port = 8005, method = "GET", "/control/show",
+  fun (_, response) -> response.json(show_state()))
+harbor.http.register(port = 8005, method = "POST", "/control/show",
+  fun (req, response) -> begin
+    show_set(req)
+    response.json(show_state())
+  end)
+
 # --- likes -----------------------------------------------------------------
 # Public, and deliberately with no notion of who is listening: a like is one
 # number against one song, not a row belonging to an account. A host is a
@@ -1412,6 +1514,15 @@ end
 # this same answer, so the page works it out from the same two numbers this file
 # does and the two cannot drift apart by arithmetic.
 #
+# The show rides along for that same argument, made once more and at its
+# strongest. A /show/now of its own would be a second poll, and at the one
+# moment it matters - a host leaving the air - the two answers a page held
+# would disagree, one still naming a show and the other already back to the
+# music, for as long as a poll takes and with nothing in either to say which
+# was written first. It also has to be here rather than anywhere: this is the
+# only endpoint a page with no credential may ask, and the listener page is
+# exactly that page.
+#
 # Sending the remainder was the first shape and it was measurably not enough.
 # Measured in a headless browser against the live station: the page went dim
 # 3672 ms after the click that caused the skip and cleared 1052 ms later. It had
@@ -1440,7 +1551,8 @@ def likes_state() =
     rope     = tug_span,
     cool     = tug_cool,
     elapsed  = e,
-    duration = source.duration(library) }
+    duration = source.duration(library),
+    show     = show_state() }
 end
 
 def like_endpoint(act) =
@@ -1474,11 +1586,6 @@ harbor.http.register(port = 8005, method = "POST", "/tug/skip",
 harbor.http.register(port = 8005, method = "POST", "/tug/keep",
   like_endpoint(fun () -> tug(-1)))
 
-# Whether a live source is connected. Asking the source itself is not
-# reliable - a dropped one goes on looking alive for a while - so track the
-# connect and disconnect callbacks, and duck the music off that.
-connected = ref(false)
-
 live = input.harbor(
   id            = "live",
   "live",
@@ -1505,7 +1612,17 @@ live = input.harbor(
   # and stops often, which is what the first session actually looked like.
   timeout       = 5.0,
   on_connect    = fun (_) -> connected := true,
-  on_disconnect = fun () -> connected := false
+  # The show goes with the source, and this is the only place that can end
+  # it. Nothing a host types carries a time, so a name left standing after
+  # the socket went is a listener being told a show is on while the room is
+  # already back to the music - and a host who left the air by closing the
+  # tab, or by losing signal, is not going to come back and clear it.
+  on_disconnect = fun () -> begin
+    connected  := false
+    show_name  := ""
+    show_title := ""
+    show_note  := ""
+  end
 )
 
 # --- voice notes -----------------------------------------------------------

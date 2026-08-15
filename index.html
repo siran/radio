@@ -9,6 +9,11 @@
   :root {
     --bg: #0b0b0e; --panel: #131318; --line: #24242c;
     --fg: #ecebe8; --dim: #8b8b96; --accent: #4ade80;
+    /* Not in the light block below, on purpose. Every other colour here is
+       redefined for light because it is a shade of the page; this one is a
+       signal and reads the same on both, exactly as the host console's own
+       on-air red does with no light theme at all to check it against. */
+    --air: #ef4444;
     /* The diameter of the record, and through it the height of the volume row
        and the width of the column under the button. This number is no longer the
        one chosen first, and what is chosen first has changed again. It used to be
@@ -78,6 +83,32 @@
   .on .dot { background: var(--accent); animation: pulse 2s ease-in-out infinite; }
   .on .lbl { color: var(--accent); }
   @keyframes pulse { 0%,100%{opacity:1; box-shadow:0 0 0 0 rgba(74,222,128,.5)} 50%{opacity:.75; box-shadow:0 0 0 6px rgba(74,222,128,0)} }
+
+  /* A HOST is on the microphone. A different fact from the one above it, and
+     it needed a different mark rather than a second reading of that one: the
+     dot up there is the stream, this one is a person. Same dot, and the red
+     and the beat of the host console's own on-air bar, so both ends of a
+     broadcast look like each other.
+
+     Not one word of ours anywhere inside it, which is the rule this page is
+     built to: the tug row has no words at all so that somebody who reads no
+     English can still use it. What is drawn here IS the host's own writing,
+     which is theirs and not a label, and the dot is what carries the meaning
+     for a reader who cannot read it.
+
+     The show block simply is not there when nobody is live, so nothing has
+     to be dimmed, greyed or explained away in the off state. */
+  .show { margin: 2px 0 16px; }
+  .show .showname { display: inline-flex; align-items: center; gap: 8px;
+                    font-size: 1.02rem; font-weight: 650; overflow-wrap: anywhere; }
+  .show .dot { background: var(--air); animation: airpulse 1.2s ease-in-out infinite; }
+  .show .showtitle { font-size: .92rem; margin-top: 2px; overflow-wrap: anywhere; }
+  .show .shownote { color: var(--dim); font-size: .86rem; margin-top: 3px;
+                    white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* by name. The reduced-motion rule further down is a * and this is a real
+     element, so it does reach it - but the animation still has to be one
+     that can be named. */
+  @keyframes airpulse { 50% { opacity: .25; } }
 
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 20px; }
@@ -740,6 +771,14 @@
     <div class="live" id="live"><span class="dot"></span><span class="lbl" id="lbl">connecting</span></div>
     <h1 id="name">&nbsp;</h1>
     <div class="desc" id="desc">&nbsp;</div>
+    <!-- Whoever is broadcasting, in their own words, and only while they
+         are. Empty and hidden the rest of the time - a station between
+         shows says nothing about shows. -->
+    <div class="show" id="showwrap" role="status" hidden>
+      <div class="showname"><span class="dot"></span><span id="showname"></span></div>
+      <div class="showtitle" id="showtitle" hidden></div>
+      <div class="shownote" id="shownote" hidden></div>
+    </div>
   </header>
 
   <div class="cols">
@@ -1444,7 +1483,37 @@
   // it is a question about whether they might ever differ. The count belongs
   // on the thing you press to change it; the row below stays about the
   // station, which is a different subject.
+
+  // Whoever is on the microphone, from the same response as everything else
+  // here and for the reason the station gives for putting it there: a poll of
+  // its own would disagree with this one for as long as a poll takes at the
+  // one moment that matters, which is a host leaving the air.
+  //
+  // textContent, never innerHTML, and here that is not a habit - these three
+  // strings were typed by one person and are being shown to everybody else.
+  // It is the rule the guestbook and the chat already follow, and the station
+  // caps the three lengths on its own side as well.
+  //
+  // A host who has typed nothing still gets the dot. That is the honest
+  // reading of what the station said - somebody is live, and they chose to
+  // say nothing about it - and it is the half of this that survives a
+  // listener who reads no English at all.
+  function showShow(sh) {
+    const on = !!(sh && sh.live);
+    $('showname').textContent  = on ? (sh.name  || '') : '';
+    $('showtitle').textContent = on ? (sh.title || '') : '';
+    $('shownote').textContent  = on ? (sh.note  || '') : '';
+    $('showtitle').hidden = !$('showtitle').textContent;
+    $('shownote').hidden  = !$('shownote').textContent;
+    $('showwrap').hidden  = !on;
+  }
+
   function showLikes(j) {
+    // Before the early return below, because the two are about different
+    // things: that one is "is a track on", and a host can be live over a
+    // station playing nothing at all - which is exactly what the music being
+    // paused for a bucket set looks like from here.
+    showShow(j && j.show);
     likeId = (j && j.id) || '';
     if (!likeId) { $('likerow').hidden = true; $('tugrow').hidden = true; return; }
     const mine = liked.includes(likeId);
@@ -1467,6 +1536,10 @@
     catch {
       $('likerow').hidden = true;
       $('tugrow').hidden = true;
+      // The same rule as the clock below: a show this page was told about
+      // before the station stopped answering is not a show it may keep
+      // drawing.
+      showShow(null);
       // Stop rather than keep counting from the last thing it was told. A
       // position that goes on climbing after the station stopped answering is
       // a number this page has no right to.
