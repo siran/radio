@@ -643,10 +643,15 @@
      buttons are button.vote again, so the thing you press to move a number
      looks the same here as it does on the heart and in the guestbook.
 
-     One pip per click, filled from the left. That is the rope AND the figure in
-     one object rather than a bar with a number beside it: you can see how far
-     it has got and you can count how many are left, and there are not two
-     copies of one number a hundred pixels apart to wonder about. */
+     One pip per click, filled from the left, with the same count in digits
+     beside them. The pips are the picture - how far it has got, how much rope
+     is left - and past about four dots a picture stops answering "how many is
+     that" without counting five-pixel circles one at a time, which is the
+     question the digits take. They are not the two-copies-of-one-number the
+     heart was cured of: those sat a hundred pixels apart and were written by
+     different lines, and these sit nine pixels apart and are written from
+     pullNow and rope in the same pair of statements as the pips, so there is
+     no moment in which either of them is the newer. */
   .tugrow { display: flex; justify-content: center; align-items: center; gap: 9px;
             margin: -10px 0 18px; }
   .tugrow[hidden] { display: none; }
@@ -660,6 +665,39 @@
      would be a second clock on a page that already has one, about a wait of
      five seconds. */
   .rope.cool .pip { opacity: .3; }
+  /* The count in digits, beside the pips rather than instead of them. .72rem is
+     button.vote's own size, so it stands between the two glyphs at their weight
+     instead of reading as a heading over the row, and var(--dim) is the pips'
+     UNLIT colour rather than the lit one: it reports the number, it is not a
+     thirteenth pip.
+
+     A floor under the width, because the row is centred and so pays for every
+     character twice. 12/12 measures 29.34px against 23.13px for 7/12 - four
+     tabular digits of 6.22px and a solidus of 4.47px - so with no floor the
+     pips would jump 3.11px sideways on the click from 9 to 10 and back again
+     on the one that undoes it, which is the click a listener is watching
+     hardest. The floor is written in ch rather than in that 29.34px so that it
+     follows the font instead of recording the one this stack happens to resolve
+     to. 4.74 and not the 4.7186 the division gives, because ch is the advance
+     of the ZERO and these figures are tabular, which are a hair wider here -
+     6.20px against 6.22px. At 4.72 the box came out 0.05px short of 12/12 and
+     the pips still moved, by a sixty-fourth of a pixel. Invisible, but it was
+     the whole point of the floor, so it is cleared outright instead.
+
+     Right-aligned in that box so the /12 does not move at all and only the
+     column that is really changing changes.
+
+     The fade is the pips' own .18s. It matters that it is theirs and not
+     nought: with no transition the digits went out on the frame the class
+     landed while the dots took most of a fifth of a second after them, and two
+     halves of one object leaving at different times reads as two objects. */
+  .tugnum { font-size: .72rem; color: var(--dim); font-variant-numeric: tabular-nums;
+            min-width: 4.74ch; text-align: right; transition: opacity .18s ease; }
+  /* Faded with the pips during the cool-off, off the one class drawTug already
+     toggles and by the pips' own .3 rather than a constant of its own. The
+     figure is part of the rope, so it goes out by exactly what the rope goes
+     out by and cannot be left looking live over a pair of dead buttons. */
+  .rope.cool + .tugnum { opacity: .3; }
   .recent { margin-top: 20px; }
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
@@ -729,10 +767,18 @@
            asks for the text form rather than the colour emoji, so they sit
            beside the hollow heart instead of shouting over it.
            The pips are built by the script, not written here: how many there
-           are is the station's number and the page is told it. -->
+           are is the station's number and the page is told it - and so is the
+           12 in the reading beside them, for that same reason.
+           The digits break none of the rule above them. 7/12 is figures and a
+           solidus, which say the one thing they say to a reader of any of the
+           languages the words this row refuses would have had to be translated
+           into. They are a span of their own rather than a child of .rope
+           because showTug lights the pips by walking that element's children by
+           index, and anything else living in there would be pip thirteen. -->
       <div class="tugrow" id="tugrow" hidden>
         <button type="button" class="vote" id="tugKeep" title="pull the skip counter back down" aria-label="pull the skip counter back down">&#9875;&#65038;</button>
         <div class="rope" id="rope"></div>
+        <span class="tugnum" id="tugNum"></span>
         <button type="button" class="vote" id="tugSkip" title="push the skip counter up" aria-label="push the skip counter up">&#9197;&#65038;</button>
       </div>
       <div class="controls">
@@ -1477,9 +1523,10 @@
   const GAP = 120;
   let rope = 0, pullNow = 0, lastPull = 0, coolUntil = 0;
 
-  // One pip per click, so the picture and the figure are the same object. The
-  // page is told how many there are rather than knowing, so twelve lives in
-  // exactly one place and that place is the station.
+  // One pip per click, and the same count in digits beside them. The page is
+  // told how many there are rather than knowing, so twelve lives in exactly one
+  // place and that place is the station - which is also why the reading is
+  // built out of j.rope and why "/12" is written nowhere in this file.
   function showTug(j) {
     if (typeof j.pull !== 'number' || typeof j.rope !== 'number' || j.rope <= 0) {
       $('tugrow').hidden = true; return;
@@ -1516,6 +1563,12 @@
                : 0;
     coolUntil = Date.now() + left * 1000;
     [...el.children].forEach((p, i) => p.classList.toggle('on', i < pullNow));
+    // The digits, off the same two variables as the line above and in the same
+    // breath as it, so no redraw can leave the reading and the picture holding
+    // different numbers. drawTug does not touch this and nothing else writes
+    // it: the only other thing that happens to the figure is the fade, and the
+    // fade is CSS hanging off the class drawTug already puts on the rope.
+    $('tugNum').textContent = pullNow + '/' + rope;
     drawTug();
     $('tugrow').hidden = false;
   }
