@@ -287,6 +287,27 @@ music_on  = ref(true)
 paused    = ref(false)
 repeating = ref(false)
 
+# Whether the live source is actually SAYING anything, as opposed to merely
+# holding the mount. They used to be one question and are not: a host can now
+# go on air with the microphone shut - so the room can see a show has started
+# while the autoDJ plays on - and open it when they have something to say.
+# The ducking further down reads `connected`, so without this a host who went
+# on air and stayed quiet would have the music dipped under them for the whole
+# broadcast while they said nothing.
+#
+# Declared here rather than beside `connected`, which is where it belongs by
+# meaning: this file is read top to bottom, the endpoint that writes it is
+# registered hundreds of lines above that, and a ref declared after its own
+# endpoint does not typecheck. Measured, not guessed - it was written there
+# first and liquidsoap said "Undefined variable live_open".
+#
+# TRUE by default, and that is the important half. Nothing but the console
+# sets it: butt, CoolMic and anything else speaking the icecast source
+# protocol have no way to say "I am muted now", and for them holding the
+# mount IS talking, exactly as it always was. A default of false would have
+# made every one of them silently stop ducking the music.
+live_open = ref(true)
+
 music = amplify({if music_on() then 1.0 else 0.0 end}, music)
 
 # replay_metadata = false: on the way back from a pause the switch would
@@ -1017,6 +1038,12 @@ harbor.http.register(port = 8005, method = "POST", "/control/music",
   endpoint(fun (r) -> music_on := on_flag(r)))
 harbor.http.register(port = 8005, method = "POST", "/control/pause",
   endpoint(fun (r) -> paused := on_flag(r)))
+# Said by a console whose host has opened or shut their microphone. This is NOT
+# a mute: the audio is already gone, cut at the browser where it costs nothing
+# and cannot be heard on the way. It tells the ducking whether there is a voice
+# to make room for.
+harbor.http.register(port = 8005, method = "POST", "/control/talking",
+  endpoint(fun (r) -> live_open := on_flag(r)))
 
 # Find a track, then queue it. The only two endpoints here that do not answer
 # with the state object: a search is a question about the library rather than
@@ -1632,6 +1659,10 @@ live = input.harbor(
   # tab, or by losing signal, is not going to come back and clear it.
   on_disconnect = fun () -> begin
     connected  := false
+    # Reset rather than trusted to be tidied up: a console whose laptop lid
+    # closed mid-mute would otherwise leave the next source, of any kind,
+    # unable to duck the music.
+    live_open  := true
     show_name  := ""
     show_title := ""
     show_note  := ""
@@ -2027,7 +2058,7 @@ def duck_gain() =
   # what says a note is still on air; the annotation only says what that
   # speaker wanted.
   ducking =
-    connected()
+    (connected() and live_open())
     or list.exists(
          fun (q) ->
            if q.is_ready() then

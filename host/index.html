@@ -3704,6 +3704,9 @@
   let airTabGain = null, airMicGain = null, airMicFn = null, airTalking = false;
   // The two headphone taps, and the EQ chain feeding the air.
   let airTabMon = null, airMicMon = null, airEq = null;
+  // Whether this console ever told the station the microphone was shut, so
+  // that leaving the air only puts it back if it was ever moved.
+  let airWasOpen = false;
   // Whether the browser agreed to stop playing the captured tab itself. Only
   // when it has can this page offer a headphone switch: otherwise the browser
   // is playing the tab, we cannot reach that, and adding a second playback of
@@ -3754,7 +3757,7 @@
     $('airmute').disabled = airOn || !!airWS;
     // Live only while the air is, and only over a tab: with the microphone as
     // the source it is already everything going out.
-    $('airtalk').disabled = !airOn || $('airsrc').value === 'mic';
+    $('airtalk').disabled = !airOn;
     airHpLook();
     if (!airOn) { $('airvu').style.width = '0%'; }
   }
@@ -3862,7 +3865,12 @@
       airEq = eqChain(airAC);
       airEq.ac = airAC;
       eqChains.push(airEq);
-      airMicGain.gain.value = 1;
+      // Shut, like the tab path below has always started. Going on air is now
+      // a thing the room can see - the show block appears and the autoDJ plays
+      // on - and speaking is a thing done inside it. A hot microphone on the
+      // press of a button has cost this station two hours of broadcast room
+      // tone in one evening.
+      airMicGain.gain.value = 0;
       airMicMon.gain.value = 0;
       airAC.createMediaStreamSource(st).connect(airEq.input);
       airEq.output.connect(airMicGain).connect(dest);
@@ -3989,6 +3997,7 @@
       }
     }
     airTalking = !airTalking;
+    airWasOpen = true;
     const t = airAC.currentTime;
     // Ramped rather than switched. A gain that jumps from 0 to 1 on a live
     // signal is a click on everybody's speakers, and the dip needs to be
@@ -3997,7 +4006,14 @@
     const dip = $('airduck').checked && airTalking ? 0.3 : 1;
     airTabGain.gain.setTargetAtTime(dip, t, 0.08);
     $('airtalk').classList.toggle('on', airTalking);
-    $('airtalk').textContent = airTalking ? 'Stop talking' : 'Talk over it';
+    const tab = $('airsrc').value !== 'mic';
+    $('airtalk').textContent = airTalking
+      ? (tab ? 'Stop talking' : 'Close my mic')
+      : (tab ? 'Talk over it' : 'Open my mic');
+    // The station cannot see a gain in this browser, and it ducks the music
+    // off whether a host is speaking. Without this, going on air shut would
+    // dip the music for the whole broadcast under somebody saying nothing.
+    control('talking?on=' + (airTalking ? 'true' : 'false'), 'POST');
   }
   $('airtalk').addEventListener('click', airTalkToggle);
 
@@ -4066,6 +4082,10 @@
     airMicFn = null;
     $('airtalk').classList.remove('on');
     $('airtalk').textContent = 'Talk over it';
+    // The station resets this on disconnect too. Said from both ends because
+    // the two failures are different: this covers leaving the air tidily,
+    // the station's own reset covers a laptop lid closing mid-mute.
+    if (airWasOpen) control('talking?on=true', 'POST');
     // However the autoDJ was found, put it back. Done here rather than at the
     // button, because the air can end without anybody pressing anything - a
     // dropped socket, a tab that stopped sharing - and leaving the station
@@ -4226,7 +4246,10 @@
     const tab = $('airsrc').value !== 'mic';
     $('airbucketnote').hidden = !tab;
     $('airtalknote').hidden = !tab;
-    $('airtalk').hidden = !tab;
+    // Shown for both sources: it is the microphone switch, and there is a
+    // microphone either way. Only its wording changes.
+    $('airtalk').hidden = false;
+    $('airtalk').textContent = tab ? 'Talk over it' : 'Open my mic';
     $('airduckwrap').hidden = !tab;
     // Nothing about the pause box is decided here any more. It used to be set
     // at the moment of choosing a source, because the two sources were thought
