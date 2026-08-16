@@ -2845,7 +2845,7 @@
                      'was saved: ' + e.message +
                      '. Open the Mixing desk fold to see whether the station is answering.');
     }
-    if (await presPut('Saved "' + n + '" \u2014 voice, EQ, streaming settings, the desk, the phrases the narrator has kept, and which panels were open.')) {
+    if (await presPut('Saved "' + n + '" \u2014 voice, EQ, streaming settings, the desk, the show, how the broadcast is set up, your monitor levels, the phrases the narrator has kept, and which panels were open.')) {
       presDraw();
       $('preslist').value = n;
     } else if (prev === undefined) { delete presets[n]; } else { presets[n] = prev; }
