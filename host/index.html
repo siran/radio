@@ -2659,7 +2659,34 @@
       voice: { gain: settings.gain, duck: settings.duck, eq: eq },
       desk: desk,
       phrases: phrases,
-      panels: panelState()
+      panels: panelState(),
+      // The show, read off the boxes rather than from the station. The two
+      // agree while a show is on, and off air the station holds nothing at
+      // all - it is cleared the moment a source disconnects - so reading the
+      // station would save an empty show every time a preset was made between
+      // broadcasts, which is when anybody would make one.
+      show: {
+        name:  $('showname').value,
+        title: $('showtitle').value,
+        note:  $('shownote').value
+      },
+      // How a broadcast is set up, as opposed to how it sounds. Saved
+      // because a recurring show is the same answer to these three every
+      // week: this source, the autoDJ handled this way, the tab dipping or
+      // not when its host talks over it.
+      air: {
+        src:  $('airsrc').value,
+        mute: $('airmute').checked,
+        duck: $('airduck').checked
+      },
+      // The monitor is this browser and this room, and it is saved anyway:
+      // a preset is loaded by the person who made it far more often than by
+      // anybody else, and their headphones are the same headphones.
+      mon: {
+        bed:  $('monvol').value,
+        mic:  $('micmonvol').value,
+        sync: $('monsync').value
+      }
     };
   }
 
@@ -2735,7 +2762,59 @@
       $('eq' + b).value = settings.eq[b];
       showBand(b);
     }
+    // The filters, not just the numbers. Without this a preset loaded during
+    // a broadcast moved every slider and left the voice going out shaped by
+    // the preset before it - silently, and only until the next reconnection,
+    // which is the worst way for a setting to be wrong.
+    eqPush();
     if (Array.isArray(p.phrases)) histMerge(p.phrases);
+
+    // The show. Written to the boxes always, and pushed to the station only
+    // when one is actually on: pushing off air would put a name on an
+    // endpoint that has nobody live behind it, and the public page reads
+    // `live` before it reads any of the words, so it would show nothing and
+    // simply sit there readable by anyone who asked.
+    const sh = (p.show && typeof p.show === 'object') ? p.show : null;
+    if (sh) {
+      if (typeof sh.name  === 'string') $('showname').value  = sh.name.slice(0, 60);
+      if (typeof sh.title === 'string') $('showtitle').value = sh.title.slice(0, 120);
+      if (typeof sh.note  === 'string') $('shownote').value  = sh.note.slice(0, 240);
+      if (airOn) showPush();
+    }
+
+    // How the broadcast is set up. The source goes through a change event
+    // rather than being assigned, because everything that follows a source -
+    // which notes are shown, whether Talk exists, what the pause box means -
+    // hangs off that event and not off the value.
+    const ai = (p.air && typeof p.air === 'object') ? p.air : null;
+    if (ai && !airOn && !airWS) {
+      if (ai.src === 'mic' || ai.src === 'bucket') {
+        $('airsrc').value = ai.src;
+        $('airsrc').dispatchEvent(new Event('change'));
+      }
+      if (typeof ai.mute === 'boolean') $('airmute').checked = ai.mute;
+      if (typeof ai.duck === 'boolean') $('airduck').checked = ai.duck;
+    }
+
+    // The monitor. Sync is applied and then re-gated rather than trusted: a
+    // preset made when the station was holding music back carries a hold that
+    // is actively wrong when it is not, and that combination has already been
+    // found on this console once.
+    const mo = (p.mon && typeof p.mon === 'object') ? p.mon : null;
+    if (mo) {
+      const put = (id, v) => {
+        const x = parseFloat(v);
+        if (!isFinite(x)) return;
+        $(id).value = x;
+        $(id).dispatchEvent(new Event('input'));
+      };
+      put('monvol', mo.bed);
+      put('micmonvol', mo.mic);
+      put('monsync', mo.sync);
+      $('monsync').dispatchEvent(new Event('change'));
+      monSyncGate();
+    }
+
     applyPanels(p.panels);
     panelSave();          // so a refresh comes back to the preset, not the markup
     presErr('');
