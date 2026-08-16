@@ -174,7 +174,10 @@
   button.play { flex: none; width: var(--lp); height: var(--lp); border-radius: 50%; cursor: pointer;
     border: none; background: #0d0d11; padding: 0;
     display: grid; place-items: center; transition: transform .12s ease; }
-  button.play:hover:not(:disabled) { transform: scale(1.05); }
+  /* No hover. It grew the button five per cent, which was a reasonable thing
+     for a button to do and is the wrong thing for a turntable: a record on a
+     deck does not swell because a cursor came near, and the transform fought
+     the carriage on the way in. Touch never had it and lost nothing. */
   button.play:disabled { opacity: .28; cursor: not-allowed; }
   /* An empty deck that cannot be pressed keeps more of itself than a record that
      cannot. .28 was chosen for a disc with grooves and a label on it, where a
@@ -590,12 +593,19 @@
      on screen, which is the fault this state was added to fix. `arriving` is set
      by the script whether or not anything is drawn, so the deck lights for
      everybody and only the record's travel is refused. */
+  /* The deck used to brighten while a record was on its way. It does not any
+     more, and the reason is worth keeping: the record MOVING is the
+     acknowledgement of the press. A light as well is two things saying one
+     thing, and the brighter dish pulled the eye to the empty middle at exactly
+     the moment the interesting object was entering from the side.
+
+     The well is still uncovered through the whole of a change - that part was
+     never the lighting, it is the record being off the pin - so the middle of a
+     change still shows a platter with its post standing in it rather than a
+     black porthole. It is simply lit the way it always is. */
   button.play.shoving .lp-well, button.play.arriving .lp-well {
     background: radial-gradient(circle closest-side at 50% 38%,
-                                #16161f 0 46%, #24242f 84%, #0d0d14 100%);
-    box-shadow: inset 0 7px 11px -2px rgba(0,0,0,.92),
-                inset 0 -5px 9px -3px rgba(255,255,255,.34),
-                inset 0 0 0 1px rgba(255,255,255,.13);
+                                #101018 0 46%, #17171f 84%, #08080c 100%);
   }
   /* No light on an empty deck. The glint is a lamp catching the smooth face of a
      record, and there is no record here to catch it - drawn over the recess it
@@ -682,7 +692,9 @@
             transform: translate(.1211em, .0087em); }
   button.play.empty:not(:disabled):not(.shoving) .lp-cue,
   button.play.arriving .lp-cue { visibility: visible; }
-  button.play.shoving .lp-cue, button.play.arriving .lp-cue { color: rgba(255,255,255,.66); }
+  /* Left at its resting weight during a change for the same reason the well is:
+     nothing about the press should light up. It is covered by the record within
+     a second anyway. */
   /* Metal, not a light. A first pass drew this bright enough that it read as a
      bead or a lamp rather than as a post, and on an empty deck it was the only
      lit thing on the button, which is a great deal of attention for the one part
@@ -2562,9 +2574,21 @@
     // clear, and neither of those two scales with the disc.
     const at = (x, up) => 'translate(' + x + ', ' + (up ? -LIFT : 0) + 'px)';
     const t = TRAVEL / total, s = SEAT / total;
+    // THE ARRIVAL MOVES FROM THE FIRST FRAME. There is no hold at the start of
+    // it any more.
+    //
+    // It used to wait off-screen for all but the last 660ms and then hurry in,
+    // which is the same total and reads as a delay with an animation on the end
+    // rather than as a record being put on. Now the travel is stretched over the
+    // whole wait - the slower the connection, the slower the record comes in,
+    // which is the operator's own framing of it as a speed test you can watch.
+    //
+    // Only the seat keeps a fixed length. It is the one part that is a physical
+    // event rather than a wait: a record dropping the last two hole-widths onto
+    // a pin takes as long as it takes, and stretching THAT over a slow
+    // connection would make it hang in the air.
     changeAnim = car.animate(arriving ? [
       { transform: at('-100%', 1), offset: 0 },
-      { transform: at('-100%', 1), offset: 1 - t - s },
       { transform: at('-200%', 1), offset: 1 - s },
       { transform: at('-200%', 0), offset: 1 },
     ] : [
