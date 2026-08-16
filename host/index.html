@@ -4014,8 +4014,15 @@
     // signal is a click on everybody's speakers, and the dip needs to be
     // slower than the voice it is making room for or it pumps.
     airMicGain.gain.setTargetAtTime(airTalking ? 1 : 0, t, 0.015);
-    const dip = $('airduck').checked && airTalking ? 0.3 : 1;
-    airTabGain.gain.setTargetAtTime(dip, t, 0.08);
+    // Only a tab HAS a tab gain. On the microphone path this node is null, and
+    // reading .gain off it threw a TypeError one line after the microphone had
+    // already been raised - so the audio opened, and everything below here did
+    // not: the button never changed, and the station was never told to duck.
+    // From the host's side that is a button that does nothing.
+    if (airTabGain) {
+      const dip = $('airduck').checked && airTalking ? 0.3 : 1;
+      airTabGain.gain.setTargetAtTime(dip, t, 0.08);
+    }
     $('airtalk').classList.toggle('on', airTalking);
     const tab = $('airsrc').value !== 'mic';
     $('airtalk').textContent = airTalking
