@@ -293,17 +293,39 @@
       <input type="checkbox" id="airduck" checked> Dip the tab while I talk
     </label>
     <label class="chk">
-      <input type="checkbox" id="airmute" checked> Pause the station&rsquo;s autoDJ while I am on air
+      <input type="checkbox" id="airmute"> Pause the station&rsquo;s autoDJ while I am on air
     </label>
-    <!-- Ticked in the markup and not by airSrcLook, because it no longer
-         depends on the source: a host talking and a host playing records
-         both want the autoDJ out of the way, and re-ticking it on a source
-         change would silently undo a host who had unticked it. -->
-    <div class="status" id="airmutenote">Ticked whichever source you pick. Pausing stops the autoDJ
+    <!-- OFF by default, and it has been all three ways in one evening, which is
+         worth writing down rather than quietly settling.
+
+         It followed the source first - ticked for a tab, unticked for the
+         microphone - which is the cleverest of the three and was rejected by
+         the operator, who asked for it always on. Always on is what it then
+         was, and it is what confused them: going on air made the station go
+         quiet, and a radio that falls silent when you press the button looks
+         broken long before anybody thinks to blame a checkbox. Their own
+         reading of it: "it confused me until I remember that I had mistakenly
+         asked for a Pause: on when on air".
+
+         So: off. Pressing a button on this console does not stop the station
+         unless somebody said so on this visit. A default that silences a radio
+         has to be asked for every time, not remembered from a session where it
+         made sense. -->
+    <div class="status" id="airmutenote">Off unless you tick it. Pausing stops the autoDJ
       pulling the playlist at all, so it resumes on the note it stopped on rather than however far into
       the library half an hour of talking would have carried it. Untick it to go out over the station
       instead of in place of it. This is not the dip &mdash; the music sinking under your voice is the
       desk&rsquo;s own <span class="when">duck</span> knob and is unaffected either way.</div>
+    <!-- Named here because the operator had to ask where it was, and the answer
+         was a fold away under a different word. Named, not duplicated: a second
+         control writing the same interactive variable is a second thing to
+         disagree with the first, and this console already has one pair of
+         gain-shaped controls that were mistaken for each other. -->
+    <div class="status">How loud you are <span class="when">for listeners</span> is
+      <span class="when">Mic volume</span> on the mixing desk below &mdash; it is on the air the moment it
+      moves, so it can be set while you talk. The <span class="when">mic</span> slider in your monitor is
+      not it: that one is your headphones and reaches nobody. The seven bands on the desk shape your
+      voice in this browser before it is sent, so they are yours and not the station&rsquo;s.</div>
     <div class="status">This sends what you pick above to the station, mixed over the music, which dips
       for you. It is <span class="when">not</span> the monitor below &mdash; Hear my mic there only reaches
       your own headphones. While you are on air the top of this page turns red and the tab says so.</div>
