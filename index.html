@@ -98,7 +98,14 @@
 
      The show block simply is not there when nobody is live, so nothing has
      to be dimmed, greyed or explained away in the off state. */
-  .show { margin: 2px 0 16px; }
+  .show { margin: 2px 0 6px; text-align: center; }
+  .show .showname { justify-content: center; }
+  /* The station's own track while a show is on: still audible, so still
+     shown, but it is the bed and not the billing. Dropped to the weight the
+     page already uses for context - the same treatment a paused track gets -
+     so the eye reads the show first. */
+  .np.under { font-size: .86rem; font-weight: 500; color: var(--dim);
+              margin: 8px 0 18px; }
   .show .showname { display: inline-flex; align-items: center; gap: 8px;
                     font-size: 1.02rem; font-weight: 650; overflow-wrap: anywhere; }
   .show .dot { background: var(--air); animation: airpulse 1.2s ease-in-out infinite; }
@@ -780,11 +787,6 @@
     <!-- Whoever is broadcasting, in their own words, and only while they
          are. Empty and hidden the rest of the time - a station between
          shows says nothing about shows. -->
-    <div class="show" id="showwrap" role="status" hidden>
-      <div class="showname"><span class="dot"></span><span id="showname"></span></div>
-      <div class="showtitle" id="showtitle" hidden></div>
-      <div class="shownote" id="shownote" hidden></div>
-    </div>
   </header>
 
   <div class="cols">
@@ -793,6 +795,16 @@
     <!-- player -->
     <div class="panel">
       <div class="np-label" id="npLabel">NOW PLAYING</div>
+      <!-- The show, when there is one, IS this panel. It is not a second
+           announcement above it: two blocks describing what is on is two
+           things to disagree, and during a show they did - the header named
+           the host while this named a track that had been paused for an
+           hour. -->
+      <div class="show" id="showwrap" role="status" hidden>
+        <div class="showname"><span class="dot"></span><span id="showname"></span></div>
+        <div class="showtitle" id="showtitle" hidden></div>
+        <div class="shownote" id="shownote" hidden></div>
+      </div>
       <div class="np" id="np">—</div>
       <div class="findrow" id="findrow" hidden>
         <a id="findLink" target="_blank" rel="noopener" title="find this song in the library">♫ find this song</a>
@@ -1528,10 +1540,32 @@
   //
   // The title itself is deliberately kept. It is still the track the station
   // is standing on and will resume, and showing nothing would lose that.
+  // What this panel says is on, in one place, because it has exactly one
+  // subject and used to have two.
+  //
+  // Three states, and the middle one is the one worth spelling out:
+  //
+  //   no show          the track, as it always was
+  //   show, music on   the show, with the track beneath it in the weight the
+  //                    page uses for context - a host talking over the
+  //                    station is genuinely hearing both, so both are named
+  //   show, paused     the show alone. The track is not audible, and a track
+  //                    that cannot be heard has no place on a panel that says
+  //                    what is on. That is the lie the pause glyph was added
+  //                    to stop telling and it would be told again here.
+  //
+  // No word of ours appears in the live state. The dot carries it, as it did
+  // in the header, and the words are the host's own.
   function showHold(j) {
     const held = !!(j && j.paused);
+    const live = !!(j && j.show && j.show.live);
+    $('npLabel').hidden = live;
     $('npLabel').textContent = held ? '\u23F8\uFE0F' : 'NOW PLAYING';
-    $('np').classList.toggle('hold', held);
+    $('np').classList.toggle('hold', held && !live);
+    $('np').classList.toggle('under', live);
+    // Hidden rather than emptied, so the panel closes up instead of leaving a
+    // gap where a track used to be named.
+    $('np').hidden = live && held;
   }
 
   function showLikes(j) {
@@ -1556,6 +1590,11 @@
       trackAt = Date.now();
     }
     showTug(j);
+    if (j && j.show && j.show.live && j.paused) {
+      $('likerow').hidden = true;
+      $('tugrow').hidden = true;
+      $('findrow').hidden = true;
+    }
   }
 
   async function pollLikes() {
