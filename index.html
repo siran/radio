@@ -338,6 +338,41 @@
     animation-play-state: paused;
   }
   button.play.spinning .lp-disc { animation-play-state: running; }
+  /* --- a record being changed --------------------------------------------
+     The next record comes in from the right and shoves the one that was
+     playing out of the window. One axis, one constant speed, a hard start and
+     a hard stop: nothing here is eased, because easing is what makes a change
+     look designed, and this one is meant to look like a mechanism.
+
+     Both records in the shove are COPIES, built for it and thrown away after
+     it, and the real disc above is hidden for its length. That is the whole
+     reason they exist rather than the disc being moved: the disc carries the
+     spin, its angle is the one thing on this button that must survive a track
+     change - which is what the play-state line above is already for - and both
+     moving it in the DOM and transforming it would throw that angle away. The
+     script hands the copies the angle instead, so nothing snaps upright.
+
+     The window is the button itself, clipped only while this runs. It is a
+     circle, so the two records pass through a porthole and the button's own
+     black opens between them around halfway. That seam is not covered up: it
+     is the gap between two objects in a slot, and it is the clearest thing in
+     the shove that says there are two records rather than one picture sliding.
+
+     420ms is 267px/s across the 112px face - slow enough to read as an object
+     being carried, short enough that the button is back under a finger before
+     anybody reaches for it.
+
+     The incoming copy is offset with `left` rather than a transform, and that
+     is not a preference: the copies are still turning, spin drives transform,
+     and one property cannot be driven by an animation and a static value at
+     once - the same collision the waiting pulse above avoids by using opacity.
+     Left means width as well, because inset:0 sizes these from both edges. */
+  @keyframes lpshove { to { transform: translateX(-100%); } }
+  button.play.shoving { overflow: hidden; }
+  button.play.shoving > .lp-disc { visibility: hidden; }
+  .lp-shove { position: absolute; inset: 0; pointer-events: none;
+              animation: lpshove 420ms linear; }
+  .lp-shove .lp-disc + .lp-disc { left: 100%; right: auto; width: 100%; }
   /* The highlight is light landing on the record, not something printed on it. A
      specular reflection comes from a lamp somewhere in the room and a lamp does
      not go round with the turntable, so the streak has to stay where it is while
@@ -1697,6 +1732,57 @@
     $('np').hidden = live && held;
   }
 
+  // --- a record being changed ---------------------------------------------
+  // /likes/now's id is a digest of the file playing, so a change in it IS a
+  // track change and there is nothing else to ask. showLikes already keys the
+  // heart off that value; this keys the record off the same one.
+  //
+  // Cleared in sleep() for the reason that block already gives about the
+  // clock: a change this page did not witness is not one it may act out.
+  // Without that, pressing play after an hour away would open with a shove for
+  // a record that went half an album ago.
+  //
+  // Reduced motion is refused HERE rather than left to the blanket rule at the
+  // foot of the sheet. That rule does reach .lp-shove, and that is exactly the
+  // trouble: the carriage takes itself out on its own animationend, so taking
+  // the animation away would leave a copy of the outgoing record sitting over
+  // the real one for good. An element that exists only for the length of its
+  // animation must not be built where there is no animation to end.
+  let shownId = '';
+  const stillness = matchMedia('(prefers-reduced-motion: reduce)');
+
+  function showRecord(id) {
+    const was = shownId;
+    shownId = id;
+    if (!id || !was || id === was || stillness.matches) return;
+    // A second change inside the first shove replaces it outright. Queueing
+    // would spend 420ms pushing off a record that is already two behind.
+    const running = btn.querySelector('.lp-shove');
+    if (running) running.remove();
+    const disc = btn.querySelector('.lp-disc');
+    const car = document.createElement('span'); car.className = 'lp-shove';
+    car.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 2; i++) {
+      const d = car.appendChild(document.createElement('span')); d.className = 'lp-disc';
+      const lab = d.appendChild(document.createElement('span')); lab.className = 'lp-label';
+      const s = lab.appendChild(document.createElement('span')); s.className = 'lp-sym';
+      s.textContent = sym.textContent;
+      lab.appendChild(document.createElement('span')).className = 'lp-hole';
+    }
+    btn.insertBefore(car, btn.querySelector('.lp-glint'));
+    btn.classList.add('shoving');
+    // Both copies are put at the angle the record is at instead of starting
+    // upright, so the outgoing one takes over where the record was and the real
+    // one comes back where the incoming one got to. Each of these elements
+    // carries exactly one animation and it is spin.
+    const phase = disc.getAnimations()[0].currentTime;
+    for (const d of car.querySelectorAll('.lp-disc')) d.getAnimations()[0].currentTime = phase;
+    car.addEventListener('animationend', () => {
+      car.remove();
+      btn.classList.remove('shoving');
+    }, { once: true });
+  }
+
   function showLikes(j) {
     // Before the early return below, because the two are about different
     // things: that one is "is a track on", and a host can be live over a
@@ -1705,6 +1791,7 @@
     showShow(j && j.show);
     showHold(j);
     likeId = (j && j.id) || '';
+    showRecord(likeId);
     if (!likeId) { $('likerow').hidden = true; $('tugrow').hidden = true; return; }
     const mine = liked.includes(likeId);
     $('likeCount').textContent = j.likes;
@@ -1909,6 +1996,8 @@
     // a number this page has no right to - the same rule pollLikes already
     // follows when the station stops answering.
     trackAt = null;
+    // And the record forgets what it was last showing, for the same reason.
+    shownId = '';
     quiet = true;
     tick();
   }
