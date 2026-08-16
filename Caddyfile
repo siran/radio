@@ -154,6 +154,71 @@ import relays.caddy
 		}
 	}
 
+	# What a show puts on the page beside the music: a few lines of markdown, or
+	# a picture. Written by a host, read by the room - the opposite way round
+	# from the chat and the guestbook above, which anybody may write.
+	#
+	# Under /host/ for the reason /host/upload/ is: basic auth credentials are
+	# scoped to a URL and everything below it, so a browser challenged for
+	# /host/ sends them here without a second prompt, and will not reliably do
+	# that across two sibling paths.
+	#
+	# NO SVG, and that is the whole of why this list is a list rather than
+	# "any image". An svg is a document: it may carry script, and a browser
+	# asked to render one from this station would run it on this origin. The
+	# four raster formats here cannot execute whatever is inside them, and
+	# nosniff on the read side stops a renamed file being treated as anything
+	# but what its extension claims.
+	#
+	# max_size TRUNCATES rather than refusing - measured on this build, and the
+	# reason /host/upload/ carries the same warning. A picture over the ceiling
+	# would be written CUT SHORT with nothing said to the host, so the console
+	# stops itself below this figure and explains; this is the backstop, not
+	# the guard anybody should hit.
+	handle /host/post/* {
+		import speakers
+		@postput {
+			method PUT
+			path *.md *.png *.jpg *.jpeg *.webp *.gif
+		}
+		handle @postput {
+			rate_limit {
+				zone post_writes {
+					key {remote_host}
+					events 60
+					window 1m
+				}
+			}
+			request_body {
+				max_size 4MB
+			}
+			webdav {
+				root {env.RADIO_HOME}/posts
+				prefix /host/post
+			}
+		}
+		# a PUT of anything else, and every other method, refused rather than
+		# quietly written under a name the read side will not serve
+		handle {
+			respond 403
+		}
+	}
+
+	# Reading them: public, like the music. Pictures need their real content
+	# type - forcing text/plain the way the chat does would stop them being
+	# pictures - so the protection here is that nothing servable from this
+	# folder can execute: four raster formats and markdown, no svg, nosniff so
+	# a renamed file stays what its extension says, and a sandbox CSP so even
+	# a mistake has no origin to act on.
+	#
+	# The markdown is never rendered by a browser as markup. The listener page
+	# fetches it as text and builds DOM nodes from it itself.
+	handle /posts/* {
+		header X-Content-Type-Options "nosniff"
+		header Content-Security-Policy "default-src 'none'; sandbox"
+		file_server browse
+	}
+
 	# Private email sidecars: WRITE ONLY. A PUT is accepted so the page can
 	# leave an address, but nothing can ever read them back over HTTP.
 	# Voice notes. Whatever lands here is played on the air within seconds, so
@@ -1015,6 +1080,17 @@ import relays.caddy
 		not path /host/relay/*
 		not path /chat/*
 		not path /messages/*
+		# Posts are markdown too, and this rule 404s every .md on the site. The
+		# chat spent ten days unreadable for exactly this reason - the listing
+		# worked, every line in it answered 404 - so a new folder of .md files
+		# gets its exception written at the same time as the folder.
+		not path /posts/*
+		# And the path they are WRITTEN to, which is a different string. Measured:
+		# a PUT of a .md under /host/post/ answered 404 rather than the credential
+		# challenge, because this rule reached it first - so the exception for
+		# reading them said nothing about writing them, and a host could not have
+		# posted at all.
+		not path /host/post/*
 	}
 	handle @docs {
 		respond 404
