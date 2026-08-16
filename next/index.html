@@ -620,10 +620,17 @@
   /* Not over a parked deck. `shoving` there means a carriage that has stopped
      and is going to stay stopped, and a lamp over a deck nobody has asked a
      record from is a light left on. */
-  button.play.shoving:not(.parked) .lp-well, button.play.arriving .lp-well {
-    background: radial-gradient(circle closest-side at 50% 38%,
-                                #101018 0 46%, #17171f 84%, #08080c 100%);
-  }
+  /* THERE IS NO RULE HERE, and the absence is the point. A brighter well was
+     drawn while a record was on its way; a later change said in its message that
+     the deck no longer lights up and dimmed this instead of deleting it, so the
+     paragraph and the sheet disagreed - #101018 against a resting #08080c is
+     still a lamp, only a quieter one. The comment was wrong rather than the
+     code, which is the worse way round: the next person reads the paragraph.
+
+     So the well is lit exactly the same whether a record is moving, parked or
+     absent. The record moving is the acknowledgement of the press. What still
+     changes during a change is that the well is VISIBLE at all - that is the
+     rule above, and it is not lighting, it is the record being off the pin. */
   /* No light on an empty deck. The glint is a lamp catching the smooth face of a
      record, and there is no record here to catch it - drawn over the recess it
      is a wedge of light on nothing, which is the one thing on this button that
@@ -1639,7 +1646,22 @@
       // never left the window.
       if (btn.classList.contains('empty')) beginArrival('arrive');
       else if (parked) beginArrival('return');
-      start().catch(() => { setBtn('play'); setLive(false, 'could not start'); });
+      // A press taken back before the first sound is NOT a failure, and treating
+      // it as one disabled this button until the page was reloaded. Stopping
+      // calls pause() and load() on the element, which rejects the play promise
+      // that is still outstanding - so the listener's own second click arrived
+      // here as `could not start`, set disabled, and nothing ever cleared it:
+      // wake() only fires on `playing`, and no poller is running before the
+      // first sound. Every later click was dead.
+      //
+      // AbortError is the name the browser gives that exact case - the play was
+      // interrupted by a new load request - and it is the one rejection that
+      // means the station is fine and the listener changed their mind.
+      start().catch(e => {
+        setBtn('play');
+        if (e && e.name === 'AbortError') return;
+        setLive(false, 'could not start');
+      });
     } else {
       // sleep() by hand rather than trusting the pause EVENT. pause() only
       // QUEUES that event, and load() on the next statement restarts the media
