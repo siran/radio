@@ -190,6 +190,25 @@
   .np.hold { color: var(--dim); font-weight: 500; }
 
   .controls { display: flex; align-items: center; gap: 16px; }
+  /* A switch rather than a button, and the difference is that a switch has a
+     state you can see without pressing it. The face goes IN when it is off -
+     the same inset the deck's own well is drawn with - so silence reads as a
+     thing held down rather than as a thing missing.
+
+     It is the symbol itself, with no label beside it. That is the rule the
+     rest of this page's controls follow, and here it costs nothing: a speaker
+     with waves and a speaker with a cross need no translation.
+
+     Sized against the volume slider it sits beside rather than against the
+     record, which is a different object at a different scale. */
+  .sw { flex: 0 0 auto; width: 34px; height: 27px; padding: 0; cursor: pointer;
+        border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+        display: grid; place-items: center; font-size: 15px; line-height: 1;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 1px 2px rgba(0,0,0,.35);
+        transition: box-shadow 130ms ease, opacity 130ms ease; }
+  .sw[aria-pressed="true"] { opacity: .62;
+        box-shadow: inset 0 2px 5px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.25); }
+  .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   button.play { flex: none; width: var(--lp); height: var(--lp); border-radius: 50%; cursor: pointer;
     border: none; background: #0d0d11; padding: 0;
     display: grid; place-items: center; transition: transform .12s ease; }
@@ -1555,7 +1574,9 @@
           <div class="clocks" id="intotrack">--:-- / --:--</div>
         </div>
         <div class="vol">
-          <span aria-hidden="true">🔉</span>
+          <button type="button" class="sw" id="mute" aria-pressed="false" aria-label="Mute">
+            <span id="muteg" aria-hidden="true">🔊</span>
+          </button>
           <input type="range" id="vol" min="0" max="100" value="85" aria-label="Volume">
         </div>
       </div>
@@ -1630,8 +1651,45 @@
   let stationName = '', stationDesc = '';
   let replyTo = null;   // filename of the message being replied to
 
-  vol.addEventListener('input', () => { audio.volume = vol.value / 100; });
+  // TWO OWNERS OF ONE FLAG, and the rule between them is not symmetrical: the
+  // tug may silence this element, and only the listener may give the sound
+  // back. Written the other way round, a track being voted off in the middle
+  // of somebody's deliberate silence would turn their radio back on.
+  //
+  // Kept as a variable rather than remembered across loads, which is what the
+  // volume beside it does too. A radio that opens silent is a radio that looks
+  // broken, and the argument that saved the switch - that the state is visible
+  // on screen - is weaker on a page somebody has just opened and is not yet
+  // looking at.
+  let userMuted = false;
+
+  // The glyph is the state. Zero on the slider draws the crossed speaker even
+  // with the switch up, because a slider at nothing IS silence and an icon
+  // that said otherwise would be lying about what you can hear.
+  const muteBtn = $('mute'), muteGlyph = $('muteg');
+  function drawMute() {
+    const v = Number(vol.value);
+    muteGlyph.textContent =
+      (userMuted || v === 0) ? '\uD83D\uDD07'
+      : v < 34              ? '\uD83D\uDD08'
+      : v < 67              ? '\uD83D\uDD09'
+                            : '\uD83D\uDD0A';
+    muteBtn.setAttribute('aria-pressed', String(userMuted));
+  }
+
+  vol.addEventListener('input', () => { audio.volume = vol.value / 100; drawMute(); });
   audio.volume = vol.value / 100;
+
+  // mutedAt is declared much further down and is in its temporal dead zone
+  // until then, so this reads it only from the click - which cannot happen
+  // before the page has finished running. At startup neither owner wants
+  // silence and the element is simply left alone.
+  muteBtn.addEventListener('click', () => {
+    userMuted = !userMuted;
+    audio.muted = userMuted || mutedAt > 0;
+    drawMute();
+  });
+  drawMute();
 
   function start() {
     audio.src = '/stream?t=' + Date.now();   // always join live, never a stale buffer
@@ -2677,7 +2735,14 @@
   // radio that is silently off with nothing on screen to say why - the worst
   // thing this mechanism could leave behind - so every path that could reach
   // that state calls this and none of them has to be sure it was needed.
-  function unmute() { mutedAt = 0; audio.muted = false; }
+  //
+  // It gives the sound back to `userMuted` and not to false, which is the one
+  // asymmetry in this: the tug silences and the listener un-silences. A radio
+  // that came back on by itself because a track was voted off would be the
+  // same fault as the one above wearing the opposite sign, and this time there
+  // WOULD be something on screen saying why - the switch, still down, being
+  // contradicted by the sound.
+  function unmute() { mutedAt = 0; audio.muted = userMuted; }
   // What an arrival is booked for before this connection has ever been measured.
   // Only the first press of a cold page uses it, and only until the playing
   // event says how wrong it was. 4400 is the median of five cold starts against
