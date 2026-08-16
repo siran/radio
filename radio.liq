@@ -1232,6 +1232,62 @@ log.important(label = "earlier", "#{list.length(earlier())} events loaded")
 harbor.http.register(port = 8005, method = "GET", "/earlier",
   fun (_, response) -> response.json(earlier()))
 
+# --- crowd skips -----------------------------------------------------------
+# How many times the room has taken this track off. The other half of the
+# sentence the heart starts: a station can already say a track is loved, and
+# this says one keeps being voted off.
+#
+# Kept exactly as the likes are, and deliberately so - same shape, same
+# lifetime, same failure behaviour - because they are the same kind of fact
+# about the same thing, and two facts kept two different ways is how they end
+# up disagreeing. Per file path, for all time, one appended line each, counted
+# in memory and rebuilt from the file at startup.
+#
+# Keyed by PATH and not by title for the reason the likes are: about one track
+# in seven of this library is untagged and comes back with an empty title, so
+# every untagged track would share one pile.
+skips_file = "#{radio_home}/live/skips.jsonl"
+skips = ref([])
+
+def skip_count(p) =
+  list.assoc(default = 0, p, skips())
+end
+
+def bump_skip(p) =
+  n = skip_count(p) + 1
+  skips := list.add((p, n), list.filter(fun (kv) -> fst(kv) != p, skips()))
+end
+
+def record_skip(p) =
+  try
+    file.write(append = true,
+      data = json.stringify(compact = true, { path = p }) ^ "\n", skips_file)
+  catch _ do
+    log.important(label = "skips", "could not write the ledger")
+  end
+end
+
+# One line -> the path it names, or "" for a line that is not one: the empty
+# tail after the last newline, or half a line left by a crash. Parsed per line
+# so one bad line costs itself and not the ledger.
+def skip_path(line) =
+  try
+    let json.parse ( e : { path : string } ) = line
+    e.path
+  catch _ do
+    ""
+  end
+end
+
+list.iter(
+  fun (line) -> begin
+    p = skip_path(line)
+    if p != "" then bump_skip(p) end
+  end,
+  string.split(separator = "\n",
+    try file.contents(skips_file) catch _ do "" end))
+log.important(label = "skips", "#{list.length(skips())} skipped tracks loaded")
+
 # --- the skip tug of war ---------------------------------------------------
 # Public, like the likes below and for the same reason: there is nobody to log
 # in as here, and there was never meant to be. The difference between the two
@@ -1442,6 +1498,13 @@ def tug(dir) =
       # without working out which of two adjacent tracks was voted off.
       earlier_add(earlier_blank().{
         kind = "voted", at = earlier_now(), title = np.title, artist = np.artist })
+      # And on the track itself, for all time, the way a like is. `p` is the
+      # path this counter is keyed by and is already in hand from the top of
+      # tug() - current_file() is asked once there for exactly this reason.
+      if p != "" then
+        bump_skip(p)
+        record_skip(p)
+      end
       library.skip()
     end
   end
@@ -1730,6 +1793,9 @@ def likes_state() =
   e = source.elapsed(library)
   { id       = if p == "" then "" else string.digest(p) end,
     likes    = like_count(p),
+    # The other half of the same sentence, and served in the same breath so a
+    # page can never draw one against a stale copy of the other.
+    skips    = skip_count(p),
     total    = list.fold(fun (n, kv) -> n + snd(kv), 0, likes()),
     pull     = tug_pull(),
     rope     = tug_span,
