@@ -195,34 +195,41 @@
      sound actually begins. It is not a progress bar and does not pretend to be:
      it says heard you, and still coming. */
   button.play { position: relative; }
-  /* Three states the object itself carries, so the words underneath are a
-     caption rather than the only signal:
+  /* Grey means the stream cannot be reached, and this round is it coming to
+     mean only that. It used to be written `not loading and not spinning`, which
+     is a description of a record that is not playing, so every listener who
+     merely pressed pause was handed a grey record - and the owner of this page
+     named what a grey record actually says when he saw one: a greyed label
+     means the stream is unreachable. It is a good thing to be able to say and
+     it was being spent on something else.
 
-       grey and still     nothing is playing
-       black and still    the press landed, the record is on the platter
-       black and turning  sound is coming out
+     So the filter keys off the one condition that is true then and false
+     otherwise, which is the button being disabled. setLive turns the control
+     off when icecast reports no source and when a press could not be started,
+     and those are the two ways this page ever learns there is nothing to
+     listen to.
+
+     Pausing is not one of them. A paused record is red because it is a record.
+     What says it is not playing is that it has been lifted off the pin and
+     stood beside the deck, which is an object having moved rather than a wash
+     laid over one, so the states are kept apart by where the record IS:
+
+       parked, out of the window   nothing is playing
+       on the pin, still           the press landed, sound has not come yet
+       on the pin, turning         sound is coming out
+       grey, whatever it holds     the station is not there
 
      The filter sits on the BUTTON rather than on the disc, so the silver rim
      and the light on it grey out with the vinyl - a bright specular highlight
-     on a grey record reads as a rendering fault rather than as a record that is
-     not playing.
+     on a grey record reads as a rendering fault rather than as a record there
+     is no point pressing.
 
-     620ms because the colour returning is the whole acknowledgement of a press;
-     instant would look like a redraw, and slower would still be arriving when a
-     fast stream has already started turning. The transition is on the button and
-     is therefore killed with everything else under reduced motion, which leaves
-     the states intact and only removes the fade between them. */
-  button.play { filter: grayscale(1) brightness(.72);
-                transition: filter 620ms ease; }
-  button.play.loading, button.play.spinning { filter: none; }
-  /* The three states above are the three states of a record ON the deck, and
-     since this round there is a fourth that is not: a page that has just opened
-     has no record on it at all - see the well below. Nothing is greyed out then
-     because there is nothing there to grey, so the filter comes off entirely
-     rather than being turned down. The first press puts a record on, and from
-     that moment the three states above are the whole of it again for the rest of
-     the session. */
-  button.play.empty { filter: none; }
+     620ms because the colour coming back is the whole announcement that the
+     station has returned; instant would look like a redraw. The transition is
+     on the button and is therefore killed with everything else under reduced
+     motion, which leaves the states intact and only removes the fade. */
+  button.play { transition: filter 620ms ease; }
+  button.play:disabled { filter: grayscale(1) brightness(.72); }
   /* Waiting, with no words in it. The record is on the platter and breathing;
      when sound arrives it stops breathing and starts turning, so the two states
      are never both true and cannot be confused for each other.
@@ -498,6 +505,13 @@
      starts empty, the script's keyframes start at the far end, and there is no
      record to lift off first. */
   .lp-shove.arriving .lp-disc { left: 200%; right: auto; width: 100%; }
+  /* A park and a return use neither of those two rules, and the omission is the
+     whole of what they are. There is one copy and it is left where inset:0 puts
+     it - ON the deck - because a record being taken off starts there and the
+     same record coming back ends there, where the offsets above are for records
+     that are somewhere else at one end of their travel. Both are driven on the
+     carriage exactly as the other two are, and both are the same three moves in
+     opposite orders: off the pin, PARK per cent of a window sideways, stop. */
   /* --- the deck with no record on it --------------------------------------
      A page that has just opened used to show a grey record, and a grey record is
      a claim: it says a record is on the deck and is not playing, which is not
@@ -603,7 +617,10 @@
      never the lighting, it is the record being off the pin - so the middle of a
      change still shows a platter with its post standing in it rather than a
      black porthole. It is simply lit the way it always is. */
-  button.play.shoving .lp-well, button.play.arriving .lp-well {
+  /* Not over a parked deck. `shoving` there means a carriage that has stopped
+     and is going to stay stopped, and a lamp over a deck nobody has asked a
+     record from is a light left on. */
+  button.play.shoving:not(.parked) .lp-well, button.play.arriving .lp-well {
     background: radial-gradient(circle closest-side at 50% 38%,
                                 #101018 0 46%, #17171f 84%, #08080c 100%);
   }
@@ -685,12 +702,29 @@
      already gives: a change ends with a record that may be about to be paused,
      and a play cue under that would be the button saying two things. An arrival
      cannot end that way. It only ever ends with a record that is about to
-     play. */
+     play.
+
+     Three states now, and the third is a record parked beside the deck rather
+     than on it. This triangle is what a paused control shows, and it is the
+     only symbol in the window while it is paused: the paper goes on carrying
+     the pause bars, because a record on this deck carries them from the moment
+     it starts moving until the moment it leaves, and the park takes that paper
+     clear of the window so the two are never both on screen. Nothing pops,
+     because the cue is uncovered BY the record sliding off it rather than
+     switched on afterwards. The measurement that makes that work is in PARK, in
+     the script: the record's trailing edge stops 13.21px short of the nearest
+     ink of this glyph, so neither is ever half drawn.
+
+     Absent when the station is not there, exactly as it is on an empty deck and
+     for the same reason: a deck there is no point pressing should not be the
+     pressable one with the lights turned down. That is what keeps a parked deck
+     on a dead station from reading as a parked deck on a live one. */
   .lp-cue { grid-area: 1 / 1; font-size: var(--cue); visibility: hidden;
             color: rgba(255,255,255,.46);
             transition: color 260ms ease;
             transform: translate(.1211em, .0087em); }
   button.play.empty:not(:disabled):not(.shoving) .lp-cue,
+  button.play.parked:not(:disabled) .lp-cue,
   button.play.arriving .lp-cue { visibility: visible; }
   /* Left at its resting weight during a change for the same reason the well is:
      nothing about the press should light up. It is covered by the record within
@@ -1139,9 +1173,19 @@
      snapped: 2.445px at every one of the seventeen phases, to the thousandth. */
   .lp-sym { grid-area: 1 / 1; font-size: var(--ctl);
             transform: translate(.1211em, .0087em); }
-  button.play.spinning .lp-sym { font-size: calc(var(--ctl) * 1.1152);
-                                 letter-spacing: .2348em;
-                                 transform: translate(.1174em, 0); }
+  /* Keyed off the glyph rather than off the button, and the copies are what
+     forced it. A record travelling onto the deck carries the pause bars
+     whatever the button is doing while it travels, and while it travels the
+     button is `loading` and not `spinning` - so a selector that asked the
+     BUTTON which symbol was printed would set a pair of bars at the triangle's
+     size with none of the letter-spacing that opens the gap the spindle hole
+     sits in, and the hole would rest on both bars at once. That is the fault
+     the 9.50px gap forty lines up was measured to avoid. Whoever writes the
+     glyph writes this class with it, which is the only arrangement in which the
+     metrics cannot disagree with the ink they were measured for. */
+  .lp-sym.bars { font-size: calc(var(--ctl) * 1.1152);
+                 letter-spacing: .2348em;
+                 transform: translate(.1174em, 0); }
   /* The record is the whole face of the button turning with a symbol printed on
      it, which is a great deal of motion, so under reduced-motion it stops
      outright. It is named here rather than being left to
@@ -1574,6 +1618,11 @@
     btn.classList.toggle('spinning', state === 'pause');   // the record turns only while sound is coming out
     sym.textContent = state === 'loading' ? '' :
                       state === 'pause'   ? GLYPH_PAUSE : GLYPH_PLAY;
+    // The bars are set at their own size with their own gap - see .lp-sym.bars
+    // - and the class is written here with the glyph rather than being derived
+    // from the state, because the copies the carriage is built from carry the
+    // bars while the button says `loading`.
+    sym.classList.toggle('bars', state === 'pause');
     btn.setAttribute('aria-label', state === 'loading' ? 'Connecting to the stream' :
                                    state === 'pause'   ? 'Pause' : 'Play');
   }
@@ -1583,11 +1632,13 @@
     if (audio.paused) {
       setBtn('loading');          // before anything else, on the press itself
       tick();                     // and say so, while no poller is running yet
-      // A deck with nothing on it gets a record put on it, and the putting is
-      // what fills the wait for the first sound. Only from the empty state:
-      // after that the record stays on the deck through every pause, which is
-      // what sleep() below is careful not to undo.
-      if (btn.classList.contains('empty')) beginArrival();
+      // A deck with nothing on it gets a record put on it; a deck with one
+      // standing beside it gets that one back. Either way the putting is what
+      // fills the wait for the first sound, and it is the same wait and the
+      // same arithmetic - only the distance differs, because a parked record
+      // never left the window.
+      if (btn.classList.contains('empty')) beginArrival('arrive');
+      else if (parked) beginArrival('return');
       start().catch(() => { setBtn('play'); setLive(false, 'could not start'); });
     } else {
       // sleep() by hand rather than trusting the pause EVENT. pause() only
@@ -1601,7 +1652,15 @@
       // The listener below stays, for every pause this button does not make -
       // the lock screen, a headset button, a stream that drops.
       audio.pause(); audio.removeAttribute('src'); audio.load();
-      setBtn('play'); sleep();
+      // park() as well as sleep(), and it is not a duplicate of the one sleep()
+      // ends with. sleep() returns early when it finds no pollers running,
+      // which is exactly the case for a press taken back before any sound
+      // arrived - and that press still has to put the record wherever it
+      // belongs. park() is idempotent, so the ordinary pause pays nothing for
+      // it. What setBtn writes to the paper is not seen either way: a parked
+      // record is a copy, the real disc is hidden under it, and the paper a
+      // listener can see goes on carrying the bars.
+      setBtn('play'); sleep(); park();
     }
   });
 
@@ -2300,6 +2359,30 @@
   // travels and two seats are the floor for a change and one of each is the
   // floor for an arrival; everything above that is the deck standing empty.
   const TRAVEL = 420, SEAT = 240;
+  // How far out of the window a parked record stands, as a percentage of its
+  // own width. It is not a taste: the window is the button, a circle of the
+  // record's own diameter, and the paper label is .42 of that diameter, so a
+  // record whose centre has gone half a width plus a label radius out has its
+  // label exactly tangent to the window with no part of the paper - and so no
+  // part of the symbol printed on it - inside. 50 + 42/2 = 71, out of two
+  // fractions the record is already built from and not out of a preference.
+  //
+  // Under it the label is cut by the window's edge rather than gone, which
+  // reads as a record with a bite out of it - the same fault this file lost a
+  // round to on the spindle hole. Over it the record is a sliver and stops
+  // being an object standing to one side.
+  //
+  // Both halves of that were read off a sixteen-times raster of the parked
+  // button rather than trusted to the arithmetic, because a box model is no use
+  // for either of them: the disc's own rect is the bounding box of a ROTATED
+  // square and the cue's is the glyph's advance, not its ink. The disc's centre
+  // parks at -23.520px, so its face - a circle of the button's own diameter -
+  // stops 32.48px into a 112px window; the cue's ink begins at 45.69px, which
+  // is 13.21px further in; and the paper, whose centre is the same -23.520px,
+  // leaves nine subpixels of antialiased red at the window's edge and nothing
+  // else. So the parked state is a record BESIDE a triangle and never a record
+  // across one, and the label is out rather than nearly out.
+  const PARK = 71;
   // How far above the platter a record is carried, read off the sheet rather
   // than repeated here so that --seat is the one place it is written. It is a
   // custom property and getPropertyValue returns its raw tokens, so it is set as
@@ -2374,6 +2457,16 @@
   // what the page has been told but is not showing yet.
   let changeUntil = 0, changeCar = null, changeAnim = null, changeTimer = 0;
   let changeArriving = false;
+  // Where in a booked arrival the last carry-and-seat begins, so the `playing`
+  // event can jump to it. Worked out where the arrival is booked rather than in
+  // the handler, because a record returning from the park has PARK per cent of
+  // a window to cross and one arriving from off the window has a whole one.
+  let arriveSeat = 0;
+  // A record lifted off the pin and standing beside the deck. Not the same fact
+  // as an empty deck and not drawn like one: there IS a record, this session
+  // put it there, and pressing play brings that one back rather than fetching a
+  // first one.
+  let parked = false;
   let heldTitle = null, heldSince = 0, heldTrack = null;
   // When this page silenced itself for a skip it saw land, 0 when it has not,
   // and the track it did it for. The id is what stops a station that has taken
@@ -2488,8 +2581,7 @@
     // sound is a state this button has always had and still draws.
     if (!changeArriving) return;
     if (!changeAnim) return endChange(true);
-    const at = changeAnim.effect.getTiming().duration - TRAVEL - SEAT;
-    if (changeAnim.currentTime < at) changeAnim.currentTime = at;
+    if (changeAnim.currentTime < arriveSeat) changeAnim.currentTime = arriveSeat;
   });
 
   // Everything the page was told while the record was being changed, put on
@@ -2515,7 +2607,12 @@
     if (changeTimer) { clearTimeout(changeTimer); changeTimer = 0; }
     if (changeAnim) { changeAnim.onfinish = null; changeAnim.cancel(); changeAnim = null; }
     if (changeCar) { changeCar.remove(); changeCar = null; }
-    btn.classList.remove('shoving', 'arriving');
+    // Including the park. Everything this function takes off the button is a
+    // carriage, and a parked record is one that stopped - so ending it is the
+    // record going back on the pin, which is exactly what a return begins by
+    // doing before it draws the same record travelling in.
+    btn.classList.remove('shoving', 'arriving', 'parked');
+    parked = false;
     if (landed && changeArriving) btn.classList.remove('empty');
     changeArriving = false;
     changeUntil = 0;
@@ -2527,21 +2624,40 @@
     settle();
   }
 
-  // The copies, the angle they inherit, and the travel over them.
-  // Returns false if there is no spin to inherit, which is what reduced motion
-  // leaves behind - the caller then keeps the timing and draws nothing.
-  function carry(total, arriving) {
+  // The copies, the angle they inherit, and the travel over them. Four moves
+  // are built here and they are one mechanism seen from four sides: a change (a
+  // record off, a record on), an arrival (nothing to take off), a park (nothing
+  // to put on) and a return (the parked one coming back).
+  //
+  // A missing spin is no longer a refusal. It used to be - reduced motion takes
+  // the disc's animation away and there was then no angle to inherit - but the
+  // park has to be drawn for those listeners too, and an unrotated copy over an
+  // unrotated record is not a mismatch, it is the same upright record. So the
+  // angle is copied when there is one and the carriage is built either way.
+  function carry(total, mode) {
     const disc = btn.querySelector('.lp-disc');
-    const spin = disc && disc.getAnimations()[0];
-    if (!spin) return false;
+    if (!disc) return false;
+    const spin = disc.getAnimations()[0];
     const car = document.createElement('span');
-    car.className = 'lp-shove' + (arriving ? ' arriving' : '');
+    car.className = 'lp-shove' + (mode === 'arrive' ? ' arriving' : '');
     car.setAttribute('aria-hidden', 'true');
-    for (let i = arriving ? 1 : 0; i < 2; i++) {
+    // Every copy carries the pause bars, in every one of the four moves, and
+    // that is the whole rule: the symbol printed on a record does not change
+    // while it is a record on this deck. It arrives with the bars, turns with
+    // them, is parked with them and leaves with them. Nothing has to be swapped
+    // at the instant the music starts or at the instant it stops, and there is
+    // never a moment where a listener is asked to compare two symbols - the
+    // play affordance is the deck's own cue, printed on the platter, and the
+    // park is what uncovers it.
+    //
+    // It used to copy whatever the disc had, which on an arrival is nothing:
+    // the press clears the symbol to say connecting, so a record travelled in
+    // blank and had a symbol appear on it after it landed.
+    for (let i = mode === 'change' ? 0 : 1; i < 2; i++) {
       const d = car.appendChild(document.createElement('span')); d.className = 'lp-disc';
       const lab = d.appendChild(document.createElement('span')); lab.className = 'lp-label';
-      const s = lab.appendChild(document.createElement('span')); s.className = 'lp-sym';
-      s.textContent = sym.textContent;
+      const s = lab.appendChild(document.createElement('span')); s.className = 'lp-sym bars';
+      s.textContent = GLYPH_PAUSE;
       lab.appendChild(document.createElement('span')).className = 'lp-hole';
     }
     btn.insertBefore(car, btn.querySelector('.lp-glint'));
@@ -2551,8 +2667,13 @@
     // the outgoing one takes over exactly where the record was and the real one
     // is let go of exactly where the incoming one stopped. Each of these
     // elements carries exactly one animation and it is spin.
-    const phase = spin.currentTime;
-    for (const d of car.querySelectorAll('.lp-disc')) d.getAnimations()[0].currentTime = phase;
+    if (spin) {
+      const phase = spin.currentTime;
+      for (const d of car.querySelectorAll('.lp-disc')) {
+        const a = d.getAnimations()[0];
+        if (a) a.currentTime = phase;
+      }
+    }
     changeCar = car;
     // Up, out, wait, in, down. Each move keeps its own length whatever the total
     // is - 420ms to carry, 240ms to lift or to seat - so the whole of the
@@ -2573,7 +2694,7 @@
     // and not of the record: it is twice the hole, which is what the pin has to
     // clear, and neither of those two scales with the disc.
     const at = (x, up) => 'translate(' + x + ', ' + (up ? -LIFT : 0) + 'px)';
-    const t = TRAVEL / total, s = SEAT / total;
+    const t = TRAVEL / total, s = SEAT / total, p = '-' + PARK + '%';
     // THE ARRIVAL MOVES FROM THE FIRST FRAME. There is no hold at the start of
     // it any more.
     //
@@ -2587,19 +2708,38 @@
     // event rather than a wait: a record dropping the last two hole-widths onto
     // a pin takes as long as it takes, and stretching THAT over a slow
     // connection would make it hang in the air.
-    changeAnim = car.animate(arriving ? [
-      { transform: at('-100%', 1), offset: 0 },
-      { transform: at('-200%', 1), offset: 1 - s },
-      { transform: at('-200%', 0), offset: 1 },
-    ] : [
-      { transform: at('0',     0), offset: 0 },
-      { transform: at('0',     1), offset: s },
-      { transform: at('-100%', 1), offset: s + t },
-      { transform: at('-100%', 1), offset: 1 - t - s },
-      { transform: at('-200%', 1), offset: 1 - s },
-      { transform: at('-200%', 0), offset: 1 },
-    ], { duration: total, easing: 'linear', fill: 'forwards' });
-    changeAnim.onfinish = () => endChange(true);
+    //
+    // The park and the return are the same two lists cut short. A park is the
+    // front of a change - lift, then carry - stopped at PARK instead of running
+    // the record out of the window, and a return is the back of an arrival -
+    // carry, then seat - started from there instead of from off the window. So
+    // a record leaves and comes back along one line, at one speed, and the pin
+    // is uncovered for the whole of the time it is away.
+    changeAnim = car.animate(
+      mode === 'arrive' ? [
+        { transform: at('-100%', 1), offset: 0 },
+        { transform: at('-200%', 1), offset: 1 - s },
+        { transform: at('-200%', 0), offset: 1 },
+      ] : mode === 'park' ? [
+        { transform: at('0', 0), offset: 0 },
+        { transform: at('0', 1), offset: s },
+        { transform: at(p,   1), offset: 1 },
+      ] : mode === 'return' ? [
+        { transform: at(p,   1), offset: 0 },
+        { transform: at('0', 1), offset: 1 - s },
+        { transform: at('0', 0), offset: 1 },
+      ] : [
+        { transform: at('0',     0), offset: 0 },
+        { transform: at('0',     1), offset: s },
+        { transform: at('-100%', 1), offset: s + t },
+        { transform: at('-100%', 1), offset: 1 - t - s },
+        { transform: at('-200%', 1), offset: 1 - s },
+        { transform: at('-200%', 0), offset: 1 },
+      ], { duration: total, easing: 'linear', fill: 'forwards' });
+    // A park is the one move here that does not end. The record stays where it
+    // was put until somebody presses play, which is the whole of what a parked
+    // record is, so there is nothing to clear away and nothing to land.
+    if (mode !== 'park') changeAnim.onfinish = () => endChange(true);
     return true;
   }
 
@@ -2648,20 +2788,74 @@
   // being drawn as nothing at all.
   //
   // The deck is lit here rather than in carry(), because carry() is the one part
-  // of this that a listener may not get. Reduced motion and a browser with no
-  // spin to inherit both come out of it having drawn nothing, and a press that
-  // draws nothing is what this whole state exists to stop.
-  function beginArrival() {
+  // of this that a listener may not get: reduced motion refuses the travel, and
+  // a press that draws nothing is what this whole state exists to stop. The
+  // park is the one move that is drawn anyway - its own paragraph says why.
+  //
+  // Two arrivals rather than one, and the second is a record that never left
+  // the window. A parked record has PARK per cent of a window to come back
+  // across where a fresh one has a whole one, so the mechanical floor under it
+  // is smaller by exactly the part of the travel it does not have to make.
+  // Nothing else about the two differs, because the wait they cover is the same
+  // wait: this browser filling its buffer, whichever record is being put on.
+  function beginArrival(mode) {
     endChange(false);
+    const carryMs = mode === 'return' ? TRAVEL * PARK / 100 : TRAVEL;
     const total = Math.min(CHANGE_MAX,
-                           Math.max(TRAVEL + SEAT, recordMinMs, fillMs || FILL_GUESS));
+                           Math.max(carryMs + SEAT, recordMinMs, fillMs || FILL_GUESS));
     changeUntil = Date.now() + total;
     changeArriving = true;
+    arriveSeat = total - carryMs - SEAT;
     btn.classList.add('arriving');
-    if (stillness.matches || !carry(total, true)) {
+    if (stillness.matches || !carry(total, mode)) {
       changeTimer = setTimeout(() => endChange(true), total);
     }
     drawTug();
+  }
+
+  // The record coming OFF the pin, and the one move on this button that covers
+  // no wait at all. The music has already stopped - it stops on the press, as
+  // it always did - so this is drawn at the speed a hand works at and at no
+  // other: 240ms to lift, then PARK per cent of a window at the speed records
+  // are carried at, which is 538ms and is the same 538ms the return has as its
+  // floor. Neither is stretched to anything, because there is nothing to
+  // stretch to.
+  //
+  // Nothing about the record itself changes. It keeps its angle - the copy is
+  // handed the phase exactly as every other copy is, and the real disc under it
+  // is only ever unpaused, never restarted - it keeps its red, and it keeps the
+  // pause bars printed on it. What changes is that it is no longer on the pin,
+  // and what a listener presses next is the deck's own play cue, which the
+  // record uncovers on its way out. One symbol on screen at a time, and the two
+  // are never compared because they are never both in the window.
+  //
+  // The deck does not go back to `empty`. A parked record is a record this
+  // session has already put on, and the opening state - a turntable nobody has
+  // pressed - is not a state playback returns to.
+  //
+  // DRAWN EVEN WHEN MOTION IS REFUSED, which is what makes this different from
+  // every other move here. The others end with the record on the pin, which is
+  // where it already is if nothing was drawn, so refusing them costs a listener
+  // only the travel. This one ends with the record somewhere else, and refusing
+  // it would leave that listener a record on the pin carrying the pause bars
+  // and not turning - which under reduced motion is precisely what PLAYING
+  // looks like, because nothing turns there either. So the carriage is built
+  // either way and only the travel is refused: finish() puts it where the
+  // travel would have left it, in one frame, with no motion to see.
+  function park() {
+    if (parked) return;
+    // A press taken back before the record was down. The arrival is abandoned
+    // rather than parked, and if it was the first press of the session there is
+    // nothing to park: the deck goes back to empty, because that is what
+    // happened.
+    if (changeArriving) {
+      endChange(false);
+      if (btn.classList.contains('empty')) return;
+    }
+    if (!carry(SEAT + TRAVEL * PARK / 100, 'park')) return;
+    parked = true;
+    btn.classList.add('parked');
+    if (stillness.matches) changeAnim.finish();
   }
 
   function showRecord(id, elapsed) {
@@ -3010,11 +3204,10 @@
     //
     // Ended as NOT landed, which matters only in the opening state: somebody who
     // presses play and changes their mind before the record is down gets the
-    // empty deck back, because that is what happened. It is also the reason this
-    // is the only thing sleep() does to the deck. A record that HAS arrived
-    // stays on it for the rest of the session - pausing does not take a record
-    // off a turntable, and the grey filter is already the page's way of saying a
-    // record is on and not playing. Emptying the deck on every pause would make
+    // empty deck back, because that is what happened. What this does NOT do is
+    // empty the deck of a record that arrived. That one is lifted off the pin
+    // and stood beside it at the foot of this function, and it stays in the
+    // session for the rest of it. Emptying the deck on every pause would make
     // the opening state a state playback returns to, which it is not.
     endChange(false);
     // And the sound comes back, because the element is about to be handed to
@@ -3030,6 +3223,16 @@
     fillFrom = 0;
     quiet = true;
     tick();
+    // And the record comes off the pin. It is here rather than on the pause
+    // event because sleep() is the one place every way of stopping arrives at -
+    // the button, the lock screen, a headset, a stream that ends or errors -
+    // and the record has to be parked on all of them. If it were not, the
+    // carriage would be gone (endChange above) and the real disc uncovered
+    // while the page is paused, showing the triangle setBtn writes for the
+    // accessible name; the paper a listener can see must go on carrying the
+    // bars. It is last because endChange at the top of this function would end
+    // the carriage it builds.
+    park();
   }
 
   audio.addEventListener('playing', wake);
