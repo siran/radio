@@ -1133,6 +1133,18 @@ import relays.caddy
 	# Likes. The /control block again with a different path and, on purpose, NO
 	# `import speakers`: anyone listening can like, there is no account to have
 	# and nothing here can change what is on the air. Same harbor as above.
+	# What happened earlier: what played, what the room voted off, and when
+	# somebody went live. Public and READ ONLY - it is the station's own record,
+	# and nothing outside liquidsoap ever writes it.
+	#
+	# No rate limit, unlike its neighbours below. Those meter because a POST
+	# appends a line to a file; this is a GET of a list the station already holds
+	# in memory, capped at sixty, and metering it would only punish a page that
+	# reloads.
+	handle /earlier {
+		reverse_proxy 127.0.0.1:8005
+	}
+
 	handle /likes/* {
 		# A POST appends a line to a file, so it gets the same metering as
 		# every other public write. It has to be inside an explicit `route`:

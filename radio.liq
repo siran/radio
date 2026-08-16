@@ -1137,6 +1137,101 @@ def chat_say(name, text) =
   end
 end
 
+# --- what happened earlier -------------------------------------------------
+# The station's own record of its evening: what played, what the room voted
+# off, and when somebody went live.
+#
+# Kept HERE rather than in each page, and that is the whole point. A list a
+# browser remembers starts empty for everybody who arrives, so a listener who
+# tunes in now is told the station has played nothing - the opposite of what
+# "earlier" means. Kept here it is the same for the room, and somebody who has
+# just arrived can see the hour they missed.
+#
+# In live/, the one folder svc-radio may write, and append-only for the two
+# reasons the likes ledger is: one small write per event however long the
+# station has been up, and nothing a crash can half-rewrite.
+#
+# ONE SHAPE for every event, with a `kind` to tell them apart and empty strings
+# where a field does not apply. Not tidiness - a liquidsoap list is uniform, so
+# three record types could not share one list or one response at all. `kind` is
+# what lets a page draw a vote-off differently from a track without inspecting
+# which fields happen to be filled in.
+earlier_file = "#{radio_home}/live/earlier.jsonl"
+
+# What is served. The file grows for as long as the station runs; a page asking
+# what happened earlier wants the last hour, not the last month, and a phone
+# should not be handed a megabyte to draw forty lines from.
+earlier_max = 60
+earlier = ref([])
+
+def earlier_blank() =
+  { kind = "", at = "", title = "", artist = "", name = "" }
+end
+
+# Newest LAST, the order the file is written in and the order a log reads in.
+# A page wanting newest-first can reverse forty items; a station storing them
+# backwards has to think about it on every append.
+def earlier_add(e) =
+  kept = list.append(earlier(), [e])
+  n = list.length(kept)
+  earlier := if n > earlier_max then list.tl(kept) else kept end
+  try
+    file.write(append = true,
+      data = json.stringify(compact = true, e) ^ "\n", earlier_file)
+  catch _ do
+    # The same rule as the likes ledger: an evening of history is not worth
+    # taking the station off the air for, and the copy above is already
+    # updated - so a failed write costs the restart, not the broadcast.
+    log.important(label = "earlier", "could not write the log")
+  end
+end
+
+# The clock, in the format the chat lines already use.
+def earlier_now() =
+  t = time.utc()
+  "#{t.year}-#{pad2(t.month)}-#{pad2(t.day)}T#{pad2(t.hour)}:#{pad2(t.min)}:#{pad2(t.sec)}.000Z"
+end
+
+# One line -> one event, or nothing. Parsed per line so a half-written tail
+# costs that line and not the evening, which is what the likes ledger learned.
+def earlier_parse(line) =
+  try
+    let json.parse ( e : {
+      kind : string, at : string, title : string, artist : string, name : string
+    } ) = line
+    [e]
+  catch _ do
+    []
+  end
+end
+
+# Read back at startup so a restart does not erase the evening.
+def earlier_load() =
+  raw =
+    try
+      string.split(separator = "\n", file.contents(earlier_file))
+    catch _ do
+      []
+    end
+  all = list.flatten(list.map(earlier_parse, raw))
+  n = list.length(all)
+  # Only the tail. Dropping from the front one at a time rather than reaching
+  # for a slice: the list is at most a few thousand long once a day, this runs
+  # once at startup, and it needs no function this build may not have.
+  def rec drop_to(l) =
+    if list.length(l) > earlier_max then drop_to(list.tl(l)) else l end
+  end
+  earlier := if n > earlier_max then drop_to(all) else all end
+end
+earlier_load()
+log.important(label = "earlier", "#{list.length(earlier())} events loaded")
+
+# Public, like the likes and the tug, and for the same reason: there is nobody
+# to log in as, and what played is not a secret. The file PATH never goes out -
+# only a title and an artist, which is what a page shows anyway.
+harbor.http.register(port = 8005, method = "GET", "/earlier",
+  fun (_, response) -> response.json(earlier()))
+
 # --- the skip tug of war ---------------------------------------------------
 # Public, like the likes below and for the same reason: there is nobody to log
 # in as here, and there was never meant to be. The difference between the two
@@ -1342,6 +1437,11 @@ def tug(dir) =
           "🔁 #{np.title} — #{np.artist} 👋"
         end
       chat_say("🔁", msg)
+      # Its own kind. The track event records what STARTED; this records what
+      # the room did to the one before it, so a page can mark that entry
+      # without working out which of two adjacent tracks was voted off.
+      earlier_add(earlier_blank().{
+        kind = "voted", at = earlier_now(), title = np.title, artist = np.artist })
       library.skip()
     end
   end
@@ -1415,10 +1515,24 @@ end
 # time it asks. Clearing is then a POST with no parameters at all, which the
 # harbor answers - a bare trailing `?` with nothing after it is the one shape
 # it does not, and comes back 404.
+# Remembers the last name recorded in the log, so a host editing their note
+# five times does not put five entries in it. Reset on disconnect with the
+# rest of the show, so the same name next week is a new show and says so.
+show_logged = ref("")
+
 def show_set(req) =
   show_name  := show_clip(60,  req.query["name"])
   show_title := show_clip(120, req.query["title"])
   show_note  := show_clip(240, req.query["note"])
+  # Into the log the first time a live show is given a name. Not on every
+  # keystroke - the console saves as you type - and not when nobody is live,
+  # which is a host filling the boxes in before they go on.
+  if connected() and show_name() != "" and show_name() != show_logged() then
+    show_logged := show_name()
+    earlier_add(earlier_blank().{
+      kind = "show", at = earlier_now(),
+      name = show_name(), title = show_title() })
+  end
   log.important(label = "show",
     if show_name() == "" and show_title() == "" and show_note() == "" then
       "cleared"
@@ -1706,7 +1820,16 @@ live = input.harbor(
   # dropped rather than ridden through. Five is chosen for a host who starts
   # and stops often, which is what the first session actually looked like.
   timeout       = 5.0,
-  on_connect    = fun (_) -> connected := true,
+  on_connect    = fun (_) -> begin
+    connected := true
+    # The show metadata is almost always empty at this instant - a host presses
+    # Go on air first and names the show afterwards, if at all - so this says
+    # somebody went live and show_set records what they called it. Two events,
+    # because they are two things that happened, and a host who never types a
+    # name still appears here.
+    earlier_add(earlier_blank().{
+      kind = "live", at = earlier_now(), name = show_name() })
+  end,
   # The show goes with the source, and this is the only place that can end
   # it. Nothing a host types carries a time, so a name left standing after
   # the socket went is a listener being told a show is on while the room is
@@ -1718,6 +1841,7 @@ live = input.harbor(
     # closed mid-mute would otherwise leave the next source, of any kind,
     # unable to duck the music.
     live_open  := true
+    show_logged := ""
     show_name  := ""
     show_title := ""
     show_note  := ""
@@ -2456,6 +2580,11 @@ def forward_meta(m) =
     remember(now_file())
   end
   now_file := m["filename"]
+  # Recorded off the DELAYED source, because forward_meta hangs off it - so the
+  # timestamp is when a listener hears the track begin rather than when the
+  # library handed it over, and those are air_delay apart.
+  earlier_add(earlier_blank().{
+    kind = "track", at = earlier_now(), title = n.title, artist = n.artist })
   # The new title reaches the stream first; the announcement is about
   # the one before it and can wait the millisecond a file write takes.
   announce(m)
