@@ -3984,7 +3984,18 @@
     if (!airMicGain || !airAC) return;
     if (!airTalking) {
       try {
-        if (!airMicFn.opened) {
+        // airMicFn EXISTS ONLY ON THE TAB PATH, where the microphone is opened
+        // lazily on the first press. With the microphone as the source it was
+        // opened when the broadcast started and is already wired through the EQ
+        // into this very gain, so there is nothing to open and the guard simply
+        // steps over it.
+        //
+        // Without the null check this threw a TypeError, which the catch below
+        // dutifully reported as 'the microphone would not open' - so the one
+        // path where the microphone was definitely already open was the one path
+        // that could not be switched on. Reported as: "open my mic seems not to
+        // work, i can't enable it".
+        if (airMicFn && !airMicFn.opened) {
           airEq = eqChain(airAC);
           airEq.ac = airAC;
           eqChains.push(airEq);
