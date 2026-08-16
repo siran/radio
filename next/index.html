@@ -55,10 +55,11 @@
        exact measurements they were cut to at eighty-four - 20.41px of symbol and
        4.61px of hole - and the red grows around them instead of with them. The
        clearances round that hole are the reason both numbers are frozen, and they
-       are now 2.05 to 2.51px of white inside the triangle and 2.45px of red
-       between the hole and each pause bar, measured off the rendered button and
-       not derived. The white is a range and the red is not, which is a fact about
-       the raster rather than about the drawing; the symbol explains it.
+       are now 2.35px of white inside the triangle and 2.45px of red between the
+       hole and each pause bar, measured off the rendered button and not derived.
+       The white moves with where the button lands on the page and the red does
+       not, which is a fact about the raster rather than about the drawing; the
+       symbol explains it.
        Scale them with the disc and the bars grow by a third too, and the
        label ends up exactly as full as it started, which is what was asked to
        change. */
@@ -155,6 +156,15 @@
     display: grid; place-items: center; transition: transform .12s ease; }
   button.play:hover:not(:disabled) { transform: scale(1.05); }
   button.play:disabled { opacity: .28; cursor: not-allowed; }
+  /* An empty deck that cannot be pressed keeps more of itself than a record that
+     cannot. .28 was chosen for a disc with grooves and a label on it, where a
+     quarter of the contrast still leaves a recognisable object; a recess has
+     almost no contrast of its own to spend and at .28 it goes to a flat grey
+     coin in the light theme, which reads as a missing image rather than as a
+     turntable nobody can start. Half is enough to keep the dish and the pin,
+     and the state is carried anyway by the thing that is missing rather than by
+     the light: there is no play cue on it. */
+  button.play.empty:disabled { opacity: .5; }
   /* The stream takes a moment to arrive however fast the server is - TLS, then
      the first audio, then whatever the browser wants buffered before it makes a
      sound. Pressing a button that sits there looking unpressed is the worst part
@@ -182,6 +192,14 @@
   button.play { filter: grayscale(1) brightness(.72);
                 transition: filter 620ms ease; }
   button.play.loading, button.play.spinning { filter: none; }
+  /* The three states above are the three states of a record ON the deck, and
+     since this round there is a fourth that is not: a page that has just opened
+     has no record on it at all - see the well below. Nothing is greyed out then
+     because there is nothing there to grey, so the filter comes off entirely
+     rather than being turned down. The first press puts a record on, and from
+     that moment the three states above are the whole of it again for the rest of
+     the session. */
+  button.play.empty { filter: none; }
   /* Waiting, with no words in it. The record is on the platter and breathing;
      when sound arrives it stops breathing and starts turning, so the two states
      are never both true and cannot be confused for each other.
@@ -193,6 +211,13 @@
   @keyframes lpwait { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
   button.play.loading { animation: lpwait 1.15s ease-in-out infinite; }
   button.play.loading { cursor: progress; }
+  /* Not while a record is on its way onto the deck. The pulse says the record is
+     on the platter and waiting, and during an arrival it is not on the platter -
+     the arrival itself is saying the same thing better, with an object moving.
+     Two things saying wait at once, one of them by fading the other in and out,
+     is worse than either. It comes back the moment the record lands, which is
+     the moment the pulse's own sentence becomes true again. */
+  button.play.loading.shoving { animation: none; }
   /* The ring that used to sit here is gone. A record coming up to speed says
      the same thing - heard you, still coming - with the object already on
      screen rather than a second spinner laid over it. */
@@ -268,7 +293,7 @@
      clear of the spindle hole to a pixel and a half, and the play triangle from
      1.80px of white around it to 2.39px. Both of those numbers have since moved
      and the second of them was never rendered by anything: the clearances the
-     button actually draws are 2.45px of red and 2.05 to 2.51px of white, and
+     button actually draws are 2.45px of red and 2.35px of white, and
      where they come from is set out down at the symbol. Measured off the rendered button over the
      band each field actually occupies, the sixteen come out at 16.8 levels of
      contrast against the seventeen's 18.1, with the angular scatter that tells a
@@ -339,12 +364,26 @@
   }
   button.play.spinning .lp-disc { animation-play-state: running; }
   /* --- a record being changed --------------------------------------------
-     The next record comes in from the right and shoves the one that was
-     playing out of the window. One axis, one constant speed, a hard start and
-     a hard stop: nothing here is eased, because easing is what makes a change
-     look designed, and this one is meant to look like a mechanism.
+     The record that was playing goes out of the window to the left, the deck
+     stands empty, and then the next one comes in from the right and stops dead
+     centre. One axis, one constant speed, a hard start and a hard stop:
+     nothing here is eased, because easing is what makes a change look designed,
+     and this one is meant to look like a mechanism.
 
-     Both records in the shove are COPIES, built for it and thrown away after
+     The empty deck in the middle is the whole point of this round, and it is
+     not a pause put in for looks. A track change on this station happens at the
+     source, and the sound of it does not reach a listener until the station's
+     own delay and icecast's burst and that browser's own buffer have all been
+     paid - which is several seconds, is different for every listener, and used
+     to be spent with the page already showing the new title and the new clock
+     while the old song was still in the ear. So the change of record is stretched
+     to fill exactly that interval instead: it starts when the page is told, and
+     the new record lands when the new music does. What was 420ms of flourish at
+     the START of the gap is now a mechanism that COVERS it. The script works out
+     how long that is, per listener, and hands the length in - see the comment
+     over beginChange for where each part of that number comes from.
+
+     Both records in the change are COPIES, built for it and thrown away after
      it, and the real disc above is hidden for its length. That is the whole
      reason they exist rather than the disc being moved: the disc carries the
      spin, its angle is the one thing on this button that must survive a track
@@ -352,27 +391,142 @@
      moving it in the DOM and transforming it would throw that angle away. The
      script hands the copies the angle instead, so nothing snaps upright.
 
+     Nothing turns while the record is being changed. Every disc on the button,
+     the two copies and the hidden real one, is held at that one angle by the
+     play-state rule below, and the real one is let go of again at the instant
+     the new record lands. A record being carried is not spinning, a record on
+     the platter is, and this is the difference between the two being drawn.
+     Because all three are frozen at the same angle and the real one is never
+     restarted - only unpaused - the label picks up from exactly where the
+     incoming copy left it and there is no snap at the handover.
+
      The window is the button itself, clipped only while this runs. It is a
-     circle, so the two records pass through a porthole and the button's own
-     black opens between them around halfway. That seam is not covered up: it
-     is the gap between two objects in a slot, and it is the clearest thing in
-     the shove that says there are two records rather than one picture sliding.
+     circle, so the records pass through a porthole and the button's own black is
+     what stands there between them. That black is not covered up and is not
+     decorated: an empty platter is what a deck with no record on it looks like,
+     and it is the clearest possible statement that the next one has not arrived.
 
-     420ms is 267px/s across the 112px face - slow enough to read as an object
-     being carried, short enough that the button is back under a finger before
-     anybody reaches for it.
+     420ms per travel is 267px/s across the 112px face - slow enough to read as
+     an object being carried, and unchanged from when it was the whole animation,
+     because the speed a hand moves a record at does not depend on how long the
+     next one takes to arrive. Two travels is therefore 840ms and that is the
+     floor: a change cannot be drawn shorter than the time it takes to carry two
+     records at the speed records are carried at.
 
-     The incoming copy is offset with `left` rather than a transform, and that
-     is not a preference: the copies are still turning, spin drives transform,
-     and one property cannot be driven by an animation and a static value at
-     once - the same collision the waiting pulse above avoids by using opacity.
-     Left means width as well, because inset:0 sizes these from both edges. */
-  @keyframes lpshove { to { transform: translateX(-100%); } }
+     The copies are offset with `left` rather than a transform, and that is not a
+     preference: the copies carry spin, spin drives transform, and one property
+     cannot be driven by an animation and a static value at once - the same
+     collision the waiting pulse above avoids by using opacity. Left means width
+     as well, because inset:0 sizes these from both edges. 200% rather than 100%
+     is what opens the empty deck: at -100% the outgoing record has just cleared
+     the window and the incoming one has not reached it.
+
+     There are no @keyframes here any more. The three-part travel has offsets
+     that depend on a duration only the script knows, so it is written with the
+     Web Animations API instead, where a keyframe can be handed an offset at the
+     moment it is built. That has a second effect worth knowing: the blanket
+     `animation: none !important` at the foot of this sheet cannot touch a script
+     animation, so the carriage can no longer be stranded by it. Reduced motion
+     is still refused in the script, because it should be, but it is now a
+     preference being honoured rather than a hazard being avoided. */
   button.play.shoving { overflow: hidden; }
   button.play.shoving > .lp-disc { visibility: hidden; }
-  .lp-shove { position: absolute; inset: 0; pointer-events: none;
-              animation: lpshove 420ms linear; }
-  .lp-shove .lp-disc + .lp-disc { left: 100%; right: auto; width: 100%; }
+  button.play.shoving .lp-disc { animation-play-state: paused; }
+  .lp-shove { position: absolute; inset: 0; pointer-events: none; }
+  .lp-shove .lp-disc + .lp-disc { left: 200%; right: auto; width: 100%; }
+  /* An arrival has nothing leaving, so it is built with one copy instead of two
+     and that copy is the one waiting off to the right. Same element, same
+     travel, same speed - the only difference is that the window starts empty
+     and the script's keyframes start at the far end. */
+  .lp-shove.arriving .lp-disc { left: 200%; right: auto; width: 100%; }
+  /* --- the deck with no record on it --------------------------------------
+     A page that has just opened used to show a grey record, and a grey record is
+     a claim: it says a record is on the deck and is not playing, which is not
+     what is true of a station nobody has pressed play on yet. What is true is
+     that there is a turntable and nothing is on it. The owner of the page put it
+     in one line - there is no grey record, there is only the place where you put
+     the record - and this is that place.
+
+     It is a recess and a spindle pin, and nothing else. The bowl is darker than
+     the button's own face and carries an inner shadow at the top and a hairline
+     of light at the bottom, which is what a dish lit from above does and is the
+     whole of why it reads as a hole rather than as a black circle. The pin is
+     exactly --hole across, because it is the thing the hole is punched for; a
+     pin that did not match the hole would be a pin no record on this page could
+     be put on.
+
+     The play triangle sits here too, and it is the same glyph at the same size
+     with the same centring correction as the one printed on the paper - so the
+     symbol does not move, resize or shift when the record arrives under it. It
+     only changes what it is printed on. That is also why the pin is written
+     after it and given a position of its own: a spindle stands proud of whatever
+     is drawn on the platter, exactly as the hole is punched through whatever is
+     printed on the paper, and the rule that makes one work makes the other.
+
+     Three states this has to keep apart, and they are kept apart by what is
+     drawn rather than by how brightly:
+
+       empty and pressable    the recess, the pin, and the triangle
+       empty and not          the recess and the pin, and no triangle at all
+       a record on the deck   none of this; the disc covers it
+
+     The middle one is a station that is not answering, and it must not be the
+     first one with the lights turned down. So the triangle is not dimmed there,
+     it is absent: an empty deck with no cue on it is a deck there is no point
+     pressing, which is exactly the fact. The button's own disabled fade is still
+     underneath and says the same thing again in the way the rest of the page
+     says it.
+
+     It is shown for the change of record as well, and that is not a second job.
+     The empty window in the middle of a change IS this deck - the record has
+     been taken off and the next one has not arrived - so what stands there is
+     the platter and its pin rather than a plain black hole, which is what it
+     used to be. The triangle does not come with it: during a change the state
+     of the control is whatever the record is about to carry, and a play cue
+     under a record arriving to be paused would be the button saying two things.
+     */
+  .lp-well {
+    position: absolute; inset: 0; border-radius: 50%; visibility: hidden;
+    display: grid; grid-template: 1fr / 1fr;
+    justify-items: center; align-items: center; line-height: 1;
+    background: radial-gradient(circle closest-side at 50% 38%,
+                                #08080c 0 46%, #101017 84%, #06060a 100%);
+    box-shadow: inset 0 7px 11px -2px rgba(0,0,0,1),
+                inset 0 -4px 7px -3px rgba(255,255,255,.16),
+                inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  button.play.empty .lp-well, button.play.shoving .lp-well { visibility: visible; }
+  /* No light on an empty deck. The glint is a lamp catching the smooth face of a
+     record, and there is no record here to catch it - drawn over the recess it
+     is a wedge of light on nothing, which is the one thing on this button that
+     has ever read as a rendering fault rather than as an object. It is off for
+     the whole of a change of record too, because the middle of a change is this
+     same empty deck and a highlight that survives the record leaving is a
+     highlight that was never on the record. */
+  button.play.empty .lp-glint, button.play.shoving .lp-glint { visibility: hidden; }
+  button.play.empty > .lp-disc { visibility: hidden; }
+  .lp-cue { grid-area: 1 / 1; font-size: var(--ctl); visibility: hidden;
+            color: rgba(255,255,255,.46);
+            transform: translate(.1211em, .0087em); }
+  button.play.empty:not(:disabled):not(.shoving) .lp-cue { visibility: visible; }
+  /* Metal, not a light. A first pass drew this bright enough that it read as a
+     bead or a lamp rather than as a post, and on an empty deck it was the only
+     lit thing on the button, which is a great deal of attention for the one part
+     of a turntable nobody looks at. Dulled until it reads as what it is: a short
+     steel pin catching the same lamp everything else on this button is lit by,
+     with the shadow it casts on the platter around it.
+
+     The dark ring round it is the same device the spindle hole uses on the paper
+     and it is here for the same reason. The play cue is printed around this pin
+     exactly as the symbol is printed around the hole, and grey metal inside grey
+     ink reads as a bead ON the triangle rather than as a post standing through
+     it - which is a version of the mistake this file lost a whole round to on
+     the label. One pixel of black separates them and the shape resolves. */
+  .lp-pin { grid-area: 1 / 1; position: relative;
+            width: var(--hole); height: var(--hole); border-radius: 50%;
+            background: radial-gradient(circle closest-side at 45% 35%,
+                                        #9d9da8 0 30%, #6a6a75 62%, #43434c 100%);
+            box-shadow: 0 0 0 1px rgba(0,0,0,.85), 0 1px 2px rgba(0,0,0,.7); }
   /* The highlight is light landing on the record, not something printed on it. A
      specular reflection comes from a lamp somewhere in the room and a lamp does
      not go round with the turntable, so the streak has to stay where it is while
@@ -529,7 +683,7 @@
      its box but its centroid, a third of the way from base to apex, and about the
      centroid the clearance on the triangle drawn here measures 4.36 to 4.81px. The
      second is that the hole was wider than it had to be. At 4.61px across it leaves
-     between 2.05 and 2.51px of white all the way round at the tightest point, and
+     2.35px of white all the way round at the tightest point, and
      at true size that reads as a spindle hole showing through printed label art,
      which is what it is. That white was 1.80px two rounds ago and the triangle has
      grown twice while the hole has not, which is the whole of the difference. A
@@ -607,10 +761,11 @@
      allowed to touch: the whole of the change is the symbol growing around a hole
      that stayed where it was and stayed the size it was, and a hole that grew with
      the symbol would have bought no clearance at all. What that fixed width now
-     leaves is 2.05 to 2.51px of white all round it inside the triangle and 2.45px
-     of red on either side of it between the bars - near enough the same margin
-     whichever symbol is printed round it, where before this round the pause got
-     barely half what the play did.
+     leaves is 2.35px of white all round it inside the triangle and 2.48px of red
+     on either side of it between the bars, both measured on a sixteen-times
+     raster at the phase the page loads at - near enough the same margin whichever
+     symbol is printed round it, where two rounds ago the pause got barely half
+     what the play did.
 
      Those two margins do not have to be equal to read as equal, and in neither
      theme do they. Measured off the rendered button, in the dark theme the hole's
@@ -681,32 +836,55 @@
      fixed pixels so that the symbol still travels if the record is ever resized,
      even though here it was the symbol that decided the record's size.
 
-     The height is the axis the two symbols share, and the scaleX below is written
-     the way it is so that they go on sharing it. Equal height had been taken for
-     equal size, and on the raster it was not: the triangle inked 14.25px wide at
-     15.94px tall, near enough square to read as square, where the pair of bars it
-     turns into inked 19.50px at the same height and now inks 21.38px. One portrait
-     and one landscape, so pressing the control swapped between two different
-     footprints with nothing in the resting shape to say which way it would go.
-     Stretching the triangle to 18.00px wide, nine eighths of its own height, is
-     what puts that warning in - not all the way to the bars' own width, which
-     blunts the apex and stops it reading as a triangle at all, but far enough that
-     the eye reads it as the same landscape shape. It is a stretch and not a larger font
-     size on purpose: a larger font size would have taken the height with it and
-     made the pause the smaller of the two controls again, which is the thing the
-     paragraph above buys with two font sizes and is not for sale. What the triangle
-     gains is 26 per cent of width and 26 per cent of ink, and the eye gets a shape
-     that already sits across the ground the bars will stand on.
+     The height is the axis the two symbols share, and it is now the only axis
+     either of them is set on. A round of this file stretched the triangle
+     horizontally - scaleX(1.2632), out to 18.00px wide against its own 15.94px
+     tall - on the argument that the pair of bars it turns into inks 21.38px wide
+     at that same height, so the control swapped between a portrait footprint and
+     a landscape one with nothing in the resting shape to say which way it would
+     go. The argument was sound and the drawing was not. It was rendered, the
+     owner of this page looked at it, and the verdict was one line: the elongated
+     triangle was a bad idea, use standard play and pause symbols and make sure
+     they fit in the red label. So the glyphs are drawn at the proportions the
+     font cut them at and nothing here scales either of them. A play triangle is
+     the one shape on this page that everybody already knows, and a control built
+     so that it needs no words cannot afford to redraw it into something that has
+     to be recognised afresh.
 
-     Stretching it also pays the hole, which is the one thing about this that is
-     not obvious. A right pointing triangle's clearance about its centroid is set by
-     its two slanted edges, and stretching it horizontally lays those edges flatter
-     without moving the centroid off the hole - so the white round the hole goes UP
-     as the triangle widens rather than being spent. Rendered at every sixteenth of
-     a pixel of layout phase, it gains 0.165px at every one of them: 1.90 to 2.33px
-     of white before the stretch and 2.05 to 2.51px after it. The base edge is not
-     close to binding either way; it stands 6.06px off the hole where the slants
-     stand 4.81px at their best and 4.36px at their worst.
+     What that costs is written down rather than argued away. The triangle inks
+     14.25px wide at 15.94px tall, near enough square to read as square, and the
+     bars ink 21.38px at the same height, so the two footprints do differ and the
+     resting shape does not forecast the pressed one. That is what a play button
+     looks like everywhere else, and it is not a fault of this record.
+
+     It costs the hole a little as well, and that is the part the stretch was
+     quietly paying for. A right pointing triangle's clearance about its centroid
+     is set by its two slanted edges, and stretching it horizontally laid those
+     edges flatter without moving the centroid off the hole, so the white round
+     the hole went UP as the triangle widened - by 0.165px, on the round that put
+     the stretch in.
+
+     Measured again this round, off the button as the page loads it, on a
+     sixteen-times device raster in the dark theme, the unstretched symbol leaves
+     2.349px of white between the hole and the nearest edge of the triangle and
+     the pause bars leave 2.476px of red. The hole is 4.61px across, the base edge
+     was never close to binding either way, and both figures are well over the
+     1.51px this file has on record as the width at which a gap stops reading as a
+     gap and starts reading as an accident.
+
+     One honest hole in that. The ranges this file quotes for these clearances -
+     1.90 to 2.33px unstretched, 2.05 to 2.51px stretched - come from sweeping
+     the button through a whole pixel of layout phase, and that sweep was NOT
+     reproduced this round. It cannot be done the way the button was captured
+     here: at sixteen device pixels to the CSS pixel a sixteenth-pixel shift is a
+     whole device pixel, so the glyph and the paper move together and nothing
+     snaps against anything - seventeen phases were rendered and all seventeen
+     measured identically, which is the instrument reporting its own resolution
+     rather than the button holding still. The figures above are therefore ONE
+     phase and not the worst one, and if the worst case ever matters again it has
+     to be measured on a one-times raster with the sub-pixel position estimated
+     off the antialiasing, which is a different instrument from this one. */
+  /* --- the two transforms -------------------------------------------------
 
      The transforms are what put the hole inside the symbol rather than merely near
      it, and they differ between the states because the two shapes do. Horizontally,
@@ -722,14 +900,19 @@
      at sixteen times scale rather than taken from the font's published metrics,
      because what is being lined up is where the pixels land.
 
-     The horizontal one does not simply follow the stretch. Scaling about the box
-     centre multiplies the centroid's offset from it, so .1211em ought to become
-     .1211 x 1.2632 = .1530em; at .1530em the ink comes out an eighth of a pixel to
-     the left and at .1570em it measures right. That eighth of a pixel is glyph
-     positions landing on the raster, and it is why these are measurements of this
-     size and of no other. If --lp or --ctl is ever changed they are the first
-     things to re-read, off the rendered button in both states, never taken from
-     the font's metrics or from the shape's own geometry.
+     The horizontal one is .1211em, and undoing the stretch meant going back to
+     that number rather than dividing the stretched one down. While the triangle
+     was scaled, the scale multiplied the centroid's offset from the box centre,
+     so .1211 x 1.2632 = .1530em was the arithmetic and .1570em was what actually
+     measured right - an eighth of a pixel apart, because glyph positions land on
+     the raster and geometry does not get the last word. .1570 / 1.2632 lands back
+     at .1243em rather than at .1211em, which is that same eighth of a pixel
+     travelling in the other direction, and .1211em is the value that was read off
+     the unstretched glyph on a rendered button. It is therefore the one to use
+     for an unstretched glyph. Both numbers are measurements of this size and of
+     no other: if --lp or --ctl is ever changed they are the first things to
+     re-read, off the rendered button in both states, never taken from the font's
+     metrics or from the shape's own geometry.
 
      The vertical one is a different animal and this round found out why. It is NOT
      a constant of the design and cannot be made one. Text ink snaps to whole device
@@ -742,7 +925,12 @@
      pixel just re-labels which phases land where: measured at every sixteenth of a
      pixel of phase, the white inside the triangle averages 2.27px whatever this
      number is, and the whole of the effect is on the spread. .0087em keeps that
-     spread at 2.05 to 2.51px. Values that centre the ink at the commonest phase
+     spread at 2.05 to 2.51px, which was measured while the triangle was stretched;
+     take the stretch's 0.165px back off and it is the 1.90 to 2.33px the
+     unstretched glyph was recorded at before the stretch went in. It is left
+     unchanged because the argument it settles is about which phases land where
+     and not about the width itself, and because that sweep was not redone this
+     round - the paragraph over .lp-sym says why. Values that centre the ink at the commonest phase
      were rendered and rejected for making the worst phase worse - .0300em looks
      perfect on the page as it usually loads and drops to 1.65px when a title wraps.
      The best any value can do for the worst case is 2.09px, so .0087em is within a
@@ -764,7 +952,7 @@
      letter-spacing, which is horizontal, and horizontal glyph placement is not
      snapped: 2.445px at every one of the seventeen phases, to the thousandth. */
   .lp-sym { grid-area: 1 / 1; font-size: var(--ctl);
-            transform: translate(.1570em, .0087em) scaleX(1.2632); }
+            transform: translate(.1211em, .0087em); }
   button.play.spinning .lp-sym { font-size: calc(var(--ctl) * 1.1152);
                                  letter-spacing: .2348em;
                                  transform: translate(.1174em, 0); }
@@ -1004,7 +1192,7 @@
       </div>
       <div class="controls">
         <div class="deck">
-          <button class="play" id="btn" disabled aria-label="Play or pause"><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-sym" id="btnsym">▶</span><span class="lp-hole"></span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
+          <button class="play empty" id="btn" disabled aria-label="Play or pause"><span class="lp-well" aria-hidden="true"><span class="lp-cue">&#9654;</span><span class="lp-pin"></span></span><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-sym" id="btnsym">▶</span><span class="lp-hole"></span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
           <div class="clocks" id="intotrack">--:-- / --:--</div>
         </div>
         <div class="vol">
@@ -1080,6 +1268,7 @@
   const audio = $('audio'), btn = $('btn'), vol = $('vol');
   const sym = $('btnsym');
   let lastTitle = null, titleSince = Date.now();
+  let stationName = '', stationDesc = '';
   let replyTo = null;   // filename of the message being replied to
 
   vol.addEventListener('input', () => { audio.volume = vol.value / 100; });
@@ -1088,6 +1277,11 @@
   function start() {
     audio.src = '/stream?t=' + Date.now();   // always join live, never a stale buffer
     audio.load();
+    // The clock on this browser filling its buffer starts with the request that
+    // fills it, not with the click - see the fill measurement further down. Cold,
+    // because this is a new connection and nothing about the old one survives it.
+    fillFrom = Date.now();
+    fillCold = true;
     return audio.play();
   }
   // One line, always on screen, and only ever about the track. There used to be
@@ -1124,6 +1318,15 @@
   // station read as information and was not: what a paused page wants to say
   // is that it is paused, which the placeholder already says.
   function tick() {
+    // Two pieces of insurance, both about state that is supposed to be ended by
+    // something else and must not be able to stick if that something never
+    // fires. The first is a change of record whose animation or timer went
+    // missing; the second is a title held for a change that was never begun,
+    // which is what a /likes/now that will not answer leaves behind. Half a
+    // second of grace on the first so it never races the animation it is
+    // insuring. Neither is expected to fire.
+    if (changeUntil && Date.now() > changeUntil + 500) endChange(true);
+    else if (heldTitle !== null && !changeUntil && Date.now() - heldSince > CLAIM) settle();
     // /likes/now answers with elapsed and duration off the frame being played.
     // Carried forward between polls by the wall clock so the seconds move every
     // second rather than in jumps every five.
@@ -1166,7 +1369,11 @@
     if (audio.paused) {
       setBtn('loading');          // before anything else, on the press itself
       tick();                     // and say so, while no poller is running yet
-
+      // A deck with nothing on it gets a record put on it, and the putting is
+      // what fills the wait for the first sound. Only from the empty state:
+      // after that the record stays on the deck through every pause, which is
+      // what sleep() below is careful not to undo.
+      if (btn.classList.contains('empty')) beginArrival();
       start().catch(() => { setBtn('play'); setLive(false, 'could not start'); });
     } else {
       // sleep() by hand rather than trusting the pause EVENT. pause() only
@@ -1213,23 +1420,74 @@
 
       if (src.server_name) { $('name').textContent = src.server_name; document.title = src.server_name; }
       $('desc').textContent = src.server_description || '';
+      stationName = src.server_name || '';
+      stationDesc = src.server_description || '';
       const title = cleanTitle(src.title || '');
-      $('np').textContent = title || 'live';
-      if (title !== lastTitle) { lastTitle = title; titleSince = Date.now(); noteTrack(title); }
-      updateFind(title);
+      // The title is no longer written straight to the panel, and this is the
+      // half of the change that is easiest to miss. icecast's metadata turns
+      // over the instant the station changes track, which is several seconds
+      // before that track reaches anybody, so a page that printed it on arrival
+      // named a song nobody was hearing yet - the same complaint the record
+      // change below is built to answer, in the one place where it is words
+      // rather than motion. So a new title is HELD, and it goes up when the new
+      // record lands.
+      //
+      // Which of the two pollers notices a track change first is a race - this
+      // one runs on eight seconds and /likes/now on five - so noticing it here
+      // asks /likes/now outright rather than waiting for its own turn. That is
+      // the poller that knows WHEN, because only it carries the station's
+      // position in the track, and it is the one that starts the change of
+      // record and therefore the one that will release this. One extra request
+      // per track change, on an endpoint already asked twelve times a minute.
+      //
+      // Nothing is held while the page is not listening. There is no ear to be
+      // ahead of, and holding then would mean a page that opens showing nothing
+      // until a poller it has not started yet says otherwise.
+      if (title !== lastTitle) {
+        if (quiet) showTitle(title);
+        else if (changeUntil) heldTitle = title;
+        else if (heldTitle !== title) { heldTitle = title; heldSince = Date.now(); pollLikes(); }
+      }
+      // On the title being SHOWN rather than the one just read, so the link
+      // under the panel points at the song the panel names. Left on every poll
+      // rather than moved inside showTitle: it is also the thing that puts the
+      // row back after a live show has hidden it.
+      updateFind(lastTitle || '');
 
       $('listeners').textContent = src.listeners ?? '–';
       $('uptime').textContent = fmtUptime(src.stream_start_iso8601 || src.stream_start);
       const br = (src.audio_info || '').match(/bitrate=(\d+)/);
       $('bitrate').textContent = br ? br[1] + ' kbps' : '–';
+      // The same number, kept rather than only printed. It is one half of how
+      // long icecast's burst lasts in seconds, and therefore of how long the
+      // change of record has to cover - see earLagMs.
+      if (br) streamKbps = parseInt(br[1], 10) || streamKbps;
       setLive(true);
 
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: title || 'Live', artist: src.server_name || '', album: src.server_description || ''
-        });
-      }
+      setMedia();
     } catch { setLive(false, 'unreachable'); }
+  }
+
+  // The lock screen and the headset say what the panel says, which means they
+  // say the held title too. Split out so that the moment a held title lands is
+  // also the moment the lock screen changes, rather than up to eight seconds
+  // later when this poller next comes round.
+  function setMedia() {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: lastTitle || 'Live', artist: stationName, album: stationDesc
+    });
+  }
+
+  // The one place the track name is written. Everything that follows from a new
+  // title follows from here: the panel, the recents list, the share link and the
+  // name the guestbook stamps on a note, which is lastTitle and is therefore now
+  // the song the writer was actually hearing when they typed.
+  function showTitle(t) {
+    $('np').textContent = t || 'live';
+    if (t !== lastTitle) { lastTitle = t; titleSince = Date.now(); noteTrack(t); }
+    updateFind(t);
+    setMedia();
   }
 
   // --- guestbook ------------------------------------------------------
@@ -1739,30 +1997,211 @@
   //
   // Cleared in sleep() for the reason that block already gives about the
   // clock: a change this page did not witness is not one it may act out.
-  // Without that, pressing play after an hour away would open with a shove for
-  // a record that went half an album ago.
+  // Without that, pressing play after an hour away would open with a change of
+  // record for one that went half an album ago.
   //
   // Reduced motion is refused HERE rather than left to the blanket rule at the
-  // foot of the sheet. That rule does reach .lp-shove, and that is exactly the
-  // trouble: the carriage takes itself out on its own animationend, so taking
-  // the animation away would leave a copy of the outgoing record sitting over
-  // the real one for good. An element that exists only for the length of its
-  // animation must not be built where there is no animation to end.
+  // foot of the sheet, and the reason has changed with the mechanism. It used to
+  // be a hazard: the carriage took itself out on its own animationend, so taking
+  // the animation away left a copy of the outgoing record sitting over the real
+  // one for good. The carriage is now driven by the Web Animations API, which
+  // that rule cannot reach, and a plain timer ends the change whether anything
+  // is drawn or not - so the hazard is gone and what is left is the preference,
+  // which is honoured on its own account. The TIMING is not refused, only the
+  // motion: a listener who wants no animation still gets a page that waits for
+  // their ear rather than running ahead of it.
   let shownId = '';
   const stillness = matchMedia('(prefers-reduced-motion: reduce)');
 
-  function showRecord(id) {
-    const was = shownId;
-    shownId = id;
-    if (!id || !was || id === was || stillness.matches) return;
-    // A second change inside the first shove replaces it outright. Queueing
-    // would spend 420ms pushing off a record that is already two behind.
-    const running = btn.querySelector('.lp-shove');
-    if (running) running.remove();
+  // One travel of the window, at the speed a record is carried. Two of them are
+  // the floor for a change; everything above that is the deck standing empty.
+  const TRAVEL = 420;
+  // icecast's burst-size in BYTES, from the station's own config. A player that
+  // joins is handed this much at once, so the oldest byte it holds - the one it
+  // starts playing - is this many bytes old, and at a constant bitrate that is a
+  // number of seconds: 65536 bytes at 128kbps CBR is 4.096s. The bitrate is NOT
+  // written here: icecast publishes it on /status-json.xsl and poll() below
+  // reads it, so a station re-encoded at 96 or 192 moves this figure by itself.
+  //
+  // That a browser really does start from the OLDEST byte, rather than throwing
+  // the burst away and joining live, was measured rather than assumed - and it
+  // had to be, because the element's readyState and its buffered range both
+  // suggest the opposite: nothing at all is exposed for the first four seconds
+  // and then playback begins with barely half a second in hand. A stream of
+  // known content was built for the question, 25s of digital silence followed by
+  // 25s of a tone, encoded at 128kbps CBR and pushed at exactly 128kbps behind a
+  // 65536 byte burst; the page's own audio element was tapped with an
+  // AnalyserNode and the wall clock of the tone's onset in the ear was compared
+  // with the wall clock it left the server at. The ear was 9.155s behind, on
+  // loopback, on the machine serving it. Burst plus the 4.262s that run took to
+  // reach `playing` is 8.358s, so the model below is right in its shape and
+  // about 0.8s short in its size, and it is short in the direction that lands
+  // the record slightly before the music rather than after it.
+  const BURST = 65536;
+  // tug_cool is `5.0 + air_delay()` in radio.liq and rides along on /likes/now
+  // as `cool`, so subtracting the constant leaves air_delay - the one station
+  // knob in this sum, read live rather than copied. It is 1.75 today and this
+  // page never has to be told when it stops being.
+  const TUG_BASE = 5.0;
+  // The ceiling on a change of record, and it is set by the parts rather than
+  // picked: air_delay plus the burst plus the largest buffer reading this page
+  // will believe is 1.75 + 4.096 + 10 seconds, so fifteen is just under
+  // everything the sum can produce and binds only when all three are at their
+  // worst at once. Beyond that a change of record stops being a mechanism and
+  // becomes a fault, and the honest thing on a link that bad is a change that
+  // ends before the song does.
+  const CHANGE_MAX = 15000;
+  // The buffer reading on its own, clamped before it is used. Anything under a
+  // tenth of a second is a cached start rather than a measurement of this link.
+  // Ten seconds is over twice the 4.4s measured from the machine that serves the
+  // stream, and past it the reading has stopped describing a buffer being filled
+  // and started describing a stream that is not arriving.
+  const FILL_MIN = 100, FILL_MAX = 10000;
+  // A held title nothing claimed. pollLikes is asked outright the moment one is
+  // held, so the ordinary claim is a single round trip; three seconds is far
+  // past any answer this station gives and still inside the five-second poll the
+  // title would otherwise have waited for.
+  const CLAIM = 3000;
+
+  let tugCool = 0;        // /likes/now's cool, TUG_BASE + air_delay
+  let streamKbps = 128;   // icecast's own audio_info, until poll() says otherwise
+  let fillMs = 0;         // measured on THIS connection, 0 until it has been
+  let fillFrom = 0;       // when this browser started filling, 0 when it is not
+  let fillCold = false;   // true for the fill that starts a connection
+  // The change in progress: when the new record lands, what is drawing it, and
+  // what the page has been told but is not showing yet.
+  let changeUntil = 0, changeCar = null, changeAnim = null, changeTimer = 0;
+  let changeArriving = false;
+  let heldTitle = null, heldSince = 0, heldTrack = null;
+  // What an arrival is booked for before this connection has ever been measured.
+  // Only the first press of a cold page uses it, and only until the playing
+  // event says how wrong it was. 4400 is the median of five cold starts against
+  // this station from a browser on the machine that serves it - 4360, 4433,
+  // 4496, 4601, 4366 ms from the press to the first sound - which is the fastest
+  // a listener can possibly be, so a real one is more likely to be over this
+  // than under it. It is startlingly large for a loopback connection and it is
+  // not the network: the element sits at readyState 0 with nothing buffered for
+  // four seconds while data arrives every 360ms, and then goes from
+  // loadedmetadata to playing in twenty milliseconds.
+  const FILL_GUESS = 4400;
+
+  // --- how long the ear is behind the page --------------------------------
+  // Two halves, and only one of them can be worked out from the station.
+  //
+  // The station's half is arithmetic and is the same for everybody: air_delay,
+  // which is the station holding the sound back so the narrator can be cut in,
+  // plus icecast's burst, which is the several seconds of already-played audio a
+  // joining player is handed in one go and then starts playing from the oldest
+  // end of. Both are read live, one off /likes/now and one off /status-json.xsl.
+  //
+  // The listener's half cannot be worked out at all and does not have to be,
+  // because the page is RUNNING on the listener's machine and that machine knows
+  // how long it took to fill its own buffer. That is what fillMs is, and what it
+  // honestly measures is stated where it is measured: it is the time this
+  // browser needed to gather enough audio to make a sound, on this connection,
+  // just now. It is a real component of the lag rather than a proxy for it, so
+  // it is ADDED to the station's half rather than replacing it, and until there
+  // is one the station's half stands alone. The two halves are about equal on
+  // the fastest connection there is - 5.846s of station against 4.4s of browser
+  // - and it is the browser's half that varies from listener to listener, which
+  // is the whole reason it is measured rather than assumed.
+  //
+  // What this deliberately does NOT do is read the audio element's own buffered
+  // range. `buffered.end(0) - currentTime` was used to steer the host console's
+  // monitor and it read a flat 2.30s for ninety seconds while the true lag went
+  // from 8.4s to 4.9s: a plain element reports a window around the playhead, not
+  // everything it is holding, and the only way that console ever got a true
+  // figure was by owning the buffer through MediaSource. This page plays /stream
+  // through an ordinary element and must not repeat that mistake.
+  function airDelay() { return tugCool > TUG_BASE ? tugCool - TUG_BASE : 0; }
+  function earLagMs() {
+    return (airDelay() + BURST * 8 / (streamKbps * 1000)) * 1000 + fillMs;
+  }
+
+  // The one honest reading a plain audio element gives: from asking it to play,
+  // or from it running dry mid-stream, to it making a sound again. That is this
+  // browser filling its buffer over this connection - network, decode and the
+  // element's own idea of how much is enough, all three of which are exactly the
+  // part of the lag the station cannot know. It is NOT the whole lag and is not
+  // treated as it: the burst above is the other half of it and is invisible from
+  // here. Kept in a variable and never stored, because it is a property of this
+  // connection at this moment and a number measured on a train last week would
+  // be worse than no number at all.
+  //
+  // A cold start and a stall are the same measurement and are not the same
+  // arithmetic. The cold start IS the whole of this browser's contribution, so
+  // it replaces the figure. A stall mid-stream does not restart anything: the
+  // stream resumes where it left off, so the ear falls further behind by exactly
+  // the length of the stall and the right thing to do with the reading is add
+  // it. That is the difference fillCold carries, and it is the reason the
+  // `waiting` below never resets the clock it finds already running - the first
+  // thing a fresh <audio> does is fire `waiting`, and treating that as a stall
+  // would throw away the cold start it is the beginning of.
+  audio.addEventListener('waiting', () => { if (!fillFrom) fillFrom = Date.now(); });
+  audio.addEventListener('playing', () => {
+    if (fillFrom) {
+      const ms = Date.now() - fillFrom;
+      fillFrom = 0;
+      if (ms >= FILL_MIN) {
+        fillMs = Math.min(FILL_MAX, fillCold ? ms : fillMs + ms);
+      }
+      fillCold = false;
+    }
+    // A record arriving was booked against a guess at this moment, and this
+    // moment is the answer. Sound has started, so the arrival finishes now
+    // rather than at the length it was booked for. It is seeked to the START of
+    // the last travel rather than to the end: a record that snaps into place has
+    // not been put there by anybody, and 420ms is what it costs to be put there.
+    // If the booking was too short the record is already down and there is
+    // nothing to correct - a record on the platter waiting for sound is a state
+    // this button has always had and still draws.
+    if (!changeArriving) return;
+    if (!changeAnim) return endChange(true);
+    const at = changeAnim.effect.getTiming().duration - TRAVEL;
+    if (changeAnim.currentTime < at) changeAnim.currentTime = at;
+  });
+
+  // Everything the page was told while the record was being changed, put on
+  // screen now that the ear has caught up with it. The title and the clock land
+  // together and they land with the record, which is the whole order the change
+  // exists to keep. The clock is applied with the timestamp it was READ at, not
+  // this one, so it goes on telling the station's time rather than restarting.
+  function settle() {
+    if (heldTitle !== null) { const t = heldTitle; heldTitle = null; showTitle(t); }
+    if (heldTrack) {
+      trackElapsed = heldTrack.e; trackTotal = heldTrack.d; trackAt = heldTrack.at;
+      heldTrack = null;
+    }
+    tick();
+  }
+
+  // landed says whether the record got where it was going. An arrival that did
+  // is the one thing that takes the deck out of its opening state, and an
+  // arrival that did not - the listener pressed play and pressed it again, or
+  // the stream never came - leaves the deck exactly as empty as it found it,
+  // which is the truth about what happened.
+  function endChange(landed) {
+    if (changeTimer) { clearTimeout(changeTimer); changeTimer = 0; }
+    if (changeAnim) { changeAnim.onfinish = null; changeAnim.cancel(); changeAnim = null; }
+    if (changeCar) { changeCar.remove(); changeCar = null; }
+    btn.classList.remove('shoving');
+    if (landed && changeArriving) btn.classList.remove('empty');
+    changeArriving = false;
+    changeUntil = 0;
+    settle();
+  }
+
+  // The two copies, the angle they inherit, and the three-part travel over them.
+  // Returns false if there is no spin to inherit, which is what reduced motion
+  // leaves behind - the caller then keeps the timing and draws nothing.
+  function carry(total, arriving) {
     const disc = btn.querySelector('.lp-disc');
-    const car = document.createElement('span'); car.className = 'lp-shove';
+    const spin = disc && disc.getAnimations()[0];
+    if (!spin) return false;
+    const car = document.createElement('span');
+    car.className = 'lp-shove' + (arriving ? ' arriving' : '');
     car.setAttribute('aria-hidden', 'true');
-    for (let i = 0; i < 2; i++) {
+    for (let i = arriving ? 1 : 0; i < 2; i++) {
       const d = car.appendChild(document.createElement('span')); d.className = 'lp-disc';
       const lab = d.appendChild(document.createElement('span')); lab.className = 'lp-label';
       const s = lab.appendChild(document.createElement('span')); s.className = 'lp-sym';
@@ -1772,15 +2211,86 @@
     btn.insertBefore(car, btn.querySelector('.lp-glint'));
     btn.classList.add('shoving');
     // Both copies are put at the angle the record is at instead of starting
-    // upright, so the outgoing one takes over where the record was and the real
-    // one comes back where the incoming one got to. Each of these elements
-    // carries exactly one animation and it is spin.
-    const phase = disc.getAnimations()[0].currentTime;
+    // upright, and the class above has just stopped all three of them there, so
+    // the outgoing one takes over exactly where the record was and the real one
+    // is let go of exactly where the incoming one stopped. Each of these
+    // elements carries exactly one animation and it is spin.
+    const phase = spin.currentTime;
     for (const d of car.querySelectorAll('.lp-disc')) d.getAnimations()[0].currentTime = phase;
-    car.addEventListener('animationend', () => {
-      car.remove();
-      btn.classList.remove('shoving');
-    }, { once: true });
+    changeCar = car;
+    // Out, wait, in. The travels keep their own 420ms whatever the total is, so
+    // the middle keyframe pair is where the whole of the waiting goes and the
+    // records always move at the speed records move at. An arrival is the same
+    // list with the first travel taken off the front: it begins where the other
+    // one gets to after the outgoing record has left, which is an empty window.
+    const edge = TRAVEL / total;
+    changeAnim = car.animate(arriving ? [
+      { transform: 'translateX(-100%)', offset: 0 },
+      { transform: 'translateX(-100%)', offset: 1 - edge },
+      { transform: 'translateX(-200%)', offset: 1 },
+    ] : [
+      { transform: 'translateX(0)',     offset: 0 },
+      { transform: 'translateX(-100%)', offset: edge },
+      { transform: 'translateX(-100%)', offset: 1 - edge },
+      { transform: 'translateX(-200%)', offset: 1 },
+    ], { duration: total, easing: 'linear', fill: 'forwards' });
+    changeAnim.onfinish = () => endChange(true);
+    return true;
+  }
+
+  // elapsed is where the STATION is in the new track. The ear is earLagMs()
+  // behind the station, so what is left to cover is that lag less the part of it
+  // the station has already spent before this page was told - which is the same
+  // subtraction showTug does to the cool-off, off the same two numbers.
+  function beginChange(elapsed) {
+    // A second change inside the first replaces it outright. Queueing would
+    // spend the whole of one gap pushing off a record that is already two
+    // behind, and would land the wrong title at the end of it.
+    endChange(false);
+    const total = Math.min(CHANGE_MAX,
+                           Math.max(TRAVEL * 2, earLagMs() - elapsed * 1000));
+    changeUntil = Date.now() + total;
+    if (stillness.matches || !carry(total, false)) {
+      changeTimer = setTimeout(() => endChange(true), total);
+    }
+    drawTug();
+  }
+
+  // The first press of a session, and the arrival half of the same mechanism
+  // with nothing leaving. The deck opens empty - see the well in the sheet - and
+  // this is the record being put on it.
+  //
+  // What it covers is a DIFFERENT wait from the one a skip covers, and the
+  // arithmetic says so. A listener who has just pressed play is not behind the
+  // station at all, because they are not hearing anything: air_delay and the
+  // burst decide how OLD the first sound will be, not how long it takes to
+  // arrive. What they are waiting through is their own browser filling its
+  // buffer, start to finish, which is the whole of fillMs and nothing else. So
+  // this is the one place that number stands alone rather than being added to
+  // the station's half.
+  //
+  // On the very first press of a cold page there is no measurement yet, which is
+  // the one moment this cannot be right; FILL_GUESS stands in and the playing
+  // event corrects it in whichever direction it was wrong.
+  function beginArrival() {
+    endChange(false);
+    const total = Math.min(CHANGE_MAX, Math.max(TRAVEL, fillMs || FILL_GUESS));
+    changeUntil = Date.now() + total;
+    changeArriving = true;
+    if (stillness.matches || !carry(total, true)) {
+      changeTimer = setTimeout(() => endChange(true), total);
+    }
+    drawTug();
+  }
+
+  function showRecord(id, elapsed) {
+    const was = shownId;
+    shownId = id;
+    // Not a change this page witnessed, so nothing to act out - but anything
+    // being held for a change is released here rather than waiting out CLAIM,
+    // which is what makes the first title after a resume appear at once.
+    if (!id || !was || id === was) { if (!changeUntil) settle(); return; }
+    beginChange(elapsed);
   }
 
   function showLikes(j) {
@@ -1791,7 +2301,10 @@
     showShow(j && j.show);
     showHold(j);
     likeId = (j && j.id) || '';
-    showRecord(likeId);
+    // Before the record is changed, because the length of the change is worked
+    // out from air_delay and air_delay only reaches this page inside cool.
+    if (j && typeof j.cool === 'number') tugCool = j.cool;
+    showRecord(likeId, (j && typeof j.elapsed === 'number') ? j.elapsed : 0);
     if (!likeId) { $('likerow').hidden = true; $('tugrow').hidden = true; return; }
     const mine = liked.includes(likeId);
     $('likeCount').textContent = j.likes;
@@ -1800,10 +2313,20 @@
     $('likerow').hidden = false;
     // Same response, same track: the position rides along with the likes
     // because this is the one endpoint a page with no password may ask.
+    //
+    // Held while the record is being changed. The station is already several
+    // seconds into the new track by the time it has reached anybody's ear, so
+    // taking this reading straight would jump the clock to the new song while
+    // the old one is still playing - which is the same crime the title used to
+    // commit and the reason the change of record now covers the gap at all. The
+    // reading is kept with the moment it was READ at, so when it lands the clock
+    // is still the station's time and not a stopwatch started here.
     if (typeof j.elapsed === 'number') {
-      trackElapsed = j.elapsed;
-      trackTotal = typeof j.duration === 'number' ? j.duration : 0;
-      trackAt = Date.now();
+      const t = { e: j.elapsed,
+                  d: typeof j.duration === 'number' ? j.duration : 0,
+                  at: Date.now() };
+      if (changeUntil) heldTrack = t;
+      else { trackElapsed = t.e; trackTotal = t.d; trackAt = t.at; }
     }
     showTug(j);
     if (j && j.show && j.show.live && j.paused) {
@@ -1934,7 +2457,18 @@
   // coming out - so the buttons come back when the wait is actually over
   // instead of at the next poll. Nothing new is on a timer.
   function drawTug() {
-    const cool = Date.now() < coolUntil;
+    // The record being changed counts as cool-off in its own right, so the tug
+    // comes back AFTER the new record has landed and never during it - which is
+    // the last step of the order the change exists to keep, and on the numbers
+    // this station actually measures it is not a corner case but the ordinary
+    // one. The station refuses clicks for 5.0 + air_delay, which is 6.75s. The
+    // ear is behind by air_delay + the burst + this browser's own buffer, and
+    // the browser's own buffer alone measured 4.4s from the machine that serves
+    // the stream - so the change of record outlasts the station's window
+    // whenever that buffer takes more than 0.904s to fill, which is every
+    // listener there has ever been. Without this line the buttons would come
+    // back while the record was still travelling, every time.
+    const cool = Date.now() < coolUntil || changeUntil > 0;
     $('rope').classList.toggle('cool', cool);
     $('tugSkip').disabled = cool;
     // Nought is the floor and nothing else - no saved state, no veto, just a
@@ -1995,9 +2529,27 @@
     // given. A position that keeps climbing while nothing is being fetched is
     // a number this page has no right to - the same rule pollLikes already
     // follows when the station stops answering.
+    // A change of record in progress is ended here rather than left to run.
+    // Its whole job is to cover the wait for audio that is no longer coming,
+    // and a carriage still travelling over a button nobody is listening to is
+    // an animation with nothing left to mean. Ending it also lets go of the
+    // title and the position it was holding, which is what a page that has
+    // stopped listening should be showing: what the station says, now.
+    //
+    // Ended as NOT landed, which matters only in the opening state: somebody who
+    // presses play and changes their mind before the record is down gets the
+    // empty deck back, because that is what happened. It is also the reason this
+    // is the only thing sleep() does to the deck. A record that HAS arrived
+    // stays on it for the rest of the session - pausing does not take a record
+    // off a turntable, and the grey filter is already the page's way of saying a
+    // record is on and not playing. Emptying the deck on every pause would make
+    // the opening state a state playback returns to, which it is not.
+    endChange(false);
     trackAt = null;
     // And the record forgets what it was last showing, for the same reason.
     shownId = '';
+    // The buffer reading belongs to a connection that no longer exists.
+    fillFrom = 0;
     quiet = true;
     tick();
   }
