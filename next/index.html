@@ -432,70 +432,72 @@
   }
   button.play.spinning .lp-disc { animation-play-state: running; }
   /* --- a record being changed --------------------------------------------
-     The record that was playing is lifted off the spindle, carried out of the
-     window to the left, the deck stands empty, the next one comes in from the
-     right riding above the pin, and it is lowered onto it. Two axes now and
-     they are used for two different things: sideways is a record being carried,
-     downwards is a record being PUT somewhere, and the second is the whole of
-     what a spindle is for. One constant speed on each, a hard start and a hard
-     stop: nothing here is eased, because easing is what makes a change look
-     designed, and this one is meant to look like a mechanism.
+     THE NEW RECORD SLIDES IN OVER THE ONE THAT IS PLAYING. It comes in from the
+     right riding above the pin, crosses the face of the record already on the
+     deck, and is lowered onto the spindle; at that instant the title changes,
+     the tug comes back and the record turns. Two axes and they are used for two
+     different things: sideways is a record being carried, downwards is a record
+     being PUT somewhere, and the second is the whole of what a spindle is for.
+     One constant speed on each, a hard start and a hard stop: nothing here is
+     eased, because easing is what makes a change look designed, and this one is
+     meant to look like a mechanism.
 
-     The empty deck in the middle is the whole point of this round, and it is
-     not a pause put in for looks. A track change on this station happens at the
-     source, and the sound of it does not reach a listener until the station's
-     own delay and icecast's burst and that browser's own buffer have all been
-     paid - which is several seconds, is different for every listener, and used
-     to be spent with the page already showing the new title and the new clock
-     while the old song was still in the ear. So the change of record is timed
-     against THAT moment: the new record is pressed onto the pin as the new music
-     arrives, and the title and the clock land with it. What was 420ms of
-     flourish at the START of the gap is a mechanism that ends on the boundary.
+     WHAT THE OUTGOING RECORD DOES IS NOTHING. It stays exactly where it is,
+     turning until the incoming one reaches it, and is covered. That is the
+     operator's own instruction and it is also the only one of the two choices
+     that keeps a record on the deck the whole way through: carried off
+     underneath, it would leave the far side of the window empty again for as
+     long as it took to clear, which is the thing this round exists to remove.
+     Covered, there is never a moment with no record under the pin, so the lift
+     off the spindle goes with it - nothing has to come off a spindle it is not
+     leaving - and the deck's own well and cue are never uncovered by a change.
 
-     It is AIMED at that moment rather than started at it, and the difference is
-     this round's. A track ending is the one change of record this page can see
-     coming - the station says how long the track is and where it is in it, and
-     the script knows how far behind the station this ear is - so the change is
-     booked to finish on the boundary and drawn for a length chosen because it
-     reads well, instead of being started when the page is told and stretched
-     over the whole ten seconds the ear happens to be behind by. A change that
-     IS covering a wait still is: the tug cuts a song off and the silence has to
-     be filled, and a page that found out too late to book anything draws it the
-     old way. See the comment over aimChange for the arithmetic and for what
-     happens when the prediction is wrong.
+     Which is why the outgoing record is not a copy any more. It is the REAL
+     disc, left visible where every other move here hides it, held at its own
+     angle by the play-state rule below and let go of again at the instant the
+     new one lands. There is nothing to hand over at the end: the carriage is
+     taken off and what is underneath is the same element that was underneath
+     when it went on, at the same angle, so the seam that the copies were
+     built to hide does not exist for a change. One copy is built and it is the
+     incoming record.
 
-     Both records in the change are COPIES, built for it and thrown away after
-     it, and the real disc above is hidden for its length. That is the whole
-     reason they exist rather than the disc being moved: the disc carries the
-     spin, its angle is the one thing on this button that must survive a track
-     change - which is what the play-state line above is already for - and both
-     moving it in the DOM and transforming it would throw that angle away. The
-     script hands the copies the angle instead, so nothing snaps upright.
+     Nothing turns while the record is being changed. The copy and the real disc
+     under it are held at one angle by the play-state rule, and the real one is
+     unpaused - never restarted - at the landing. A record being carried is not
+     spinning, a record on the platter is, and this is the difference between
+     the two being drawn. It also makes the operator's sentence literally true:
+     the new record starts playing at the moment it is put down, because that is
+     the moment anything on this button starts turning again.
 
-     Nothing turns while the record is being changed. Every disc on the button,
-     the two copies and the hidden real one, is held at that one angle by the
-     play-state rule below, and the real one is let go of again at the instant
-     the new record lands. A record being carried is not spinning, a record on
-     the platter is, and this is the difference between the two being drawn.
-     Because all three are frozen at the same angle and the real one is never
-     restarted - only unpaused - the label picks up from exactly where the
-     incoming copy left it and there is no snap at the handover.
+     THIS IS THE SAME MOVE AS AN ARRIVAL, over a deck that is not empty. Both
+     are one copy waiting off the right of the window, one travel across it, one
+     seat onto the pin, and they share the script's keyframes. What differs is
+     only what is underneath - a lit well and a play cue for the first press of
+     a session, the record that is still sounding for a change - and the change
+     is therefore no longer the long sequence it was: lift, carry out, stand
+     empty, carry in, seat, of which the empty deck was the largest part.
+
+     The empty middle was not decoration and it is worth writing down what paid
+     for it, because the argument was sound and the drawing was still wrong. A
+     track change happens at the source and does not reach a listener until the
+     station's delay, icecast's burst and that browser's own buffer have all
+     been paid - about ten seconds, measured - so the change was timed against
+     THAT moment and the deck stood empty across it. Aiming fixed the timing;
+     the empty deck was what was left over, and a long sequence that has to be
+     STARTED at the right moment is more sensitive to an estimate of that
+     ten seconds than a short one that has to LAND on it. One move that lands is
+     the whole simplification.
 
      The window is the button itself, clipped only while this runs. It is a
-     circle, so the records pass through a porthole and the button's own black is
-     what stands there between them. That black is not covered up and is not
-     decorated: an empty platter is what a deck with no record on it looks like,
-     and it is the clearest possible statement that the next one has not arrived.
+     circle, so the incoming record comes through a porthole and passes over the
+     face of the one it is replacing.
 
-     420ms per travel is 267px/s across the 112px face, and it is the FLOOR on a
-     travel now rather than its length. It used to be the length, on the
-     reasoning that the speed a hand moves a record at does not depend on how
-     long the next one takes to arrive - which is true of a hand and false of a
-     drawing whose whole job is to cover an interval. Measured at a natural
-     boundary the interval is about ten seconds, so 420ms of it was four per
-     cent and the record arriving read as a record appearing. Each travel takes
-     a quarter of what is left after the lift and the seat instead; the script's
-     own paragraph over it has the measurement and the split.
+     420ms of travel is 267px/s across the 112px face, and it is the FLOOR
+     rather than the length. A change that is covering a wait - the tug, which
+     cuts a song off and has the whole silence to fill - stretches the travel
+     over that wait instead, which is the same rule an arrival is drawn by and
+     for the same reason: the speed a hand moves at does not depend on the wait,
+     but a drawing whose job is to cover one does.
 
      The seat is 240ms over --seat, which is 9.22px, and that is 38px/s: one
      seventh of the speed the same record is carried at. The difference is the
@@ -503,41 +505,27 @@
      somewhere near; putting one on a spindle is a move that has to end on a
      4.61px target, and a hand slows down for the second one. Drawn at the
      carrying speed the drop lasts 35ms, which is two frames and is not a motion
-     at all - it reads as the record snapping down, which is the one thing the
-     three-part travel was already written to avoid at the other end. It is not
-     eased for the same reason nothing else here is; what says "aiming" is the
-     speed, not a curve.
+     at all - it reads as the record snapping down. It is not eased for the same
+     reason nothing else here is; what says "aiming" is the speed, not a curve.
+     It is the ONE part of any of these moves that keeps its length whatever the
+     total, because it is a physical event rather than a wait.
 
-     A lift and a seat, not a seat alone, and the outgoing record is why. A
-     record cannot be slid sideways off a spindle that is standing through it. So
-     the change begins by taking the old one UP off the pin by exactly what the
-     new one will be lowered by, and both records are carried at that height -
-     which is also what makes the pin visible for the whole of the middle, where
-     before there was a lift at neither end and the two records passed through
-     the pin's own plane. An arrival has nothing to lift, so it is the last two
-     moves of the same list and nothing else.
+     The floor is therefore TRAVEL + SEAT = 660ms, the same for a change as for
+     an arrival, where a change used to need SEAT + TRAVEL + TRAVEL + SEAT.
+     Under it there is nothing to see, and the station has a floor of its own -
+     record_min, on the desk - which sits above it and is what actually binds.
 
-     The floor is therefore SEAT + TRAVEL + TRAVEL + SEAT = 1320ms for a change
-     and TRAVEL + SEAT = 660ms for an arrival: a change cannot be drawn shorter
-     than the time it takes to lift a record, carry two at the speed records are
-     carried at, and put one down. Under it there is nothing to see, and the
-     station has a floor of its own - record_min, on the desk - which sits above
-     both and is what actually binds on a fast connection.
+     The copy is offset with `left` rather than a transform, and that is not a
+     preference: it carries spin, spin drives transform, and one property cannot
+     be driven by an animation and a static value at once - the same collision
+     the waiting pulse above avoids by using opacity. Left means width as well,
+     because inset:0 sizes these from both edges. 200% puts it a whole window
+     clear of the right edge, so the carriage's own -100% at the first frame is
+     what stands it just off the window with nothing showing.
 
-     The copies are offset with `left` rather than a transform, and that is not a
-     preference: the copies carry spin, spin drives transform, and one property
-     cannot be driven by an animation and a static value at once - the same
-     collision the waiting pulse above avoids by using opacity. Left means width
-     as well, because inset:0 sizes these from both edges. 200% rather than 100%
-     is what opens the empty deck: at -100% the outgoing record has just cleared
-     the window and the incoming one has not reached it.
-
-     Both axes are driven on the CARRIAGE and never on a copy, for that same
+     Both axes are driven on the CARRIAGE and never on the copy, for that same
      reason: the carriage carries no spin, so its transform is free, and one
-     translate can hold the sideways and the downwards at once. Lifting the
-     carriage lifts whatever is on it, which is exactly right - a change lifts
-     the outgoing record and finds the incoming one already at that height,
-     because they are on the same hands.
+     translate can hold the sideways and the downwards at once.
 
      There are no @keyframes here any more. The travel has offsets that depend on
      a duration only the script knows, so it is written with the Web Animations
@@ -548,15 +536,14 @@
      is still refused in the script, because it should be, but it is now a
      preference being honoured rather than a hazard being avoided. */
   button.play.shoving { overflow: hidden; }
-  button.play.shoving > .lp-disc { visibility: hidden; }
   button.play.shoving .lp-disc { animation-play-state: paused; }
   .lp-shove { position: absolute; inset: 0; pointer-events: none; }
-  .lp-shove .lp-disc + .lp-disc { left: 200%; right: auto; width: 100%; }
-  /* An arrival has nothing leaving, so it is built with one copy instead of two
-     and that copy is the one waiting off to the right. Same element, same
-     travel, same speed, same seat - the only difference is that the window
-     starts empty, the script's keyframes start at the far end, and there is no
-     record to lift off first. */
+  /* One copy, waiting off to the right, for both of the moves that bring a
+     record IN - the first press of a session and a change of record. Same
+     element, same travel, same speed, same seat; what differs is only what is
+     under it, and that is decided by the button's own classes rather than here.
+     A park and a return do not take this rule: their copy starts and ends ON
+     the deck, which is where inset:0 already puts it. */
   .lp-shove.arriving .lp-disc { left: 200%; right: auto; width: 100%; }
   /* A park and a return use neither of those two rules, and the omission is the
      whole of what they are. There is one copy and it is left where inset:0 puts
@@ -604,16 +591,15 @@
      underneath and says the same thing again in the way the rest of the page
      says it.
 
-     It is shown for the change of record as well, and that is not a second job.
-     The empty window in the middle of a change IS this deck - the record has
-     been taken off and the next one has not arrived - so what stands there is
-     the platter and its pin rather than a plain black hole, which is what it
-     used to be. The triangle does not come with it: during a change the state
-     of the control is whatever the record is about to carry, and a play cue
-     under a record arriving to be paused would be the button saying two things.
-     An ARRIVAL is the one case where the cue stays, and that is the third state
-     above rather than an exception to the fourth; the cue's own paragraph has
-     the argument.
+     It is shown for the park and the return as well, and that is not a second
+     job: a record standing beside the deck, or coming back to it, leaves this
+     same platter with its pin in it rather than a plain black hole. It is NOT
+     shown for a change of record any more, and that is the one line of this
+     sheet the slide-over changed the most. A change used to open a window in
+     the middle of itself - the old record off, the next one not yet here - and
+     this deck was what stood in it. The new record now comes in over the old
+     one, so there is no such window and this stays covered from the first frame
+     of a change to the last.
 
      The third state is new and it is what the press now buys. The press used to
      take the triangle away and put nothing in its place - the only thing that
@@ -652,47 +638,46 @@
                 inset 0 0 0 1px rgba(255,255,255,.05);
     transition: background 260ms ease, box-shadow 260ms ease;
   }
-  button.play.empty .lp-well, button.play.shoving .lp-well { visibility: visible; }
-  /* Two classes rather than one, and the second is not a duplicate. `shoving`
-     means a carriage is on the button, and there is no carriage under reduced
-     motion or on a browser with no spin to inherit - so keying the lamp off it
-     alone would leave exactly those listeners with a press that changes nothing
-     on screen, which is the fault this state was added to fix. `arriving` is set
-     by the script whether or not anything is drawn, so the deck lights for
-     everybody and only the record's travel is refused. */
+  button.play.empty .lp-well, button.play.away .lp-well { visibility: visible; }
+  /* `away` and not `shoving`, and the difference is this round's. It used to be
+     any carriage at all, because every carriage meant a record off the pin: a
+     change took one off and the deck stood empty in the middle of it. A change
+     no longer does - the new record slides in over the old one and there is a
+     record under the pin the whole way - so the two moves that DO leave the
+     deck bare are named instead. `away` is the park and the return, set by the
+     script when a record is standing beside the deck or on its way back from
+     there, and `empty` is a deck this session has not put a record on yet. */
   /* The deck used to brighten while a record was on its way. It does not any
      more, and the reason is worth keeping: the record MOVING is the
      acknowledgement of the press. A light as well is two things saying one
-     thing, and the brighter dish pulled the eye to the empty middle at exactly
-     the moment the interesting object was entering from the side.
-
-     The well is still uncovered through the whole of a change - that part was
-     never the lighting, it is the record being off the pin - so the middle of a
-     change still shows a platter with its post standing in it rather than a
-     black porthole. It is simply lit the way it always is. */
-  /* Not over a parked deck. `shoving` there means a carriage that has stopped
-     and is going to stay stopped, and a lamp over a deck nobody has asked a
-     record from is a light left on. */
-  /* THERE IS NO RULE HERE, and the absence is the point. A brighter well was
-     drawn while a record was on its way; a later change said in its message that
-     the deck no longer lights up and dimmed this instead of deleting it, so the
-     paragraph and the sheet disagreed - #101018 against a resting #08080c is
-     still a lamp, only a quieter one. The comment was wrong rather than the
-     code, which is the worse way round: the next person reads the paragraph.
+     thing, and the brighter dish pulled the eye to the middle of the window at
+     exactly the moment the interesting object was entering from the side.
 
      So the well is lit exactly the same whether a record is moving, parked or
-     absent. The record moving is the acknowledgement of the press. What still
-     changes during a change is that the well is VISIBLE at all - that is the
-     rule above, and it is not lighting, it is the record being off the pin. */
+     absent. What changes is only whether it is VISIBLE, which is the rule above,
+     and that is not lighting - it is whether there is a record over it. */
   /* No light on an empty deck. The glint is a lamp catching the smooth face of a
      record, and there is no record here to catch it - drawn over the recess it
      is a wedge of light on nothing, which is the one thing on this button that
-     has ever read as a rendering fault rather than as an object. It is off for
-     the whole of a change of record too, because the middle of a change is this
-     same empty deck and a highlight that survives the record leaving is a
-     highlight that was never on the record. */
+     has ever read as a rendering fault rather than as an object.
+
+     It is off while any carriage is on the button, and the reason for that has
+     changed with the mechanism. It used to be that the middle of a change was
+     an empty deck. There is now a record under the pin for the whole of a
+     change - so what would be wrong is different: the glint does not turn with
+     the platter, it is a lamp fixed to the room, and a fixed highlight lying
+     across a record that is sliding under it reads as light painted on the
+     window rather than as light falling on a record. It comes back when the
+     record is down and nothing is moving over it. */
   button.play.empty .lp-glint, button.play.shoving .lp-glint { visibility: hidden; }
-  button.play.empty > .lp-disc { visibility: hidden; }
+  /* The real disc is hidden for the three moves where it is not what a listener
+     should be looking at: an empty deck has no record, and a park and a return
+     have one that is somewhere else and is being drawn by a copy standing over
+     its place. A CHANGE is the case that is not in this list, and that is the
+     whole of the slide-over: the real disc stays visible and IS the outgoing
+     record, so the incoming copy has something to slide over and there is
+     nothing to hand back at the end. */
+  button.play.empty > .lp-disc, button.play.away > .lp-disc { visibility: hidden; }
   /* The cue, and it is no longer the control's own symbol at the control's own
      size. What it was for was written down two rounds ago: the same glyph at the
      same size in the same place as the one printed on the paper, so that nothing
@@ -801,11 +786,11 @@
      is now ALSO shown for the whole of an arrival - which is a deck being lit
      with a record on its way onto it, and the play cue printed on that platter
      is still true right up to the moment the record covers it. It is not shown
-     during a change of record, which is the rule the paragraph over .lp-well
-     already gives: a change ends with a record that may be about to be paused,
-     and a play cue under that would be the button saying two things. An arrival
-     cannot end that way. It only ever ends with a record that is about to
-     play.
+     during a change of record, and since the slide-over there is nothing to
+     decide: a change never uncovers the deck at all, so the well and the cue
+     printed in it are behind a record from the first frame to the last. The
+     selectors below say the same thing twice over - a change leaves the button
+     neither `empty` nor `parked` nor `arriving`.
 
      Three states now, and the third is a record parked beside the deck rather
      than on it. This triangle is what a paused control shows, and it is the
@@ -829,9 +814,9 @@
   button.play.empty:not(:disabled):not(.shoving) .lp-cue,
   button.play.parked:not(:disabled) .lp-cue,
   button.play.arriving .lp-cue { visibility: visible; }
-  /* Left at its resting weight during a change for the same reason the well is:
-     nothing about the press should light up. It is covered by the record within
-     a second anyway. */
+  /* Left at its resting weight during an arrival for the same reason the well
+     is: nothing about the press should light up. It is covered by the record
+     within a second anyway. */
   /* Metal, not a light. A first pass drew this bright enough that it read as a
      bead or a lamp rather than as a post, and on an empty deck it was the only
      lit thing on the button, which is a great deal of attention for the one part
@@ -1138,17 +1123,20 @@
      reason no second measurement is needed here.
 
      Only the real disc, and the child combinator is what says so rather than a
-     class. Every disc inside a carriage is a record being CARRIED, and a record
-     being carried is held --seat above the deck for the whole of its travel -
-     the lift at the front of a change is there for exactly that reason, so that
-     a record can pass over a pin instead of through it. Nothing stands in the
-     hole of a record in the air, so the copies keep the panel colour and the
-     pin appears at the instant the carriage is taken off and the real disc is
-     uncovered, which is the instant the record is down. That instant is the
-     same one for every move that ends on the pin, and the moves that do not end
-     there - the park, and the outgoing half of a change - never show it, which
-     is correct: a parked record is standing beside the deck with daylight
-     through it.
+     class. A disc inside a carriage is a record being CARRIED, and a record
+     being carried is held --seat above the deck for the whole of its travel, so
+     that it passes over a pin rather than through it. Nothing stands in the
+     hole of a record in the air, so the copy keeps the panel colour and the pin
+     appears at the instant the carriage is taken off and the real disc is
+     uncovered, which is the instant the record is down. The park is the one
+     move that never shows it, which is correct: a parked record is standing
+     beside the deck with daylight through it.
+
+     A change is the case where the real disc is visible from the start, and
+     this rule is what keeps that honest. The record still sounding is on the
+     pin and shows the metal in its hole; the one sliding over it is in the air
+     and does not; and when the carriage comes off there is only ever the one
+     that was on the pin all along.
 
      Nothing else about the hole changes, and the paragraph above still governs
      all of it: still painted rather than transparent, still written last inside
@@ -1663,6 +1651,50 @@
   // looking at.
   let userMuted = false;
 
+  // --- the dash on the panel, and who owns taking it off -------------------
+  // Two things put a dash where the track name goes - the tug silencing a song
+  // it has voted off, and the station going unreachable - and until this
+  // existed neither of them owned putting it back. What put it back was
+  // settle(), and settle() only has something to say when a NEW title arrived
+  // while the change was running: poll() holds a title only `if (title !==
+  // lastTitle)`, so a dash written over a track whose name the page had ALREADY
+  // shown was permanent, for the rest of that track.
+  //
+  // Reproduced twice against a station driven on demand, on two paths that end
+  // in the same state, and the state is exactly the one the operator
+  // photographed - NOW PLAYING at a dash, the counter reset to 0/12, the clock
+  // running on the new track, the tug live again:
+  //
+  //   the two endpoints are polled separately, /status-json.xsl at 8s and
+  //   /likes/now at 5s, so icecast can name the incoming track several seconds
+  //   before the id turns over. The page claims that title, the CLAIM insurance
+  //   settles it because nothing is being held back yet, and the panel is
+  //   already showing the song the skip is about to land on when the counter
+  //   tops out and blanks it;
+  //
+  //   and, more simply, a skip onto a track icecast happens to name the same
+  //   way as the one it replaced.
+  //
+  // Nothing was stuck in either. changeUntil, mutedAt, aimTold and the aim all
+  // released on time, which is why the tug came back and the counter read
+  // 0/12 - the same release ran and had nothing to give the title, because
+  // heldTitle was null and the dash was a DOM write nobody was holding.
+  //
+  // So the dash is a STATE rather than a write. This says the panel is showing
+  // one, unblank() is what takes it off, and neither of the two places that
+  // blank has to know how the other one is undone.
+  let blanked = false;
+  function blank() { blanked = true; $('np').textContent = '—'; }
+  // Only when the page is not deliberately holding the panel back - the tug's
+  // dash has to last the whole silence, and beginChange ends the change it
+  // replaces before drawing its own, which reaches settle() with the mute still
+  // on. And only when there is a name to go back to: a page that has never had
+  // one keeps the dash, which is what a station that has said nothing looks
+  // like.
+  function unblank() {
+    if (blanked && lastTitle !== null && !waiting()) showTitle(lastTitle);
+  }
+
   // The glyph is the state. Zero on the slider draws the crossed speaker even
   // with the switch up, because a slider at nothing IS silence and an icon
   // that said otherwise would be lying about what you can hear.
@@ -1725,7 +1757,31 @@
   // the second half only - inventing a total would be worse than admitting there
   // is none.
   const NOTIME = '--:--';
-  // What the station last said about the track, and when it said it.
+  // What the station last said about the track, and when it said it. The
+  // reading is the STATION's position; what is drawn is that reading less
+  // earLagMs(), because the number this line is for is where the LISTENER is in
+  // the song and the station is several seconds ahead of every listener.
+  //
+  // It was drawn straight, and the size of what that cost is the thing to keep:
+  // the record was pressed onto the pin and the clock read 0:10 at the instant
+  // it landed, on every change, because the aim lands the record when the ear
+  // reaches the boundary and the station is by then ten seconds into the next
+  // track. The operator read it as the station mixing between songs. It is not
+  // mixing - this station cuts, radio.liq has no crossfade in it - it was one
+  // panel showing two different clocks, the title and the record on the
+  // listener's and this line on the station's.
+  //
+  // Taken off continuously and not at the landing, which is the half that is
+  // easy to get wrong: an offset applied only when a change ends would leave
+  // the clock correct for one frame and jump ten seconds forward on the next
+  // ordinary poll. It comes off every tick, so the line reads the listener's
+  // position for the whole of every track and simply passes through 0:00 at the
+  // moment the record is set down.
+  //
+  // It is also a free check on the estimate. The clock at the instant of the
+  // seat IS the error in earLagMs(), in seconds, on screen: if the aim is right
+  // it reads 0:00 there, and anything else is the estimate being wrong by
+  // exactly that much and in that direction.
   let trackElapsed = 0, trackTotal = 0, trackAt = null;
   // True means the page is not listening and has stopped fetching.
   let quiet = true;
@@ -1771,8 +1827,8 @@
     // second rather than in jumps every five.
     $('intotrack').textContent = (quiet || trackAt === null)
       ? NOTIME + ' / ' + NOTIME
-      : mmss(trackElapsed + (Date.now() - trackAt) / 1000) + ' / ' +
-        (trackTotal > 0 ? mmss(trackTotal) : NOTIME);
+      : mmss(trackElapsed + (Date.now() - trackAt) / 1000 - earLagMs() / 1000) +
+        ' / ' + (trackTotal > 0 ? mmss(trackTotal) : NOTIME);
     // The tug's cool-off ends between polls, and this is the second hand that
     // already exists. It rides here rather than on a timer of its own for the
     // reason the whole PULSE block exists.
@@ -1868,7 +1924,12 @@
     $('live').className = 'live' + (on ? ' on' : '');
     $('lbl').textContent = label || (on ? 'ON AIR' : 'OFF AIR');
     btn.disabled = !on;
-    if (!on) $('np').textContent = '—';
+    // A dash while there is no station, and the name back when there is one.
+    // The second half is this round's: the station coming back does not change
+    // the title, so poll() below has nothing to hold and the panel used to keep
+    // the dash for the rest of the track over one failed request.
+    if (!on) blank();
+    else unblank();
   }
 
   function fmtUptime(s) {
@@ -1953,6 +2014,8 @@
   // name the guestbook stamps on a note, which is lastTitle and is therefore now
   // the song the writer was actually hearing when they typed.
   function showTitle(t) {
+    // Whatever was on the panel, a name is on it now.
+    blanked = false;
     $('np').textContent = t || 'live';
     if (t !== lastTitle) { lastTitle = t; titleSince = Date.now(); noteTrack(t); }
     updateFind(t);
@@ -2556,29 +2619,36 @@
   // floor for an arrival; everything above that is the deck standing empty.
   const TRAVEL = 420, SEAT = 240;
   // How long a change of record is DRAWN for when it is not covering a wait,
-  // which since this round is every change but the tug's. A track ending is
-  // seen coming rather than reacted to - aimChange has the arithmetic - so the
-  // music never stops, there is no silence to fill, and the length is free to
-  // be whatever reads best instead of being whatever the ear is behind by.
+  // which since aiming is every change but the tug's. A track ending is seen
+  // coming rather than reacted to - aimChange has the arithmetic - so the music
+  // never stops, there is no silence to fill, and the length is free to be
+  // whatever reads best instead of being whatever the ear is behind by.
   //
-  // 2400ms, and it is chosen from the drawing rather than picked. The lift and
-  // the seat are 240 each because they are physical events; the remaining 1920
-  // is split a quarter, a half, a quarter by the rule in carry(), so each travel
-  // is 480ms - 233px/s across the 112px face, within a tenth of the 267px/s
-  // this file has on record as the speed a record is carried at - and the deck
-  // stands empty for 960ms between them. That is long enough to be a deck with
-  // nothing on it and short enough that a listener whose music has not stopped
-  // is not left looking at an empty turntable. It was 10145ms measured at a
-  // real boundary before this, of which 8825 was the empty deck and 420 was the
-  // new record coming in: four per cent of the mechanism was the part that says
-  // a record is arriving, and the owner of this page said what that looks like
-  // in one line - the new record does not slide in, it appears.
+  // 660ms, which is TRAVEL + SEAT: the whole of the move, and nothing left over.
+  // It was 2400 while a change was five parts - lift, carry out, stand empty,
+  // carry in, seat - and 1920 of that was there to hold an empty deck open long
+  // enough to be read as one. There is no empty deck in a change any more, so
+  // there is nothing to hold open: the record crosses the window at 267px/s,
+  // the speed this file has on record as the speed a record is carried at, and
+  // is set down. Anything longer would be the same move drawn slower for no
+  // reason, which is what 2400 became the moment the middle came out.
   //
   // record_min is still a floor under it and is read from the station, so a
-  // desk that wants a longer minimum gets one. Nothing here is a ceiling: a
-  // change that is covering a wait - the tug, or a page that found out late -
-  // is timed by that wait and not by this.
-  const CHANGE_NATURAL = 2400;
+  // desk that wants a longer minimum gets one - and at the 1.2s this station
+  // sets it is what actually binds, stretching the travel and leaving the seat
+  // alone. Nothing here is a ceiling: a change that is covering a wait - the
+  // tug, or a page that found out late - is timed by that wait and not by this.
+  const CHANGE_NATURAL = 660;
+  // How near two boundaries have to be before they are taken for one, which is
+  // what stops a prediction and the truth behind it from being acted out twice.
+  // It was written as twice the length a change is drawn for, and that was a
+  // convenience rather than an argument: the two have nothing to do with each
+  // other, and the slide-over would have shrunk this from 4800ms to 2400
+  // without anyone deciding to. So it is the 4800 that was in force, written
+  // down. What sets it is how wrong a duration can be - a variable bitrate
+  // file's claim about its own length - and the ceiling is the shortest gap
+  // between two real boundaries, which is far longer than this.
+  const SERVED_SAME = 4800;
   // How far out of the window a parked record stands, as a percentage of its
   // own width. It is not a taste: the window is the button, a circle of the
   // record's own diameter, and the paper label is .42 of that diameter, so a
@@ -2633,6 +2703,26 @@
   // reach `playing` is 8.358s, so the model below is right in its shape and
   // about 0.8s short in its size, and it is short in the direction that lands
   // the record slightly before the music rather than after it.
+  //
+  // AND IT DOES NOT DECAY, which is the question that had not been asked. Both
+  // of the numbers above are things that happen ONCE, at the connection: a
+  // burst handed over on joining, and a buffer filled from cold. That they are
+  // also the STEADY lag - what a listener is behind by ten minutes later - is a
+  // separate claim, and if it were false every aimed change would fire late by
+  // the difference. So the same stream was rebuilt as a repeating one, 20s of
+  // silence and 4s of tone every 24.085s, and the onset was taken 22 times over
+  // eight and a half minutes of continuous play:
+  //
+  //   9.166s at the first tone, 9.182s at the twenty-second, and never outside
+  //   9.154 to 9.199 in between.
+  //
+  // Flat to forty milliseconds over eight minutes. A plain element joins with
+  // the burst and then plays at real time against a stream arriving at real
+  // time, so it never catches any of it up - the startup cost IS the steady
+  // lag, and a stall does not recover either, which is why fillMs adds one
+  // rather than replacing the figure. The estimate is therefore right in shape,
+  // does not need to decay with time, and is short by the same ~0.8s it was
+  // short by cold.
   const BURST = 65536;
   // air_delay used to be got at by subtracting 5.0 from /likes/now's `cool`,
   // because tug_cool was written `5.0 + air_delay()` in radio.liq and that was
@@ -2838,6 +2928,11 @@
   // this one, so it goes on telling the station's time rather than restarting.
   function settle() {
     if (heldTitle !== null) { const t = heldTitle; heldTitle = null; showTitle(t); }
+    // And if nothing was held, the panel still has to come back from whatever
+    // dash it is showing. This is the line the tug was missing: a release that
+    // has no new title to land is still a release, and it owes the listener the
+    // name of the song that is playing.
+    else unblank();
     if (heldTrack) {
       trackElapsed = heldTrack.e; trackTotal = heldTrack.d; trackAt = heldTrack.at;
       heldTrack = null;
@@ -2866,7 +2961,7 @@
     // carriage, and a parked record is one that stopped - so ending it is the
     // record going back on the pin, which is exactly what a return begins by
     // doing before it draws the same record travelling in.
-    btn.classList.remove('shoving', 'arriving', 'parked');
+    btn.classList.remove('shoving', 'arriving', 'parked', 'away');
     parked = false;
     if (landed && changeArriving) btn.classList.remove('empty');
     changeArriving = false;
@@ -2879,10 +2974,20 @@
     settle();
   }
 
-  // The copies, the angle they inherit, and the travel over them. Four moves
-  // are built here and they are one mechanism seen from four sides: a change (a
-  // record off, a record on), an arrival (nothing to take off), a park (nothing
-  // to put on) and a return (the parked one coming back).
+  // The copy, the angle it inherits, and the travel over it. Four moves are
+  // built here and they are one mechanism seen from four sides: a change (a
+  // record in over the one that is on), an arrival (the same, over an empty
+  // deck), a park (a record taken off and stood beside it) and a return (that
+  // one coming back).
+  //
+  // ONE COPY, in every one of the four. A change used to build two, because it
+  // took a record off and put another on and both had to move; it slides the
+  // new one over the old one now, the old one does not move, and a record that
+  // does not move does not need a copy of itself to move it with. What plays
+  // the outgoing record instead is the real disc, left visible by the sheet for
+  // this one mode - so the end of a change is a carriage being taken off an
+  // element that was never touched, at the angle it was already at, and there
+  // is no handover to get wrong.
   //
   // A missing spin is no longer a refusal. It used to be - reduced motion takes
   // the disc's animation away and there was then no angle to inherit - but the
@@ -2894,113 +2999,84 @@
     if (!disc) return false;
     const spin = disc.getAnimations()[0];
     const car = document.createElement('span');
-    car.className = 'lp-shove' + (mode === 'arrive' ? ' arriving' : '');
+    // `arriving` on the CARRIAGE - a different thing from the button class of
+    // the same name - is what stands its copy off the right of the window, and
+    // it is now on both of the moves that bring a record in.
+    car.className = 'lp-shove' +
+                    (mode === 'arrive' || mode === 'change' ? ' arriving' : '');
     car.setAttribute('aria-hidden', 'true');
-    // Every copy carries the pause bars, in every one of the four moves, and
-    // that is the whole rule: the symbol printed on a record does not change
-    // while it is a record on this deck. It arrives with the bars, turns with
-    // them, is parked with them and leaves with them. Nothing has to be swapped
-    // at the instant the music starts or at the instant it stops, and there is
-    // never a moment where a listener is asked to compare two symbols - the
-    // play affordance is the deck's own cue, printed on the platter, and the
-    // park is what uncovers it.
+    // The copy carries the pause bars, in every one of the four moves, and that
+    // is the whole rule: the symbol printed on a record does not change while it
+    // is a record on this deck. It arrives with the bars, turns with them, is
+    // parked with them and leaves with them. Nothing has to be swapped at the
+    // instant the music starts or at the instant it stops, and there is never a
+    // moment where a listener is asked to compare two symbols - the play
+    // affordance is the deck's own cue, printed on the platter, and the park is
+    // what uncovers it.
     //
     // It used to copy whatever the disc had, which on an arrival is nothing:
     // the press clears the symbol to say connecting, so a record travelled in
     // blank and had a symbol appear on it after it landed.
-    for (let i = mode === 'change' ? 0 : 1; i < 2; i++) {
-      const d = car.appendChild(document.createElement('span')); d.className = 'lp-disc';
-      const lab = d.appendChild(document.createElement('span')); lab.className = 'lp-label';
-      const s = lab.appendChild(document.createElement('span')); s.className = 'lp-sym bars';
-      s.textContent = GLYPH_PAUSE;
-      lab.appendChild(document.createElement('span')).className = 'lp-hole';
-    }
+    const d = car.appendChild(document.createElement('span')); d.className = 'lp-disc';
+    const lab = d.appendChild(document.createElement('span')); lab.className = 'lp-label';
+    const sy = lab.appendChild(document.createElement('span')); sy.className = 'lp-sym bars';
+    sy.textContent = GLYPH_PAUSE;
+    lab.appendChild(document.createElement('span')).className = 'lp-hole';
     btn.insertBefore(car, btn.querySelector('.lp-glint'));
     btn.classList.add('shoving');
-    // Both copies are put at the angle the record is at instead of starting
-    // upright, and the class above has just stopped all three of them there, so
-    // the outgoing one takes over exactly where the record was and the real one
-    // is let go of exactly where the incoming one stopped. Each of these
-    // elements carries exactly one animation and it is spin.
+    // The two moves that leave the deck bare, so the sheet can uncover the well
+    // and hide the real disc for them and for nothing else. A change is not one
+    // of them any more, which is the whole of the slide-over in one class.
+    if (mode === 'park' || mode === 'return') btn.classList.add('away');
+    // The copy is put at the angle the record is at instead of starting upright,
+    // and `shoving` has just stopped both of them there. For a change that
+    // matters twice over: the record still sounding is frozen mid-turn at the
+    // angle the incoming one is carried at, so the two agree while one crosses
+    // the other, and the real one is unpaused - never restarted - at the
+    // landing. Each of these elements carries exactly one animation and it is
+    // spin.
     if (spin) {
       const phase = spin.currentTime;
-      for (const d of car.querySelectorAll('.lp-disc')) {
-        const a = d.getAnimations()[0];
-        if (a) a.currentTime = phase;
-      }
+      const a = d.getAnimations()[0];
+      if (a) a.currentTime = phase;
     }
     changeCar = car;
-    // Up, out, wait, in, down. The lift and the seat keep their own length
-    // whatever the total is - 240ms each, because both are physical events -
-    // and the other three share what is left: a quarter out, a half standing
-    // empty, a quarter in. An arrival is the same list with
-    // the lift and the first travel taken off the front: there is nothing on the
-    // deck to take up, so it begins where the other one gets to once the
-    // outgoing record has left, which is an empty window with a record held over
-    // it to the right.
+    // In, and down. That is the whole of a change now, and of an arrival, and
+    // they share these keyframes because they are the same move over different
+    // ground: the record starts a window clear of the right edge, crosses, and
+    // is lowered onto the pin.
     //
     // The Y of every keyframe but the last is -LIFT and that is not decoration.
-    // A record on a turntable has a spindle standing through it, and the only
-    // way one travels sideways is off that spindle first. Held there, the pin
-    // is uncovered for the whole of the middle - the part of a change that used
-    // to be a black porthole and is now a lit deck with its post standing in it.
-    //
-    // px rather than a percentage, because the lift is a property of the SPINDLE
-    // and not of the record: it is twice the hole, which is what the pin has to
-    // clear, and neither of those two scales with the disc.
+    // It is what makes the last frame a record being PUT somewhere rather than
+    // a record sliding to a stop: it is carried above the platter and set down
+    // on it. px rather than a percentage, because the lift is a property of the
+    // SPINDLE and not of the record - it is twice the hole, which is what the
+    // pin has to clear - and neither of those two scales with the disc.
     const at = (x, up) => 'translate(' + x + ', ' + (up ? -LIFT : 0) + 'px)';
-    // A change's travels take a QUARTER of the middle each, not a fixed 420ms,
-    // and the two physical events keep their lengths. The lift and the seat are
-    // 240ms because a record coming off a pin and a record going onto one take
-    // as long as they take; what is left - out, empty, in - is divided a
-    // quarter, a half, a quarter. The empty deck is the largest single part,
-    // because it is what the change is FOR, and both travels are the same
-    // length as each other, because it is one pair of hands.
-    //
-    // It used to be a fixed 420ms whatever the total, on the reasoning that the
-    // speed a hand moves a record at does not depend on how long the next one
-    // takes - which is true of a hand and false of a drawing whose job is to
-    // cover an interval. Measured at a natural boundary before this round, the
-    // total was 10145ms and 8825 of it was the deck standing empty, so the part
-    // that says a record is ARRIVING was four per cent of the mechanism and
-    // read as the new record appearing rather than sliding in. That total is
-    // 2400 now because the change is aimed at the boundary rather than started
-    // when the page finds out, and this rule is what a change still covering a
-    // wait - the tug, or a page that found out late - is drawn by.
-    //
-    // TRAVEL is the floor rather than the value, so nothing below 2160ms of
-    // total changes at all: under that a quarter of the middle is less than
-    // 420ms, the travels stay at 420ms, and the empty deck absorbs what is
-    // left - down to nothing at the 1320ms mechanical floor, which is exactly
-    // what that floor already drew.
     const s = SEAT / total, p = '-' + PARK + '%';
-    const t = Math.max(TRAVEL, (total - SEAT * 2) / 4) / total;
-    // THE ARRIVAL MOVES FROM THE FIRST FRAME. There is no hold at the start of
-    // it any more.
+    // THE RECORD MOVES FROM THE FIRST FRAME, and the travel is stretched over
+    // whatever the total is rather than taking a fixed 420ms of it.
     //
     // It used to wait off-screen for all but the last 660ms and then hurry in,
     // which is the same total and reads as a delay with an animation on the end
-    // rather than as a record being put on. Now the travel is stretched over the
-    // whole wait - the slower the connection, the slower the record comes in,
-    // which is the operator's own framing of it as a speed test you can watch.
+    // rather than as a record being put on. Now the slower the connection, the
+    // slower the record comes in, which is the operator's own framing of it as
+    // a speed test you can watch. A change that is covering a wait - the tug,
+    // whose whole silence has to be filled - is drawn by the same rule, and one
+    // that is aimed at a boundary simply has a short total to stretch over.
     //
     // Only the seat keeps a fixed length. It is the one part that is a physical
     // event rather than a wait: a record dropping the last two hole-widths onto
     // a pin takes as long as it takes, and stretching THAT over a slow
     // connection would make it hang in the air.
     //
-    // The park and the return are the same two lists cut short. A park is the
-    // front of a change - lift, then carry - stopped at PARK instead of running
-    // the record out of the window, and a return is the back of an arrival -
-    // carry, then seat - started from there instead of from off the window. So
-    // a record leaves and comes back along one line, at one speed, and the pin
-    // is uncovered for the whole of the time it is away.
+    // The park and the return are the same list cut in half and reversed. A
+    // park is a lift then a carry, stopped at PARK instead of running the
+    // record out of the window; a return is that carry backwards and then the
+    // seat. So a record leaves and comes back along one line, at one speed, and
+    // the pin is uncovered for the whole of the time it is away.
     changeAnim = car.animate(
-      mode === 'arrive' ? [
-        { transform: at('-100%', 1), offset: 0 },
-        { transform: at('-200%', 1), offset: 1 - s },
-        { transform: at('-200%', 0), offset: 1 },
-      ] : mode === 'park' ? [
+      mode === 'park' ? [
         { transform: at('0', 0), offset: 0 },
         { transform: at('0', 1), offset: s },
         { transform: at(p,   1), offset: 1 },
@@ -3009,10 +3085,7 @@
         { transform: at('0', 1), offset: 1 - s },
         { transform: at('0', 0), offset: 1 },
       ] : [
-        { transform: at('0',     0), offset: 0 },
-        { transform: at('0',     1), offset: s },
-        { transform: at('-100%', 1), offset: s + t },
-        { transform: at('-100%', 1), offset: 1 - t - s },
+        { transform: at('-100%', 1), offset: 0 },
         { transform: at('-200%', 1), offset: 1 - s },
         { transform: at('-200%', 0), offset: 1 },
       ], { duration: total, easing: 'linear', fill: 'forwards' });
@@ -3031,22 +3104,13 @@
     // spend the whole of one gap pushing off a record that is already two
     // behind, and would land the wrong title at the end of it.
     endChange(false);
-    const total = Math.min(CHANGE_MAX, Math.max(TRAVEL * 2 + SEAT * 2, recordMinMs, want));
+    // TRAVEL + SEAT, where a change used to need two of each. It is the same
+    // floor an arrival has, because since the slide-over it is the same move:
+    // one record crossing the window and being set down. record_min, the
+    // station's own floor off the desk, still sits above it.
+    const total = Math.min(CHANGE_MAX, Math.max(TRAVEL + SEAT, recordMinMs, want));
     aimAt = end || 0;
     changeUntil = Date.now() + total;
-    // 'change', not false. It was false, and carry() asks `mode === 'change'`
-    // for the one thing that makes a change a change: whether to build the
-    // SECOND copy, the record that is arriving. So every change of record on
-    // this page was built with one disc, the outgoing one, and the incoming one
-    // did not exist - the deck stood empty for the whole of the second half and
-    // the new record appeared at the instant the carriage was taken off and the
-    // real disc uncovered. That is the whole of what the owner of this page
-    // reported, and it is not a matter of proportions: there was nothing to
-    // slide. Found by capturing frames across a change and looking at them,
-    // which is the only way it could have been found - the keyframes, the
-    // durations and the transforms were all correct, and every one of them is
-    // driven on the CARRIAGE rather than on a copy, so nothing about the timing
-    // was ever wrong.
     if (stillness.matches || !carry(total, 'change')) {
       changeTimer = setTimeout(() => endChange(true), total);
     }
@@ -3091,9 +3155,9 @@
   //   a boundary this page has already SERVED is not served again - a
   //   prediction that fired a moment early is followed by the id change that
   //   proves it early, and without this the same track change would be acted
-  //   out twice. Within one change's length of each other counts as the same
-  //   boundary, which is far under the gap between two tracks and far over any
-  //   error a duration has been seen to have;
+  //   out twice. Within SERVED_SAME of each other counts as the same boundary,
+  //   which is far under the gap between two tracks and far over any error a
+  //   duration has been seen to have;
   //
   //   and the tug never comes here at all. A skip voted through is a reaction
   //   to something that has already happened, it cuts the song off rather than
@@ -3106,7 +3170,7 @@
     if (quiet) return;
     if (changeUntil || mutedAt) { if (told) aimTold = true; return; }
     if (aimTold && !told) return;
-    if (servedAim && Math.abs(end - servedAim) < changeMs() * 2) return;
+    if (servedAim && Math.abs(end - servedAim) < SERVED_SAME) return;
     const now = Date.now(), total = changeMs();
     if (aimTimer) { clearTimeout(aimTimer); aimTimer = 0; }
     aimAt = end; aimTold = told;
@@ -3241,10 +3305,14 @@
     // same two numbers. It is the exact boundary rather than an estimate of one.
     const end = Date.now() + earLagMs() - elapsed * 1000;
     // Muted means the tug took this song off, and the tug is a reaction because
-    // that is what it is: the sound is already cut, the whole of the wait is
-    // silence, and an empty deck standing through the whole of it is the honest
-    // drawing. Nothing is aimed and nothing waits - see the paragraph over
-    // aimChange for why every other change now does both.
+    // that is what it is: the sound is already cut and the whole of the wait is
+    // silence, so the change is drawn NOW and stretched to the boundary rather
+    // than booked to start near it. Since the slide-over that is one record
+    // crossing the window very slowly over the record it is replacing, which is
+    // the same drawing an arrival gives a slow connection and reads the same
+    // way - something is being put on, and it is taking this long. Nothing is
+    // aimed and nothing waits; see the paragraph over aimChange for why every
+    // other change now does both.
     if (mutedAt) beginChange(end - Date.now(), 0);
     else aimChange(end, true);
   }
@@ -3420,10 +3488,12 @@
   // that is right - they are what the ear would have heard.
   //
   // The title goes to a dash for the same interval and comes back with the
-  // record, through the hold that was already there. It is written straight to
-  // the panel rather than through showTitle because lastTitle must not move: it
-  // is what the guestbook stamps on a note and what the search link points at,
-  // and neither should become a dash.
+  // record. lastTitle must not move while it is away - it is what the guestbook
+  // stamps on a note and what the search link points at, and neither should
+  // become a dash - so this does not go through showTitle. It goes through
+  // blank() instead of writing the panel outright, which is what makes the dash
+  // something the release can take off again whether or not a new title turned
+  // up to replace it; the block over blank() has the two paths where none did.
   //
   // Two catch-up polls rather than waiting out the five-second one. The station
   // needs a moment to skip and to name what replaced it, and until it does this
@@ -3441,7 +3511,7 @@
     mutedAt = Date.now();
     mutedId = likeId;
     audio.muted = true;
-    $('np').textContent = '—';
+    blank();
     setTimeout(pollLikes, 300);
     setTimeout(pollLikes, 1000);
   }
