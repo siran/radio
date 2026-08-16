@@ -62,10 +62,30 @@
        symbol explains it.
        Scale them with the disc and the bars grow by a third too, and the
        label ends up exactly as full as it started, which is what was asked to
-       change. */
+       change.
+
+       --cue is the third of those, and it is the one that is NOT a control. The
+       triangle on the empty deck used to be --ctl as well, on the argument that
+       it had to be the same size and in the same place as the one printed on the
+       paper so that nothing moved when a record landed over it. That argument
+       was paid for by the mechanism it was written against: the record used to
+       appear in place, so the two symbols were compared at the same coordinates
+       and any difference read as a jump. The record now travels in from the side
+       and is lowered onto the pin, so it COVERS the cue by moving over it, and
+       an occlusion invites no comparison. The constraint is bought out, and what
+       decides the size instead is the thing the owner of this page asked to be
+       able to enjoy: the pin standing through the ink. Set out at the cue.
+
+       --seat is how far the record is held above the deck while it is carried,
+       and it is twice --hole for a reason that is about the drawing rather than
+       about taste: the pin must start the drop clear of the hole by its own
+       width, or the record is already on the spindle before it is lowered and
+       there is nothing for the lowering to show. */
     --lp: 112px;
     --ctl: 20.41px;
     --hole: 4.61px;
+    --cue: 45px;
+    --seat: 9.22px;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
@@ -364,11 +384,14 @@
   }
   button.play.spinning .lp-disc { animation-play-state: running; }
   /* --- a record being changed --------------------------------------------
-     The record that was playing goes out of the window to the left, the deck
-     stands empty, and then the next one comes in from the right and stops dead
-     centre. One axis, one constant speed, a hard start and a hard stop:
-     nothing here is eased, because easing is what makes a change look designed,
-     and this one is meant to look like a mechanism.
+     The record that was playing is lifted off the spindle, carried out of the
+     window to the left, the deck stands empty, the next one comes in from the
+     right riding above the pin, and it is lowered onto it. Two axes now and
+     they are used for two different things: sideways is a record being carried,
+     downwards is a record being PUT somewhere, and the second is the whole of
+     what a spindle is for. One constant speed on each, a hard start and a hard
+     stop: nothing here is eased, because easing is what makes a change look
+     designed, and this one is meant to look like a mechanism.
 
      The empty deck in the middle is the whole point of this round, and it is
      not a pause put in for looks. A track change on this station happens at the
@@ -409,9 +432,34 @@
      420ms per travel is 267px/s across the 112px face - slow enough to read as
      an object being carried, and unchanged from when it was the whole animation,
      because the speed a hand moves a record at does not depend on how long the
-     next one takes to arrive. Two travels is therefore 840ms and that is the
-     floor: a change cannot be drawn shorter than the time it takes to carry two
-     records at the speed records are carried at.
+     next one takes to arrive.
+
+     The seat is 240ms over --seat, which is 9.22px, and that is 38px/s: one
+     seventh of the speed the same record is carried at. The difference is the
+     point rather than a taste. Carrying a record is a move that only has to end
+     somewhere near; putting one on a spindle is a move that has to end on a
+     4.61px target, and a hand slows down for the second one. Drawn at the
+     carrying speed the drop lasts 35ms, which is two frames and is not a motion
+     at all - it reads as the record snapping down, which is the one thing the
+     three-part travel was already written to avoid at the other end. It is not
+     eased for the same reason nothing else here is; what says "aiming" is the
+     speed, not a curve.
+
+     A lift and a seat, not a seat alone, and the outgoing record is why. A
+     record cannot be slid sideways off a spindle that is standing through it. So
+     the change begins by taking the old one UP off the pin by exactly what the
+     new one will be lowered by, and both records are carried at that height -
+     which is also what makes the pin visible for the whole of the middle, where
+     before there was a lift at neither end and the two records passed through
+     the pin's own plane. An arrival has nothing to lift, so it is the last two
+     moves of the same list and nothing else.
+
+     The floor is therefore SEAT + TRAVEL + TRAVEL + SEAT = 1320ms for a change
+     and TRAVEL + SEAT = 660ms for an arrival: a change cannot be drawn shorter
+     than the time it takes to lift a record, carry two at the speed records are
+     carried at, and put one down. Under it there is nothing to see, and the
+     station has a floor of its own - record_min, on the desk - which sits above
+     both and is what actually binds on a fast connection.
 
      The copies are offset with `left` rather than a transform, and that is not a
      preference: the copies carry spin, spin drives transform, and one property
@@ -421,10 +469,17 @@
      is what opens the empty deck: at -100% the outgoing record has just cleared
      the window and the incoming one has not reached it.
 
-     There are no @keyframes here any more. The three-part travel has offsets
-     that depend on a duration only the script knows, so it is written with the
-     Web Animations API instead, where a keyframe can be handed an offset at the
-     moment it is built. That has a second effect worth knowing: the blanket
+     Both axes are driven on the CARRIAGE and never on a copy, for that same
+     reason: the carriage carries no spin, so its transform is free, and one
+     translate can hold the sideways and the downwards at once. Lifting the
+     carriage lifts whatever is on it, which is exactly right - a change lifts
+     the outgoing record and finds the incoming one already at that height,
+     because they are on the same hands.
+
+     There are no @keyframes here any more. The travel has offsets that depend on
+     a duration only the script knows, so it is written with the Web Animations
+     API instead, where a keyframe can be handed an offset at the moment it is
+     built. That has a second effect worth knowing: the blanket
      `animation: none !important` at the foot of this sheet cannot touch a script
      animation, so the carriage can no longer be stranded by it. Reduced motion
      is still refused in the script, because it should be, but it is now a
@@ -436,8 +491,9 @@
   .lp-shove .lp-disc + .lp-disc { left: 200%; right: auto; width: 100%; }
   /* An arrival has nothing leaving, so it is built with one copy instead of two
      and that copy is the one waiting off to the right. Same element, same
-     travel, same speed - the only difference is that the window starts empty
-     and the script's keyframes start at the far end. */
+     travel, same speed, same seat - the only difference is that the window
+     starts empty, the script's keyframes start at the far end, and there is no
+     record to lift off first. */
   .lp-shove.arriving .lp-disc { left: 200%; right: auto; width: 100%; }
   /* --- the deck with no record on it --------------------------------------
      A page that has just opened used to show a grey record, and a grey record is
@@ -455,22 +511,23 @@
      pin that did not match the hole would be a pin no record on this page could
      be put on.
 
-     The play triangle sits here too, and it is the same glyph at the same size
-     with the same centring correction as the one printed on the paper - so the
-     symbol does not move, resize or shift when the record arrives under it. It
-     only changes what it is printed on. That is also why the pin is written
-     after it and given a position of its own: a spindle stands proud of whatever
-     is drawn on the platter, exactly as the hole is punched through whatever is
-     printed on the paper, and the rule that makes one work makes the other.
+     The play triangle sits here too. It used to be the same glyph at the same
+     size with the same centring correction as the one printed on the paper, and
+     it is not any more - see the cue below for what paid for that and what it
+     bought. What has not changed is why the pin is written after it and given a
+     position of its own: a spindle stands proud of whatever is drawn on the
+     platter, exactly as the hole is punched through whatever is printed on the
+     paper, and the rule that makes one work makes the other.
 
-     Three states this has to keep apart, and they are kept apart by what is
+     Four states this has to keep apart, and they are kept apart by what is
      drawn rather than by how brightly:
 
-       empty and pressable    the recess, the pin, and the triangle
-       empty and not          the recess and the pin, and no triangle at all
+       empty and pressable    the recess unlit, the pin, and the triangle
+       empty and not          the recess unlit and the pin, and no triangle
+       a record on its way    the recess LIT, the pin, and the triangle
        a record on the deck   none of this; the disc covers it
 
-     The middle one is a station that is not answering, and it must not be the
+     The second is a station that is not answering, and it must not be the
      first one with the lights turned down. So the triangle is not dimmed there,
      it is absent: an empty deck with no cue on it is a deck there is no point
      pressing, which is exactly the fact. The button's own disabled fade is still
@@ -484,7 +541,36 @@
      used to be. The triangle does not come with it: during a change the state
      of the control is whatever the record is about to carry, and a play cue
      under a record arriving to be paused would be the button saying two things.
-     */
+     An ARRIVAL is the one case where the cue stays, and that is the third state
+     above rather than an exception to the fourth; the cue's own paragraph has
+     the argument.
+
+     The third state is new and it is what the press now buys. The press used to
+     take the triangle away and put nothing in its place - the only thing that
+     changed on screen was a symbol going missing, which is the one edit that
+     cannot mean "heard you". The deck lights instead. It is a lamp over the
+     platter coming on, which is what a deck does when it is asked for a record,
+     and it leaves everything that was on the button still on it.
+
+     What "lit" is, is a brighter dish and nothing else: no colour of its own, no
+     second light source, no glow outside the recess. Everything on this button
+     is lit by one lamp from above - the dish's own inner shadow at the top and
+     hairline at the bottom, the pin's highlight at 45%/35%, the glint's conic -
+     and a light that arrived from anywhere else would break the one agreement
+     the whole drawing rests on. So the same lamp is simply turned up: the bowl
+     rises about two and a half stops, the hairline along the bottom of the dish
+     that reads as its far wall gets the same lift, and the rim goes from a fifth
+     of a level to two. The play cue is lit by it too, because it is printed on
+     the platter and not floating over it.
+
+     The transition is on .lp-well rather than on the class that lights it, so it
+     fades both ways off one declaration. 260ms is the number: it has to be
+     slower than a redraw or the press reads as the page repainting rather than
+     as something switching on, and it has to be finished well inside the 420ms
+     the record spends travelling, or the lamp is still coming up when the record
+     is already over it. It is a transition and not an animation, so the blanket
+     rule at the foot of this sheet kills it under reduced motion and leaves the
+     lit state itself standing - which is the right half to lose. */
   .lp-well {
     position: absolute; inset: 0; border-radius: 50%; visibility: hidden;
     display: grid; grid-template: 1fr / 1fr;
@@ -494,8 +580,23 @@
     box-shadow: inset 0 7px 11px -2px rgba(0,0,0,1),
                 inset 0 -4px 7px -3px rgba(255,255,255,.16),
                 inset 0 0 0 1px rgba(255,255,255,.05);
+    transition: background 260ms ease, box-shadow 260ms ease;
   }
   button.play.empty .lp-well, button.play.shoving .lp-well { visibility: visible; }
+  /* Two classes rather than one, and the second is not a duplicate. `shoving`
+     means a carriage is on the button, and there is no carriage under reduced
+     motion or on a browser with no spin to inherit - so keying the lamp off it
+     alone would leave exactly those listeners with a press that changes nothing
+     on screen, which is the fault this state was added to fix. `arriving` is set
+     by the script whether or not anything is drawn, so the deck lights for
+     everybody and only the record's travel is refused. */
+  button.play.shoving .lp-well, button.play.arriving .lp-well {
+    background: radial-gradient(circle closest-side at 50% 38%,
+                                #16161f 0 46%, #24242f 84%, #0d0d14 100%);
+    box-shadow: inset 0 7px 11px -2px rgba(0,0,0,.92),
+                inset 0 -5px 9px -3px rgba(255,255,255,.34),
+                inset 0 0 0 1px rgba(255,255,255,.13);
+  }
   /* No light on an empty deck. The glint is a lamp catching the smooth face of a
      record, and there is no record here to catch it - drawn over the recess it
      is a wedge of light on nothing, which is the one thing on this button that
@@ -505,10 +606,83 @@
      highlight that was never on the record. */
   button.play.empty .lp-glint, button.play.shoving .lp-glint { visibility: hidden; }
   button.play.empty > .lp-disc { visibility: hidden; }
-  .lp-cue { grid-area: 1 / 1; font-size: var(--ctl); visibility: hidden;
+  /* The cue, and it is no longer the control's own symbol at the control's own
+     size. What it was for was written down two rounds ago: the same glyph at the
+     same size in the same place as the one printed on the paper, so that nothing
+     moved when a record landed over it. That was worth a great deal while the
+     disc simply became visible where the cue had been - two symbols compared at
+     one set of coordinates, where a pixel of difference reads as a jump. The
+     record is carried in from the side now and lowered onto the pin, so what
+     happens to the cue is that a record passes over it. Nothing is compared,
+     because the two are never in the same place at the same time, and the
+     constraint went with the mechanism that needed it.
+
+     What decides the size instead is the thing the owner of this page asked for
+     in one line: the deck has a short three-dimensional tube standing in the
+     middle of the play symbol, and the symbol should be bigger so that effect
+     can be enjoyed. So this is the one glyph on the button drawn to show the
+     pin off rather than to be pressed, and the pin is what sets it. The pin is
+     --hole across and cannot grow with it - it is the thing the record's hole
+     goes over, and a pin that did not match that hole would be a pin nothing on
+     this page could be put on - so the white round it inside the ink is bought
+     entirely by the triangle. Every figure here is measured off the rendered
+     button on a sixteen-times raster WITH THE PIN HIDDEN, because the pin is
+     grey on white and any threshold that separates ink from dish also separates
+     ink from pin: masking it out by radius instead makes the mask decide the
+     answer, which is how a first pass reported a 1.50px clearance that was
+     nothing but the radius it had been told to exclude.
+
+     At --ctl the triangle inks 14.25 x 15.94px, the nearest edge of the ink is
+     4.18px from the centre the pin stands on, and the pin takes 2.31px of that:
+     1.87px of white, well under half the pin's own diameter, which is a post in
+     a tight collar. At --cue the same glyph inks 31.50 x 35.19px, the nearest
+     edge is 10.33px out, and the white is 8.03px - better than a pin's width on
+     every side. The pin does not get bigger; it gets room, which is what was
+     missing. (1.87 rather than the 2.35px this file records for --ctl is layout
+     phase and not a disagreement: the vertical clearance moves with where the
+     button lands on the page, this was read on a taller page than that one was,
+     and the symbol's own paragraph gives the 1.90 to 2.33px spread.)
+
+     45px is where that stops and the record is what stops it. When the record
+     lands, its paper label covers 42 per cent of the disc, a radius of 23.52px
+     about the same centre this triangle is drawn about. The ink's furthest
+     corner from the pin measures 21.16px, so the whole cue is covered by PAPER
+     rather than by black vinyl, with 2.36px in hand. That is a real relationship
+     rather than a round number: the mark on the platter is inside the mark the
+     record carries, and one lands on the other. 50px was rendered as well and
+     puts that corner at 23.47px, which is the paper's own edge to five
+     hundredths of a pixel - a cue exactly as large as the label it waits for,
+     where any layout phase at all lands a corner out on the vinyl. It buys
+     0.90px of white round the pin for that, which is not what the trade is
+     about: the pin has had enough room since about forty.
+
+     Both corrections stay in em and both therefore travel with the size, which
+     is what they were written in em for. The horizontal one is geometry - the
+     distance from a right triangle's bounding box centre to its centroid, as a
+     fraction of the em - and geometry scales exactly. The vertical one is a
+     raster correction and does NOT scale honestly: .0087em was a fifth of a
+     pixel at --ctl and is four tenths here. It is left alone because it is still
+     small against the 7.9px of clearance it is nudging, where at --ctl it was
+     being asked to place ink inside 2.35px; a correction that mattered at a
+     third of a pixel of margin does not matter at eight.
+
+     Two states, and the second is the whole of what the press changes here. The
+     cue is shown on an empty deck that can be pressed, as it always was, and it
+     is now ALSO shown for the whole of an arrival - which is a deck being lit
+     with a record on its way onto it, and the play cue printed on that platter
+     is still true right up to the moment the record covers it. It is not shown
+     during a change of record, which is the rule the paragraph over .lp-well
+     already gives: a change ends with a record that may be about to be paused,
+     and a play cue under that would be the button saying two things. An arrival
+     cannot end that way. It only ever ends with a record that is about to
+     play. */
+  .lp-cue { grid-area: 1 / 1; font-size: var(--cue); visibility: hidden;
             color: rgba(255,255,255,.46);
+            transition: color 260ms ease;
             transform: translate(.1211em, .0087em); }
-  button.play.empty:not(:disabled):not(.shoving) .lp-cue { visibility: visible; }
+  button.play.empty:not(:disabled):not(.shoving) .lp-cue,
+  button.play.arriving .lp-cue { visibility: visible; }
+  button.play.shoving .lp-cue, button.play.arriving .lp-cue { color: rgba(255,255,255,.66); }
   /* Metal, not a light. A first pass drew this bright enough that it read as a
      bead or a lamp rather than as a post, and on an empty deck it was the only
      lit thing on the button, which is a great deal of attention for the one part
@@ -1098,9 +1272,24 @@
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
   .recent ol { list-style: none; margin: 0; padding: 0; }
-  .recent li { font-size: .82rem; color: var(--dim); padding: 4px 0; overflow-wrap: anywhere;
-               border-bottom: 1px solid var(--line); }
+  .recent li { font-size: .82rem; color: var(--dim); padding: 4px 0;
+               border-bottom: 1px solid var(--line);
+               display: flex; gap: 10px; align-items: baseline; }
   .recent li:last-child { border-bottom: 0; }
+  .recent li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  /* What a song was liked to, in the mark you press to like one. The heart is
+     U+2665, the same character the like button carries when it is filled and
+     from the same block, rather than an emoji: an emoji renders in colour and in
+     somebody else's design at a size where this list is deliberately quiet, and
+     it would be the only coloured thing in a column of grey. The number rides
+     beside it with no word of any language between them, which is the standing
+     rule for every control and reading on this page.
+     Tabular figures because the counts are in a column and a 1 that is narrower
+     than a 7 makes a ragged edge out of a straight one. Never wrapped and never
+     shrunk: the title gives way, because a title that loses its last word is
+     still readable and a count that loses a digit is a different number. */
+  .recent li .l { flex: none; font-variant-numeric: tabular-nums;
+                  letter-spacing: .04em; white-space: nowrap; }
   .empty { font-size: .84rem; color: var(--dim); padding: 12px 0; }
   .privacy { font-size: .7rem; color: var(--dim); margin-top: 9px; line-height: 1.45; }
   .replying { font-size: .78rem; color: var(--dim); margin-bottom: 9px;
@@ -1277,6 +1466,13 @@
   function start() {
     audio.src = '/stream?t=' + Date.now();   // always join live, never a stale buffer
     audio.load();
+    // Every press begins audible. The page silences this element on its own
+    // account when a skip lands - see topOut - and every path that takes that
+    // mute gives it back, but this is the one line that cannot be reasoned
+    // around: whatever state the element was left in, the thing a listener asked
+    // for by pressing play is sound. unmute() rather than the property, so the
+    // bookkeeping goes with it and waiting() cannot be left armed.
+    unmute();
     // The clock on this browser filling its buffer starts with the request that
     // fills it, not with the click - see the fill measurement further down. Cold,
     // because this is a new connection and nothing about the old one survives it.
@@ -1326,7 +1522,13 @@
     // second of grace on the first so it never races the animation it is
     // insuring. Neither is expected to fire.
     if (changeUntil && Date.now() > changeUntil + 500) endChange(true);
-    else if (heldTitle !== null && !changeUntil && Date.now() - heldSince > CLAIM) settle();
+    else if (heldTitle !== null && !waiting() && Date.now() - heldSince > CLAIM) settle();
+    // And a third, about the one piece of state that silences the radio. A mute
+    // is taken on the counter reaching the top and let go of when the record
+    // that replaces the song is down; if the station never produces that record,
+    // the sound has to come back on its own rather than wait for a change that
+    // is not coming. Once a change HAS begun its own deadline above owns this.
+    if (mutedAt && !changeUntil && Date.now() - mutedAt > MUTE_MAX) unmute();
     // /likes/now answers with elapsed and duration off the frame being played.
     // Carried forward between polls by the wall clock so the seconds move every
     // second rather than in jumps every five.
@@ -1445,7 +1647,7 @@
       // until a poller it has not started yet says otherwise.
       if (title !== lastTitle) {
         if (quiet) showTitle(title);
-        else if (changeUntil) heldTitle = title;
+        else if (waiting()) heldTitle = title;
         else if (heldTitle !== title) { heldTitle = title; heldSince = Date.now(); pollLikes(); }
       }
       // On the title being SHOWN rather than the one just read, so the link
@@ -1793,9 +1995,46 @@
   // --- recently played -------------------------------------------------
   // Kept in localStorage so it survives a refresh, which the previous
   // version did not.
+  //
+  // An entry used to be the title and is now the title and what the song was
+  // liked to. Anything already in a listener's browser is a list of strings, so
+  // it is read as one and carried forward with no count rather than thrown away:
+  // a song that played before this shipped genuinely has no reading, and zero
+  // would be a claim about it.
+  //
+  // The count is stamped on the entry as the song rolls OFF, which is the only
+  // moment it can be. /likes/now describes what is playing and nothing else, and
+  // the ledger behind it is keyed by file path, so there is no way to ask what
+  // an old track ended on and no endpoint is being built for one.
+  //
+  // The number is the LIFETIME total for that file and is meant to be. A song
+  // the station has played fifty times carries fifty plays' worth of hearts,
+  // which is what the ledger holds and what the heart on the button has always
+  // been showing. Nothing is subtracted and no second reading is needed to print
+  // it.
+  //
+  // The arrow beside it is the second fact and it is free. This page sees the
+  // count on every poll while a song plays, so it knows what the figure stood at
+  // when it first saw the song and what it stood at when the song ended, and
+  // whether it moved between the two. What that honestly means is "it gained
+  // hearts while I WAS LISTENING", not "it gained hearts this play": a listener
+  // who joins two minutes into a song never witnessed the first two minutes of
+  // it, and nothing on this page can. It is the only version of the fact a page
+  // can hold, it is true of the person reading it, and it must not be repeated
+  // anywhere as a claim about the broadcast.
   const RECENT_KEY = 'radio.recent';
   let recent = [];
-  try { recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { recent = []; }
+  try {
+    recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')
+               .map(e => typeof e === 'string' ? { t: e } : e)
+               .filter(e => e && typeof e.t === 'string');
+  } catch { recent = []; }
+  // What the song that has just been replaced stood at, and whether it moved
+  // while this page was watching. null rather than zero when there is nothing to
+  // stamp: the first title of a session is not a track change, and stamping a
+  // zero on it would erase a real count left in localStorage by the session
+  // before.
+  let rollLikes = null, rollUp = false;
 
   function renderRecent() {
     const ol = document.getElementById('recent');
@@ -1803,17 +2042,38 @@
     if (!ol || !wrap) return;
     ol.textContent = '';
     const past = recent.slice(1, 6);          // skip the one currently playing
-    past.forEach(t => {
+    past.forEach(e => {
       const li = document.createElement('li');
-      li.textContent = t;
+      li.appendChild(document.createElement('span')).className = 't';
+      li.firstChild.textContent = e.t;
+      // Nothing at all at nought, rather than a nought. A song nobody has ever
+      // liked has nothing to report, and a column of zeroes is a column of noise
+      // that says the same thing an absence says in less room.
+      //
+      // Two readings, one line. The number is always the lifetime total. The
+      // arrow and the heart in front of it say the number MOVED while this
+      // listener was here, which is the difference between a song with a history
+      // and a song that has just been given something. Where it did not move the
+      // number stands alone: the column is one column, and a row that is a bare
+      // figure among rows that carry a heart is read as the same figure without
+      // the heart's news, which is exactly what it is.
+      if (e.l > 0) {
+        const l = li.appendChild(document.createElement('span'));
+        l.className = 'l';
+        l.textContent = (e.u ? '↑♥ ' : '') + e.l;
+      }
       ol.appendChild(li);
     });
     wrap.hidden = past.length === 0;
   }
 
   function noteTrack(t) {
-    if (!t || recent[0] === t) return;
-    recent.unshift(t);
+    if (!t || (recent[0] && recent[0].t === t)) return;
+    if (rollLikes !== null && recent[0]) {
+      recent[0].l = rollLikes; recent[0].u = rollUp;
+      rollLikes = null; rollUp = false;
+    }
+    recent.unshift({ t: t });
     recent = recent.slice(0, 8);
     try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch {}
     renderRecent();
@@ -1907,6 +2167,15 @@
   let liked = [];
   try { liked = JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { liked = []; }
   let likeId = '';
+  // The count as the station last reported it for likeId, and the FIRST count
+  // this page was given for the same track. Kept rather than only printed,
+  // because the recents list needs the reading a song ended on - and by the time
+  // a song is written into that list the endpoint is describing the next one -
+  // and because the difference between the two is the only thing that says a
+  // song was liked while this listener was in the room. likeFirst is null until
+  // the station has named a track, so joining between songs cannot be mistaken
+  // for a reading of nought.
+  let likeCount = 0, likeFirst = null;
 
   // The count belongs to the song on the air, not to the station: it is the
   // number a listener can move, and it changes when the track does. The two
@@ -2013,9 +2282,19 @@
   let shownId = '';
   const stillness = matchMedia('(prefers-reduced-motion: reduce)');
 
-  // One travel of the window, at the speed a record is carried. Two of them are
-  // the floor for a change; everything above that is the deck standing empty.
-  const TRAVEL = 420;
+  // One travel of the window, at the speed a record is carried, and one seat -
+  // the drop onto the pin, at a seventh of that speed because it is aiming
+  // rather than carrying. The sheet has the argument for both numbers. Two
+  // travels and two seats are the floor for a change and one of each is the
+  // floor for an arrival; everything above that is the deck standing empty.
+  const TRAVEL = 420, SEAT = 240;
+  // How far above the platter a record is carried, read off the sheet rather
+  // than repeated here so that --seat is the one place it is written. It is a
+  // custom property and getPropertyValue returns its raw tokens, so it is set as
+  // a plain length for exactly this reason - a calc() would come back unresolved
+  // and parseFloat would take the first number out of it and be wrong.
+  const LIFT = parseFloat(getComputedStyle(document.documentElement)
+                            .getPropertyValue('--seat')) || 9.22;
   // icecast's burst-size in BYTES, from the station's own config. A player that
   // joins is handed this much at once, so the oldest byte it holds - the one it
   // starts playing - is this many bytes old, and at a constant bitrate that is a
@@ -2038,11 +2317,14 @@
   // about 0.8s short in its size, and it is short in the direction that lands
   // the record slightly before the music rather than after it.
   const BURST = 65536;
-  // tug_cool is `5.0 + air_delay()` in radio.liq and rides along on /likes/now
-  // as `cool`, so subtracting the constant leaves air_delay - the one station
-  // knob in this sum, read live rather than copied. It is 1.75 today and this
-  // page never has to be told when it stops being.
-  const TUG_BASE = 5.0;
+  // air_delay used to be got at by subtracting 5.0 from /likes/now's `cool`,
+  // because tug_cool was written `5.0 + air_delay()` in radio.liq and that was
+  // the only way it reached a page with no password. It arrives on its own now,
+  // and the subtraction is gone rather than kept as a fallback: it was a
+  // coincidence of two unrelated numbers being written as one sum, the station
+  // is free to change that sum, and a page still doing the arithmetic would go
+  // on producing a plausible figure long after it stopped being air_delay.
+  //
   // The ceiling on a change of record, and it is set by the parts rather than
   // picked: air_delay plus the burst plus the largest buffer reading this page
   // will believe is 1.75 + 4.096 + 10 seconds, so fifteen is just under
@@ -2062,8 +2344,16 @@
   // past any answer this station gives and still inside the five-second poll the
   // title would otherwise have waited for.
   const CLAIM = 3000;
+  // A mute taken for a skip that never became a track change. The station is
+  // asked outright the moment the counter tops out, so the ordinary wait is one
+  // round trip and this never fires; six seconds is past any answer this station
+  // gives and is the point at which silence has stopped being the mechanism
+  // working and started being the mechanism stuck. Once a change HAS begun the
+  // change's own deadline takes over and this stops applying.
+  const MUTE_MAX = 6000;
 
-  let tugCool = 0;        // /likes/now's cool, TUG_BASE + air_delay
+  let airS = 0;           // /likes/now's air_delay, seconds the station holds back
+  let recordMinMs = 0;    // /likes/now's record_min, the station's floor in ms
   let streamKbps = 128;   // icecast's own audio_info, until poll() says otherwise
   let fillMs = 0;         // measured on THIS connection, 0 until it has been
   let fillFrom = 0;       // when this browser started filling, 0 when it is not
@@ -2073,6 +2363,34 @@
   let changeUntil = 0, changeCar = null, changeAnim = null, changeTimer = 0;
   let changeArriving = false;
   let heldTitle = null, heldSince = 0, heldTrack = null;
+  // When this page silenced itself for a skip it saw land, 0 when it has not,
+  // and the track it did it for. The id is what stops a station that has taken
+  // a skip and not acted on it from being answered with a silence every six
+  // seconds for the rest of the song: one song tops out once, the insurance
+  // below gives the sound back, and this refuses to take it away again for the
+  // same song. It cleans itself up, because the next id is a different one.
+  let mutedAt = 0, mutedId = '';
+
+  // "The ear has not caught up yet, so nothing new goes on screen." It was
+  // changeUntil alone until the skip was silenced, and a skip opens a gap the
+  // change has not begun in: the answer to the twelfth click reports the OLD
+  // track, so this page knows the song is over several hundred milliseconds
+  // before it is told what replaced it. Everything the change holds back - the
+  // title, the clock, the tug - has to be held back over that gap too, or the
+  // new title goes up while the deck is still full and the whole order the
+  // change exists to keep is broken by the one event it matters most for.
+  function waiting() { return changeUntil > 0 || mutedAt > 0; }
+
+  // Sound comes back, and the listener's own volume comes back with it, which is
+  // the whole reason this is `muted` and not the volume being wound down.
+  //
+  // Unconditional rather than guarded on mutedAt, and idempotent, because there
+  // is no failure here worth protecting against and there is a bad one worth
+  // ruling out. A muted element that nothing on the page believes it muted is a
+  // radio that is silently off with nothing on screen to say why - the worst
+  // thing this mechanism could leave behind - so every path that could reach
+  // that state calls this and none of them has to be sure it was needed.
+  function unmute() { mutedAt = 0; audio.muted = false; }
   // What an arrival is booked for before this connection has ever been measured.
   // Only the first press of a cold page uses it, and only until the playing
   // event says how wrong it was. 4400 is the median of five cold starts against
@@ -2113,9 +2431,8 @@
   // everything it is holding, and the only way that console ever got a true
   // figure was by owning the buffer through MediaSource. This page plays /stream
   // through an ordinary element and must not repeat that mistake.
-  function airDelay() { return tugCool > TUG_BASE ? tugCool - TUG_BASE : 0; }
   function earLagMs() {
-    return (airDelay() + BURST * 8 / (streamKbps * 1000)) * 1000 + fillMs;
+    return (airS + BURST * 8 / (streamKbps * 1000)) * 1000 + fillMs;
   }
 
   // The one honest reading a plain audio element gives: from asking it to play,
@@ -2150,14 +2467,16 @@
     // A record arriving was booked against a guess at this moment, and this
     // moment is the answer. Sound has started, so the arrival finishes now
     // rather than at the length it was booked for. It is seeked to the START of
-    // the last travel rather than to the end: a record that snaps into place has
-    // not been put there by anybody, and 420ms is what it costs to be put there.
-    // If the booking was too short the record is already down and there is
-    // nothing to correct - a record on the platter waiting for sound is a state
-    // this button has always had and still draws.
+    // the carry rather than to the end: a record that snaps into place has not
+    // been put there by anybody, and a travel and a seat is what it costs to be
+    // put there. What is thrown away is only the waiting - the stretch where the
+    // record sits off to the right with nothing happening - which is exactly the
+    // part that was a guess. If the booking was too short the record is already
+    // down and there is nothing to correct: a record on the platter waiting for
+    // sound is a state this button has always had and still draws.
     if (!changeArriving) return;
     if (!changeAnim) return endChange(true);
-    const at = changeAnim.effect.getTiming().duration - TRAVEL;
+    const at = changeAnim.effect.getTiming().duration - TRAVEL - SEAT;
     if (changeAnim.currentTime < at) changeAnim.currentTime = at;
   });
 
@@ -2184,14 +2503,19 @@
     if (changeTimer) { clearTimeout(changeTimer); changeTimer = 0; }
     if (changeAnim) { changeAnim.onfinish = null; changeAnim.cancel(); changeAnim = null; }
     if (changeCar) { changeCar.remove(); changeCar = null; }
-    btn.classList.remove('shoving');
+    btn.classList.remove('shoving', 'arriving');
     if (landed && changeArriving) btn.classList.remove('empty');
     changeArriving = false;
     changeUntil = 0;
+    // Sound comes back with the record, and only for a change that finished.
+    // beginChange starts by ending the change it is replacing and ends it as NOT
+    // landed, so an unmute written unconditionally here would let the old song
+    // back out for one poll every time a change was superseded.
+    if (landed) unmute();
     settle();
   }
 
-  // The two copies, the angle they inherit, and the three-part travel over them.
+  // The copies, the angle they inherit, and the travel over them.
   // Returns false if there is no spin to inherit, which is what reduced motion
   // leaves behind - the caller then keeps the timing and draws nothing.
   function carry(total, arriving) {
@@ -2218,21 +2542,38 @@
     const phase = spin.currentTime;
     for (const d of car.querySelectorAll('.lp-disc')) d.getAnimations()[0].currentTime = phase;
     changeCar = car;
-    // Out, wait, in. The travels keep their own 420ms whatever the total is, so
-    // the middle keyframe pair is where the whole of the waiting goes and the
-    // records always move at the speed records move at. An arrival is the same
-    // list with the first travel taken off the front: it begins where the other
-    // one gets to after the outgoing record has left, which is an empty window.
-    const edge = TRAVEL / total;
+    // Up, out, wait, in, down. Each move keeps its own length whatever the total
+    // is - 420ms to carry, 240ms to lift or to seat - so the whole of the
+    // waiting goes into the one keyframe pair in the middle and the records
+    // always move at the speed records move at. An arrival is the same list with
+    // the lift and the first travel taken off the front: there is nothing on the
+    // deck to take up, so it begins where the other one gets to once the
+    // outgoing record has left, which is an empty window with a record held over
+    // it to the right.
+    //
+    // The Y of every keyframe but the last is -LIFT and that is not decoration.
+    // A record on a turntable has a spindle standing through it, and the only
+    // way one travels sideways is off that spindle first. Held there, the pin
+    // is uncovered for the whole of the middle - the part of a change that used
+    // to be a black porthole and is now a lit deck with its post standing in it.
+    //
+    // px rather than a percentage, because the lift is a property of the SPINDLE
+    // and not of the record: it is twice the hole, which is what the pin has to
+    // clear, and neither of those two scales with the disc.
+    const at = (x, up) => 'translate(' + x + ', ' + (up ? -LIFT : 0) + 'px)';
+    const t = TRAVEL / total, s = SEAT / total;
     changeAnim = car.animate(arriving ? [
-      { transform: 'translateX(-100%)', offset: 0 },
-      { transform: 'translateX(-100%)', offset: 1 - edge },
-      { transform: 'translateX(-200%)', offset: 1 },
+      { transform: at('-100%', 1), offset: 0 },
+      { transform: at('-100%', 1), offset: 1 - t - s },
+      { transform: at('-200%', 1), offset: 1 - s },
+      { transform: at('-200%', 0), offset: 1 },
     ] : [
-      { transform: 'translateX(0)',     offset: 0 },
-      { transform: 'translateX(-100%)', offset: edge },
-      { transform: 'translateX(-100%)', offset: 1 - edge },
-      { transform: 'translateX(-200%)', offset: 1 },
+      { transform: at('0',     0), offset: 0 },
+      { transform: at('0',     1), offset: s },
+      { transform: at('-100%', 1), offset: s + t },
+      { transform: at('-100%', 1), offset: 1 - t - s },
+      { transform: at('-200%', 1), offset: 1 - s },
+      { transform: at('-200%', 0), offset: 1 },
     ], { duration: total, easing: 'linear', fill: 'forwards' });
     changeAnim.onfinish = () => endChange(true);
     return true;
@@ -2247,8 +2588,8 @@
     // spend the whole of one gap pushing off a record that is already two
     // behind, and would land the wrong title at the end of it.
     endChange(false);
-    const total = Math.min(CHANGE_MAX,
-                           Math.max(TRAVEL * 2, earLagMs() - elapsed * 1000));
+    const total = Math.min(CHANGE_MAX, Math.max(TRAVEL * 2 + SEAT * 2, recordMinMs,
+                                                earLagMs() - elapsed * 1000));
     changeUntil = Date.now() + total;
     if (stillness.matches || !carry(total, false)) {
       changeTimer = setTimeout(() => endChange(true), total);
@@ -2272,11 +2613,27 @@
   // On the very first press of a cold page there is no measurement yet, which is
   // the one moment this cannot be right; FILL_GUESS stands in and the playing
   // event corrects it in whichever direction it was wrong.
+  //
+  // Two floors under that, and they are floors of different kinds. TRAVEL + SEAT
+  // is mechanical: it is what the drawing costs, and nothing can be drawn in
+  // less. record_min is the station's, set on the desk, and it is there because a
+  // fast connection produces a true measurement that is too SHORT to see - a
+  // record change that completes in two hundred milliseconds is a flicker rather
+  // than a record being changed. Neither is a target and neither can make a
+  // change shorter than the wait it is covering; they only stop a short wait
+  // being drawn as nothing at all.
+  //
+  // The deck is lit here rather than in carry(), because carry() is the one part
+  // of this that a listener may not get. Reduced motion and a browser with no
+  // spin to inherit both come out of it having drawn nothing, and a press that
+  // draws nothing is what this whole state exists to stop.
   function beginArrival() {
     endChange(false);
-    const total = Math.min(CHANGE_MAX, Math.max(TRAVEL, fillMs || FILL_GUESS));
+    const total = Math.min(CHANGE_MAX,
+                           Math.max(TRAVEL + SEAT, recordMinMs, fillMs || FILL_GUESS));
     changeUntil = Date.now() + total;
     changeArriving = true;
+    btn.classList.add('arriving');
     if (stillness.matches || !carry(total, true)) {
       changeTimer = setTimeout(() => endChange(true), total);
     }
@@ -2289,7 +2646,7 @@
     // Not a change this page witnessed, so nothing to act out - but anything
     // being held for a change is released here rather than waiting out CLAIM,
     // which is what makes the first title after a resume appear at once.
-    if (!id || !was || id === was) { if (!changeUntil) settle(); return; }
+    if (!id || !was || id === was) { if (!waiting()) settle(); return; }
     beginChange(elapsed);
   }
 
@@ -2300,10 +2657,37 @@
     // paused for a bucket set looks like from here.
     showShow(j && j.show);
     showHold(j);
+    const wasId = likeId;
     likeId = (j && j.id) || '';
-    // Before the record is changed, because the length of the change is worked
-    // out from air_delay and air_delay only reaches this page inside cool.
-    if (j && typeof j.cool === 'number') tugCool = j.cool;
+    // A song has been replaced, so the count it ended on is the last one this
+    // page was given for it and the arrow is whether that differs from the first
+    // one it was given. Both are kept here and spent by noteTrack, which runs
+    // several seconds later - at the end of the change of record, with the title
+    // they belong to - and that gap is exactly why they have to be caught now:
+    // by then likeCount is the NEW song's. Only on a real transition between two
+    // named tracks; arriving at a station, or the station going quiet, is not a
+    // song ending and leaves the previous entry's reading alone.
+    const n = (j && typeof j.likes === 'number') ? j.likes : null;
+    if (likeId !== wasId) {
+      if (wasId && likeId) {
+        rollLikes = likeCount;
+        rollUp = likeFirst !== null && likeCount > likeFirst;
+      }
+      likeFirst = n;
+    }
+    if (n !== null) likeCount = n;
+    // Before the record is changed, because both of these are inputs to how long
+    // the change lasts and a change started on last poll's numbers would be
+    // timed against a station that has since been retuned. Each is read rather
+    // than derived from another: air_delay is how far the station holds the
+    // music back, record_min is the floor under the animation, and `cool` - the
+    // window the station refuses clicks in - is a third number that showTug
+    // takes straight off the response. air_delay used to be got by subtracting
+    // 5.0 from `cool`, which was true only for as long as the station happened
+    // to write tug_cool as a sum containing it, and is now a variable this page
+    // does not keep at all.
+    if (j && typeof j.air_delay === 'number') airS = j.air_delay;
+    if (j && typeof j.record_min === 'number') recordMinMs = j.record_min * 1000;
     showRecord(likeId, (j && typeof j.elapsed === 'number') ? j.elapsed : 0);
     if (!likeId) { $('likerow').hidden = true; $('tugrow').hidden = true; return; }
     const mine = liked.includes(likeId);
@@ -2325,7 +2709,7 @@
       const t = { e: j.elapsed,
                   d: typeof j.duration === 'number' ? j.duration : 0,
                   at: Date.now() };
-      if (changeUntil) heldTrack = t;
+      if (waiting()) heldTrack = t;
       else { trackElapsed = t.e; trackTotal = t.d; trackAt = t.at; }
     }
     showTug(j);
@@ -2402,6 +2786,60 @@
   const GAP = 120;
   let rope = 0, pullNow = 0, lastPull = 0, coolUntil = 0;
 
+  // The counter has reached the top. The song is over, and the first thing that
+  // has to happen is that it stops - for the person who clicked, off their own
+  // POST's answer, and for everybody else on their next poll. That is the only
+  // asymmetry in it and it is the honest one: the clicker knows first because
+  // they are the one who did it.
+  //
+  // MUTED, not paused and not disconnected, and the reason is arithmetic rather
+  // than taste. Tearing the connection down would mean building another one:
+  // icecast hands a joining player its 65536-byte burst, which is 4.096s of
+  // already-played audio, and this browser then needs its own fill on top -
+  // 4.4s measured from the machine that serves the stream, and it is the fastest
+  // a listener can be. So dropping the stream to stop the song sooner buys
+  // nothing and costs eight and a half seconds of the wait it was meant to
+  // shorten. audio.pause() is worse still and would be a bug rather than a
+  // trade: it fires the pause event, sleep() takes that as the listener leaving,
+  // and the page would stop polling in the one second it most needs to poll -
+  // ending the change of record before it began, on the track change the change
+  // exists for.
+  //
+  // Muting stops the sound in the same frame and leaves everything else running.
+  // The stream goes on arriving at real time, so the ear stays exactly where it
+  // was relative to the station, and the moment to let it out again is a moment
+  // this page already computes to the millisecond: the end of the change of
+  // record, which is when the new music reaches this listener. The old song's
+  // last seconds are played silently into the gap rather than being skipped, and
+  // that is right - they are what the ear would have heard.
+  //
+  // The title goes to a dash for the same interval and comes back with the
+  // record, through the hold that was already there. It is written straight to
+  // the panel rather than through showTitle because lastTitle must not move: it
+  // is what the guestbook stamps on a note and what the search link points at,
+  // and neither should become a dash.
+  //
+  // Two catch-up polls rather than waiting out the five-second one. The station
+  // needs a moment to skip and to name what replaced it, and until it does this
+  // page is silent with nothing drawn - which is the one stretch of this
+  // sequence that has no mechanism covering it. They are one-shots hung off an
+  // event, in the same shape as the /likes/now poll() already fires when it
+  // notices a title change, and not a timer of their own.
+  function topOut() {
+    // Nothing to silence and nothing to hold. A page that is not listening can
+    // still push the counter - the tug row is drawn from the one round of polls
+    // this page does at load - and taking a mute there would arm waiting() with
+    // no poller running to disarm it, which would freeze the title for the rest
+    // of the session on a page that never made a sound.
+    if (quiet || mutedAt || mutedId === likeId) return;
+    mutedAt = Date.now();
+    mutedId = likeId;
+    audio.muted = true;
+    $('np').textContent = '—';
+    setTimeout(pollLikes, 300);
+    setTimeout(pollLikes, 1000);
+  }
+
   // One pip per click, and the same count in digits beside them. The page is
   // told how many there are rather than knowing, so twelve lives in exactly one
   // place and that place is the station - which is also why the reading is
@@ -2441,6 +2879,9 @@
                : (into >= 0 && into < cool) ? cool - into
                : 0;
     coolUntil = Date.now() + left * 1000;
+    // The same proof, used for the other thing that has to happen at the top of
+    // the counter: the song stops. See topOut.
+    if (pullNow >= rope) topOut();
     [...el.children].forEach((p, i) => p.classList.toggle('on', i < pullNow));
     // The digits, off the same two variables as the line above and in the same
     // breath as it, so no redraw can leave the reading and the picture holding
@@ -2461,14 +2902,21 @@
     // comes back AFTER the new record has landed and never during it - which is
     // the last step of the order the change exists to keep, and on the numbers
     // this station actually measures it is not a corner case but the ordinary
-    // one. The station refuses clicks for 5.0 + air_delay, which is 6.75s. The
+    // one. The station refuses clicks for 6.75s today, which is where tug_cool
+    // sits with air_delay at 1.75. The
     // ear is behind by air_delay + the burst + this browser's own buffer, and
     // the browser's own buffer alone measured 4.4s from the machine that serves
     // the stream - so the change of record outlasts the station's window
     // whenever that buffer takes more than 0.904s to fill, which is every
     // listener there has ever been. Without this line the buttons would come
     // back while the record was still travelling, every time.
-    const cool = Date.now() < coolUntil || changeUntil > 0;
+    //
+    // waiting() rather than changeUntil, so the gap between the counter topping
+    // out and the station naming what replaced the song is covered as well. The
+    // station's own window is armed whole from the top-out and would cover it
+    // anyway; this makes the page's answer follow from the page's own state
+    // instead of from a deadline that happens to be long enough.
+    const cool = Date.now() < coolUntil || waiting();
     $('rope').classList.toggle('cool', cool);
     $('tugSkip').disabled = cool;
     // Nought is the floor and nothing else - no saved state, no veto, just a
@@ -2545,6 +2993,12 @@
     // record is on and not playing. Emptying the deck on every pause would make
     // the opening state a state playback returns to, which it is not.
     endChange(false);
+    // And the sound comes back, because the element is about to be handed to
+    // somebody pressing play. endChange above is deliberately NOT the place for
+    // this - it ends as not-landed here - and a mute that outlived the page's
+    // listening would make the next press silent with nothing on screen to say
+    // why, which is the worst failure this whole mechanism could have.
+    unmute();
     trackAt = null;
     // And the record forgets what it was last showing, for the same reason.
     shownId = '';
