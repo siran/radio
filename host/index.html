@@ -613,6 +613,11 @@
       <button class="lock" type="button" id="lockair_delay" aria-pressed="true">&#128274;</button>
       <input id="air_delay" type="range" disabled>
     </div>
+    <label for="record_min"><span class="band">Record change, shortest</span> &mdash; the listener page times a change of record from its own buffering, so a fast connection can finish it in a blink; this is the least it may take &mdash; <span id="record_minval"></span></label>
+    <div class="ctl">
+      <button class="lock" type="button" id="lockrecord_min" aria-pressed="true">&#128274;</button>
+      <input id="record_min" type="range" disabled>
+    </div>
     <!-- Not a mixing control, and it is here anyway. This is the station's own
          machinery rather than one host's sound, and the only other place it
          could sit is beside Skip, where a press meant for the next track would
@@ -1747,7 +1752,11 @@
     // instance, where pushing it from 0 to 1.2 moved nothing and starting
     // at 1.2 moved exactly 1.202s. So this writes desk.json and waits for a
     // restart, and `sync` in the monitor panel is what tunes by ear.
-    air_delay:  { unit: ' s',     min: 0,    max: 8,   step: 0.05, val: 0    }
+    air_delay:  { unit: ' s',     min: 0,    max: 8,   step: 0.05, val: 0    },
+    // A floor under the listener page's change of record, never a target: the
+    // page times that animation from its OWN buffering, and on a fast line
+    // that number gets small enough that a record change reads as a flicker.
+    record_min: { unit: ' s',     min: 0,    max: 6,   step: 0.1,  val: 1.2  }
   };
   const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k].unit; };
 

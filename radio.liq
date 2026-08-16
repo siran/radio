@@ -104,13 +104,14 @@ def desk_cfg() =
       duck_to    : float?,
       hold       : float?,
       glide      : float?,
-      air_delay  : float?
+      air_delay  : float?,
+      record_min : float?
     } ) = file.contents(desk_config)
     c
   catch _ do
     { mic_gain = null, voice_gain = null, hp_freq = null, comp_thr = null,
       comp_ratio = null, comp_gain = null, duck_to = null, hold = null,
-      glide = null, air_delay = null }
+      glide = null, air_delay = null, record_min = null }
   end
 end
 
@@ -164,6 +165,26 @@ hold       = interactive.float("hold",
 glide      = interactive.float("glide",
   description = "How fast the music fader moves. Smaller is slower and smoother.",
   unit = "", min = 0.01, max = 0.5, step = 0.01, (dcfg.glide ?? 0.01))
+
+# --- changing a record ------------------------------------------------------
+# The shortest a change of record is allowed to take on the listener page.
+#
+# That animation is timed by the LISTENER, from their own buffering - the page
+# measures how long its browser takes to have audio and spends exactly that on
+# sliding the record in, so the record lands about when the music starts. On a
+# fast line that number gets small, and a record change that completes in two
+# hundred milliseconds is not a record being changed, it is a flicker.
+#
+# So the page takes whichever is longer, this or its own measurement. It is a
+# floor and never a target: it cannot make a change SHORTER than the wait, only
+# stop a short wait looking like nothing happened.
+#
+# On the desk rather than in the page because it is a matter of taste about how
+# the station presents itself, it applies to every listener at once, and the
+# operator asked for it there.
+record_min = interactive.float("record_min",
+  description = "Shortest a record change may take on the listener page. A floor under their own buffering time, so a fast connection still sees a record change rather than a flicker.",
+  unit = "s", min = 0.0, max = 6.0, step = 0.1, (dcfg.record_min ?? 1.2))
 
 # --- talking in time with the music ----------------------------------------
 # How far the music is held back before it goes to air, so that a host talking
@@ -1015,6 +1036,7 @@ def knobs() =
     ("hold",           hold()),
     ("glide",          glide()),
     ("air_delay",      air_delay()),
+    ("record_min",     record_min()),
     # The two switches ride in the same (string * float) shape as everything
     # else - 1.0 for on, 0.0 for off - rather than giving this endpoint a
     # second response type for two values. The console renders a checkbox for
@@ -1302,16 +1324,24 @@ def tug(dir) =
       # Literal UTF-8 rather than \u escapes: liquidsoap strings are bytes, and
       # a surrogate pair is a javascript convention this parser owes nobody.
       # These are the only non-ascii characters in this file.
+      # A message from the room, not from the machinery. It used to be signed
+      # "the rope" and to explain itself in English - the station announcing
+      # its own mechanism, which is not what happened. What happened is that
+      # twelve people wanted a different record.
+      #
+      # Emoji and the track name only, so it needs no translation, which is the
+      # same rule the listener page's controls follow. The operator: "nothing
+      # about the rope haha it must look like a message from the crowd".
       np = now_playing()
       msg =
         if np.title == "" then
-          "⏭️ twelve pulls and it is gone 🪢"
+          "🔁 👋 🎶"
         elsif np.artist == "" then
-          "⏭️ twelve pulls - #{np.title} is out 🎶"
+          "🔁 #{np.title} 👋"
         else
-          "⏭️ twelve pulls - #{np.title} by #{np.artist} is out 🎶"
+          "🔁 #{np.title} — #{np.artist} 👋"
         end
-      chat_say("the rope 🪢", msg)
+      chat_say("🔁", msg)
       library.skip()
     end
   end
@@ -1605,6 +1635,18 @@ def likes_state() =
     # pulling the playlist. Only the second one means the track on the panel is
     # standing still, which is what the panel is now claiming.
     paused   = paused(),
+    # Both of these are for the listener page's change of record, and both are
+    # here rather than being worked out from something else.
+    #
+    # air_delay especially. /control/ is behind the speaker credential and this
+    # endpoint is the only one a listener may ask, so the page had been reading
+    # it as `cool - 5.0` - correct today, and correct only because tug_cool
+    # happens to be written as 5.0 + air_delay(). Change that sum and the page
+    # would have gone on subtracting five from it and timing its animation
+    # against a number that meant nothing, silently. A value a page needs is a
+    # value to publish, not one to reverse-engineer.
+    air_delay  = air_delay(),
+    record_min = record_min(),
     show     = show_state() }
 end
 
