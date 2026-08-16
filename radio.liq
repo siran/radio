@@ -1475,24 +1475,18 @@ def tug(dir) =
       # Literal UTF-8 rather than \u escapes: liquidsoap strings are bytes, and
       # a surrogate pair is a javascript convention this parser owes nobody.
       # These are the only non-ascii characters in this file.
-      # A message from the room, not from the machinery. It used to be signed
-      # "the rope" and to explain itself in English - the station announcing
-      # its own mechanism, which is not what happened. What happened is that
-      # twelve people wanted a different record.
+      # NOTHING IS SAID IN THE CHAT, and something used to be: a line signed
+      # with a recycle glyph, naming the track the room had just taken off.
       #
-      # Emoji and the track name only, so it needs no translation, which is the
-      # same rule the listener page's controls follow. The operator: "nothing
-      # about the rope haha it must look like a message from the crowd".
+      # `earlier` records that same event now, as a fact about the track rather
+      # than as a line in a conversation - which is where it belongs. The chat is
+      # people talking to each other and the station is not one of them. Two
+      # records of one event also drift, and the one in the chat could never be
+      # corrected or taken back once written.
+      #
+      # The operator, on seeing a run of them: "there shouldn't be a message on
+      # chat, not even 'sysadmin' since we have earlier".
       np = now_playing()
-      msg =
-        if np.title == "" then
-          "🔁 👋 🎶"
-        elsif np.artist == "" then
-          "🔁 #{np.title} 👋"
-        else
-          "🔁 #{np.title} — #{np.artist} 👋"
-        end
-      chat_say("🔁", msg)
       # Its own kind. The track event records what STARTED; this records what
       # the room did to the one before it, so a page can mark that entry
       # without working out which of two adjacent tracks was voted off.
