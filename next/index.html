@@ -9,6 +9,62 @@
   :root {
     --bg: #0b0b0e; --panel: #131318; --line: #24242c;
     --fg: #ecebe8; --dim: #8b8b96; --accent: #4ade80;
+    /* Not in the light block below, on purpose. Every other colour here is
+       redefined for light because it is a shade of the page; this one is a
+       signal and reads the same on both, exactly as the host console's own
+       on-air red does with no light theme at all to check it against. */
+    --air: #ef4444;
+    /* The diameter of the record, and through it the height of the volume row
+       and the width of the column under the button. This number is no longer the
+       one chosen first, and what is chosen first has changed again. It used to be
+       the play triangle at fourteen pixels tall, the height of the triangle in a
+       standard twenty-four pixel play icon and so the size a play button is on
+       anything else; the label was then made only wide enough to hold that symbol,
+       which is centred on the spindle hole rather than hanging below it; and the
+       vinyl was finally made only as wide as it had to be for the grooves outside
+       the label to still read as grooves. Deciding in that order landed on
+       eighty-four pixels, twelve less than the ninety-six this used to be, and
+       eighty-four is not reopened by anything below: the counter under the button
+       is pinned to this width and does not scale with it, and 10:00 / 100:00
+       measures 71.7px, so there are twelve pixels in hand and no more to give.
+
+       What is chosen first now is the red the spindle hole is allowed to keep
+       around it. The symbol printed round that hole had closed to within two
+       thirds of a pixel of it in the pause state, and a gap that narrow does not
+       read as a gap; it reads as two things that were meant to touch and missed.
+       So the hole is held at 4.61px, the clearance is asked for, and the symbol is
+       made as large as that clearance leaves room for: sixteen pixels of ink where
+       it was fourteen, on paper that goes from thirty and a half per cent of the
+       diameter to thirty-five. The grooves pay for the paper, because the paper
+       has nowhere else to grow into, and the price is one ring out of seventeen.
+
+       Eighty-four became a hundred and twelve because the red was asked to be
+       bigger, and the red is a fraction of this. Growing the fraction alone would
+       have been the wrong lever twice over: the paper is already at the largest
+       share the groove field could pay for at eighty-four, and a label that takes
+       more of a disc that stays the same size is a label crowding a record rather
+       than a bigger label. Growing the disc pays for both at once, because the
+       groove pitch below is in pixels and does not scale - so a wider disc simply
+       has more rings to spend, and the paper can take a larger share of it and
+       still leave more of them showing than before. Nineteen now, against sixteen.
+
+       --ctl and --hole are the two things here that are NOT a fraction of the
+       diameter, and that is the whole shape of this change. They are the control:
+       the symbol somebody presses and the hole it is printed around. A control is
+       the size a control is, on a small pressing or a large one, so both hold the
+       exact measurements they were cut to at eighty-four - 20.41px of symbol and
+       4.61px of hole - and the red grows around them instead of with them. The
+       clearances round that hole are the reason both numbers are frozen, and they
+       are now 2.05 to 2.51px of white inside the triangle and 2.45px of red
+       between the hole and each pause bar, measured off the rendered button and
+       not derived. The white is a range and the red is not, which is a fact about
+       the raster rather than about the drawing; the symbol explains it.
+       Scale them with the disc and the bars grow by a third too, and the
+       label ends up exactly as full as it started, which is what was asked to
+       change. */
+    --lp: 112px;
+    --ctl: 20.41px;
+    --hole: 4.61px;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
@@ -30,6 +86,39 @@
   .on .dot { background: var(--accent); animation: pulse 2s ease-in-out infinite; }
   .on .lbl { color: var(--accent); }
   @keyframes pulse { 0%,100%{opacity:1; box-shadow:0 0 0 0 rgba(74,222,128,.5)} 50%{opacity:.75; box-shadow:0 0 0 6px rgba(74,222,128,0)} }
+
+  /* A HOST is on the microphone. A different fact from the one above it, and
+     it needed a different mark rather than a second reading of that one: the
+     dot up there is the stream, this one is a person. Same dot, and the red
+     and the beat of the host console's own on-air bar, so both ends of a
+     broadcast look like each other.
+
+     Not one word of ours anywhere inside it, which is the rule this page is
+     built to: the tug row has no words at all so that somebody who reads no
+     English can still use it. What is drawn here IS the host's own writing,
+     which is theirs and not a label, and the dot is what carries the meaning
+     for a reader who cannot read it.
+
+     The show block simply is not there when nobody is live, so nothing has
+     to be dimmed, greyed or explained away in the off state. */
+  .show { margin: 2px 0 6px; text-align: center; }
+  .show .showname { justify-content: center; }
+  /* The station's own track while a show is on: still audible, so still
+     shown, but it is the bed and not the billing. Dropped to the weight the
+     page already uses for context - the same treatment a paused track gets -
+     so the eye reads the show first. */
+  .np.under { font-size: .86rem; font-weight: 500; color: var(--dim);
+              margin: 8px 0 18px; }
+  .show .showname { display: inline-flex; align-items: center; gap: 8px;
+                    font-size: 1.02rem; font-weight: 650; overflow-wrap: anywhere; }
+  .show .dot { background: var(--air); animation: airpulse 1.2s ease-in-out infinite; }
+  .show .showtitle { font-size: .92rem; margin-top: 2px; overflow-wrap: anywhere; }
+  .show .shownote { color: var(--dim); font-size: .86rem; margin-top: 3px;
+                    white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* by name. The reduced-motion rule further down is a * and this is a real
+     element, so it does reach it - but the animation still has to be one
+     that can be named. */
+  @keyframes airpulse { 50% { opacity: .25; } }
 
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 20px; }
@@ -53,15 +142,668 @@
   .panel h2 { text-align: left; margin-bottom: 12px; }
   .np { text-align: center; font-size: 1.02rem; font-weight: 550; margin: 6px 0 22px;
         min-height: 1.6em; overflow-wrap: anywhere; }
+  /* Held, not playing. The track stays on the panel - it is still the one the
+     station will come back to, and the operator asked to be able to see it -
+     but it stops looking like sound coming out. Dimmed to the weight of the
+     label above it, which is the page's existing shade for "this is context
+     rather than the thing itself". */
+  .np.hold { color: var(--dim); font-weight: 500; }
 
   .controls { display: flex; align-items: center; gap: 16px; }
-  button.play { flex: none; width: 62px; height: 62px; border-radius: 50%; cursor: pointer;
-    border: none; background: var(--fg); color: var(--bg); font-size: 1.4rem;
+  button.play { flex: none; width: var(--lp); height: var(--lp); border-radius: 50%; cursor: pointer;
+    border: none; background: #0d0d11; padding: 0;
     display: grid; place-items: center; transition: transform .12s ease; }
   button.play:hover:not(:disabled) { transform: scale(1.05); }
   button.play:disabled { opacity: .28; cursor: not-allowed; }
-  .vol { flex: 1; display: flex; align-items: center; gap: 9px; color: var(--dim); }
+  /* The stream takes a moment to arrive however fast the server is - TLS, then
+     the first audio, then whatever the browser wants buffered before it makes a
+     sound. Pressing a button that sits there looking unpressed is the worst part
+     of that wait, so the ring starts turning on the press itself and stops when
+     sound actually begins. It is not a progress bar and does not pretend to be:
+     it says heard you, and still coming. */
+  button.play { position: relative; }
+  /* Three states the object itself carries, so the words underneath are a
+     caption rather than the only signal:
+
+       grey and still     nothing is playing
+       black and still    the press landed, the record is on the platter
+       black and turning  sound is coming out
+
+     The filter sits on the BUTTON rather than on the disc, so the silver rim
+     and the light on it grey out with the vinyl - a bright specular highlight
+     on a grey record reads as a rendering fault rather than as a record that is
+     not playing.
+
+     620ms because the colour returning is the whole acknowledgement of a press;
+     instant would look like a redraw, and slower would still be arriving when a
+     fast stream has already started turning. The transition is on the button and
+     is therefore killed with everything else under reduced motion, which leaves
+     the states intact and only removes the fade between them. */
+  button.play { filter: grayscale(1) brightness(.72);
+                transition: filter 620ms ease; }
+  button.play.loading, button.play.spinning { filter: none; }
+  /* Waiting, with no words in it. The record is on the platter and breathing;
+     when sound arrives it stops breathing and starts turning, so the two states
+     are never both true and cannot be confused for each other.
+
+     opacity rather than filter, because filter is already carrying the grey and
+     one property cannot be driven by a transition and an animation at once. It
+     never goes below .55: a control that fades most of the way out looks broken
+     rather than busy, and this one is still the thing you press to give up. */
+  @keyframes lpwait { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+  button.play.loading { animation: lpwait 1.15s ease-in-out infinite; }
+  button.play.loading { cursor: progress; }
+  /* The ring that used to sit here is gone. A record coming up to speed says
+     the same thing - heard you, still coming - with the object already on
+     screen rather than a second spinner laid over it. */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* The button is the record, and the record is built the way one looks: black
+     vinyl carrying fine concentric grooves, a smooth run-out ring where the
+     grooves stop, a red paper label, and a spindle hole punched dead centre. The
+     label takes a little over a third of the face, which is about what a twelve
+     inch LP gives it, and it can be that small because the symbol is printed
+     around the spindle hole rather than stacked below it: what the paper has to
+     cover is the symbol's furthest corner from the centre, and no longer the
+     length of a hole and a symbol laid end to end. It grew from thirty and a half
+     per cent to thirty-five in order that the symbol printed on it could grow too
+     and still leave a pixel and a half of red between the hole and the ink. The record is built outward
+     from the symbol rather than the label being handed whatever the disc had left
+     over, which is how it ended up with a six pixel triangle on a ninety-six pixel button.
+     Every measurement here is a fraction of --lp, so changing the diameter changes
+     the whole pressing rather than leaving the label the wrong size for the disc
+     it is glued to.
+
+     The background layers are listed in the order the background property wants
+     them, topmost first, which is the reverse of the order anyone would describe
+     them in. The glint used to be the first of them and is not here any more; it
+     is an element of its own now, below, because light from a lamp in the room
+     does not turn with the turntable. What makes the turning legible without it
+     is the label, which carries a symbol and is unmistakably going round; grooves
+     in motion do look exactly like grooves at rest, but they were never the only
+     evidence.
+
+     So the first layer is the run-out, the smooth dark band every pressing has
+     between the last groove and the paper. Its inner edge is written as thirty-five
+     per cent, which is the same number as the label's share of the
+     diameter, and that is not a coincidence to be tidied away: a percentage in
+     this gradient is a fraction of the disc's radius, and the label's edge lies
+     at exactly the label's fraction of it. Move one number without the other and
+     the smooth band stops meeting the paper. Its outer edge is a different kind
+     of number, measured from the inner one and from nothing else: the band is
+     four and a half points of the radius wide, which is the 1.89px it was cut to
+     when the rings were last counted, so the outer edge is thirty-nine and a half
+     per cent. It moved out by exactly what the paper moved out by, because a
+     run-out that does not follow the paper is a run-out that no longer starts at
+     it, and it happens that the paper's new edge lands exactly where this band's
+     outer edge used to be.
+
+     Then the grooves, and they are a ramp rather than a step. A step edge carries
+     a great deal of energy above its own pitch, and once the pitch is down near
+     the width of a pixel that energy folds back and the ring field breaks into a
+     speckled hatch, which was rendered at true size and is not a subtle failure:
+     it is worse than having no grooves. Written as a ramp instead, from near-black
+     up to the light of the groove at the halfway point and back down, the field
+     survives at pitches a step cannot reach, because a ramp has almost nothing
+     above its own pitch left to fold.
+
+     Sixteen rings is what is drawn now, and the pitch that draws them has still
+     not moved by so much as a hundredth of a pixel. Contrast lives in the pitch and
+     the pitch lives on the raster: these rings are a gradient sampled on a grid
+     whose pixels are one, and measured off the rendered button over a fixed
+     annulus a pitch of 1.45px draws its rings at 9.3 levels out of 255 where
+     1.61px draws them at 13.5, and the angular scatter that tells a ring field
+     from a hash goes up by half again at the finer pitch. A pitch chosen to make
+     a ring count come out is therefore a pitch that throws the rings away, and the
+     count has to follow the band instead. A repeating radial gradient is phased
+     from the centre, so a light ring falls at 0.81px, 2.42px, 4.03px and so on
+     outward whatever happens to be covering it, and moving the paper does not move
+     a single one of them; it only decides how many are still uncovered when the
+     run-out has finished. Growing the label to thirty-five per cent put the band's
+     outer edge at 16.59px, a third of a pixel short of the ring that used to be
+     second from the middle, so that ring survives and the one at 15.35px does not.
+     Seventeen becomes sixteen and the price of the whole change is that one ring.
+
+     What the ring cost buys back is worth stating beside it, because it is the
+     reason the trade was taken. The pause bars went from two thirds of a pixel
+     clear of the spindle hole to a pixel and a half, and the play triangle from
+     1.80px of white around it to 2.39px. Both of those numbers have since moved
+     and the second of them was never rendered by anything: the clearances the
+     button actually draws are 2.45px of red and 2.05 to 2.51px of white, and
+     where they come from is set out down at the symbol. Measured off the rendered button over the
+     band each field actually occupies, the sixteen come out at 16.8 levels of
+     contrast against the seventeen's 18.1, with the angular scatter that tells a
+     ring field from a hash unchanged at 6.1 against 6.0 and the median pitch
+     unchanged at 1.6px. The contrast falls by a level and a third for two reasons
+     and neither of them is a field starting to break: the ring that was lost sat on
+     the lighter part of the moulding near the middle where the same gradient has
+     the most room to swing, and the innermost ring that remains is now clipped by
+     the run-out on its inner side. A level and a third off eighteen is a long way
+     from the 9.3 that was measured at the finer pitch and rejected two rounds ago.
+     The innermost of the sixteen sits at 16.94px and clears the run-out by a third
+     of a pixel where the innermost of the seventeen had two thirds, and the
+     outermost sits at 40.99px and clears the rim by a whole one. A label of
+     thirty-five and a half per cent was rendered and measured as well, and that is
+     where the second ring goes: it puts the run-out's outer edge past 16.90px and
+     the count falls to fifteen. Thirty-five was therefore the largest label that
+     groove field gave up only one ring for - AT EIGHTY-FOUR PIXELS, which is the
+     half of the sentence that mattered and the half that was easy to lose.
+
+     The disc is a hundred and twelve now and the arithmetic is not close. The
+     pitch is in pixels and does not scale, so the rings available are set by the
+     radius alone: light rings fall at 0.805px, 2.415px and every 1.61px outward
+     whatever is printed over them, the paper at forty-two per cent puts the
+     run-out's outer edge at 26.04px, and the rings from there to the 56px rim are
+     the ones at k=16 through k=34. Nineteen, against the sixteen a smaller disc
+     showed under a smaller label. Growing the disc is what buys a bigger label
+     without the grooves paying for it, which is why the diameter moved and not
+     the fraction on its own.
+
+     The white is left at the weight it was already carrying, because the band's
+     average brightness follows that weight and hardly notices the pitch, so leaving
+     it alone keeps the margin reading as black vinyl rather than as grey card
+     without anything else having to be arranged: each measured over the band it
+     actually occupies, this sixteen ring field reads 26.0 levels of mean luminance
+     where the seventeen read 26.6 and the ten before them read 24.4, and every one
+     of those steps is the lighter moulding near the middle changing hands between
+     the paper and the grooves. This pitch is in
+     pixels and not a fraction of --lp on purpose, unlike everything else here: it
+     was chosen against the raster the browser draws it on, and a pitch that scaled
+     with the record would land somewhere else on that raster at every size and
+     alias differently at each.
+
+     Underneath is the vinyl, a shade lighter at the centre than at the rim so
+     the face reads as a moulded object rather than a hole cut in the page.
+
+     It comes round in four and a half seconds, far slower than a real record and
+     deliberately so: at this size anything near thirty-three revolutions a minute
+     stops reading as a record and starts reading as the loading ring above,
+     which means something else entirely and can follow it within the same press.
+
+     The animation is declared on the disc unconditionally and left paused, and
+     playing only flips animation-play-state to running. Toggling the animation
+     itself on and off would throw the angle away and snap the label back to
+     upright every time the stream stopped, which is the opposite of what a
+     record does; pausing the play state leaves the transform exactly where it
+     had got to, so the label freezes mid-turn and the next press carries on from
+     the same angle. */
+  .lp-disc {
+    position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(circle closest-side, transparent 0 42%, #0f0f14 42% 46.5%, transparent 46.5%),
+      repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0,
+                                rgba(255,255,255,.12) .805px, rgba(0,0,0,.86) 1.61px),
+      radial-gradient(circle closest-side, #26262f 0 26%, #16161c 60%, #08080b 100%);
+    animation: spin 4.5s linear infinite;
+    animation-play-state: paused;
+  }
+  button.play.spinning .lp-disc { animation-play-state: running; }
+  /* --- a record being changed --------------------------------------------
+     The next record comes in from the right and shoves the one that was
+     playing out of the window. One axis, one constant speed, a hard start and
+     a hard stop: nothing here is eased, because easing is what makes a change
+     look designed, and this one is meant to look like a mechanism.
+
+     Both records in the shove are COPIES, built for it and thrown away after
+     it, and the real disc above is hidden for its length. That is the whole
+     reason they exist rather than the disc being moved: the disc carries the
+     spin, its angle is the one thing on this button that must survive a track
+     change - which is what the play-state line above is already for - and both
+     moving it in the DOM and transforming it would throw that angle away. The
+     script hands the copies the angle instead, so nothing snaps upright.
+
+     The window is the button itself, clipped only while this runs. It is a
+     circle, so the two records pass through a porthole and the button's own
+     black opens between them around halfway. That seam is not covered up: it
+     is the gap between two objects in a slot, and it is the clearest thing in
+     the shove that says there are two records rather than one picture sliding.
+
+     420ms is 267px/s across the 112px face - slow enough to read as an object
+     being carried, short enough that the button is back under a finger before
+     anybody reaches for it.
+
+     The incoming copy is offset with `left` rather than a transform, and that
+     is not a preference: the copies are still turning, spin drives transform,
+     and one property cannot be driven by an animation and a static value at
+     once - the same collision the waiting pulse above avoids by using opacity.
+     Left means width as well, because inset:0 sizes these from both edges. */
+  @keyframes lpshove { to { transform: translateX(-100%); } }
+  button.play.shoving { overflow: hidden; }
+  button.play.shoving > .lp-disc { visibility: hidden; }
+  .lp-shove { position: absolute; inset: 0; pointer-events: none;
+              animation: lpshove 420ms linear; }
+  .lp-shove .lp-disc + .lp-disc { left: 100%; right: auto; width: 100%; }
+  /* The highlight is light landing on the record, not something printed on it. A
+     specular reflection comes from a lamp somewhere in the room and a lamp does
+     not go round with the turntable, so the streak has to stay where it is while
+     the vinyl passes underneath. That is the whole of this element's job, and it
+     is why the glint is no longer one of the disc's own background layers, where
+     the same transform that turned the grooves turned the light as well and made
+     the spin read as a texture rotating rather than as a record catching the
+     light. Nothing here animates, so there is nothing here to freeze: the
+     highlight is in the same place at every angle, in every state, and while the
+     record is stopped, which is what a lamp that is not moving does.
+
+     It is a span rather than a pseudo-element because both of the button's are
+     effectively spoken for. ::after carries the loading ring. ::before is painted
+     before the element's children rather than after them, so a glint put there
+     would sit underneath the disc instead of on it and would need a z-index to
+     climb out, which would then have to be answered by a second z-index on the
+     ring to keep the ring on top of the light. One element written after the disc
+     lands above the disc and below the ring by tree order alone and needs
+     neither. It takes no pointer events, because the control is the whole button
+     and not any part of it, and it is hidden from the accessibility tree for the
+     same reason the disc is.
+
+     The mask keeps the light off the paper. A label is matte and takes no
+     specular sheen, and the shape of this particular highlight settles the
+     argument on its own: it is a conic wedge, so it narrows as it approaches the
+     middle, and any of it allowed over the label reads as a beam aimed at the
+     spindle hole rather than as a sheen across paper. A version at a third of the
+     strength was rendered and it still draws that line. Thirty-five per cent
+     is the label's share of the diameter once more, so the light stops exactly
+     where the paper starts, and it moved outward this round by exactly what the
+     paper moved outward by, for no reason other than that the paper did. The mask is declared
+     twice because Safari wanted the prefix
+     until 15.4 and this page is public; a browser that honours neither gets the
+     highlight across the label, which is wrong but is not broken. */
+  .lp-glint {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(from 250deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,.34) 15deg,
+                               rgba(255,255,255,.08) 29deg, rgba(255,255,255,0) 44deg,
+                               rgba(255,255,255,0) 360deg);
+    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 42%, #000 43%);
+    mask-image: radial-gradient(circle closest-side, transparent 0 42%, #000 43%);
+  }
+  /* The lip. A pressed record is not flat at its edge: there is a raised smooth
+     rim outside the last groove, and being smooth it is the one part of the black
+     face that returns a specular reflection rather than scattering it, which is
+     why the edge of a record catches the light in a way the playing surface never
+     does. That is the thing being drawn here, and it decides where it belongs.
+     Light that comes from a lamp in the room does not turn with the turntable, so
+     the lip's highlight has to sit still while the vinyl passes under it, exactly
+     as the glint above does, and it lives on the glint for that reason rather than
+     on the disc. It is brightest at 265 degrees because that is where the glint is
+     brightest: the glint's conic starts at 250 and reaches its peak fifteen degrees
+     later, and this one starts at 85 and reaches its own peak half a turn later, so
+     the same number is arrived at from the other side of the circle rather than
+     being copied. Two lights on one record pointing in two directions is the single
+     thing that would give the whole illusion away.
+
+     The texture is in the shape of the arc rather than in a pattern laid over it.
+     A repeating conic gradient was tried first, which is the obvious way to write
+     texture that turns with the surface, and it was measured rather than admired:
+     at forty-eight and at ninety-six cells around the circumference the phase of
+     the ripple did not move with the disc at all through a whole revolution,
+     because a cell is then two to five pixels wide on a band two pixels tall and
+     what survives the raster is its own beat against the pixel grid and not
+     anything that was drawn. At twenty-four cells it does genuinely turn, and it
+     turns as a ring of visible dashes, which is a worse thing to have than a plain
+     rim. So the variation is written into the conic itself as a main lobe with
+     several lesser ones around it, which is what an edge that is not polished under
+     a room that is not one point light actually looks like, and it varies over tens
+     of degrees rather than over three, which is a rate two pixels can hold.
+
+     The mask is what makes this a lip rather than a wash over the whole face: it
+     opens at ninety-five and a half per cent of the radius, is fully open across
+     the crest, and closes again at the rim so the outermost half pixel, which is
+     already being shared with the button's antialiased edge, is not asked to carry
+     a hard bright line. It is declared prefixed and unprefixed for the same reason
+     the glint's own mask is. Nothing here animates, so there is nothing here to
+     freeze, and the lip is in the same place at every angle and in every state. */
+  .lp-glint::after {
+    content: ''; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 85deg, rgba(255,255,255,.03) 0deg, rgba(255,255,255,.055) 38deg,
+                               rgba(255,255,255,.03) 72deg, rgba(255,255,255,.10) 104deg,
+                               rgba(255,255,255,.07) 131deg, rgba(255,255,255,.34) 180deg,
+                               rgba(255,255,255,.17) 203deg, rgba(255,255,255,.24) 222deg,
+                               rgba(255,255,255,.08) 258deg, rgba(255,255,255,.115) 292deg,
+                               rgba(255,255,255,.04) 325deg, rgba(255,255,255,.03) 360deg);
+    -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 95.5%, #000 97% 99.3%, transparent 100%);
+    mask-image: radial-gradient(circle closest-side, transparent 0 95.5%, #000 97% 99.3%, transparent 100%);
+  }
+  /* The paper label. There is no word on it any more, and losing the word is the
+     point of this pressing rather than a consequence of shrinking it. PLAY and
+     PAUSE were the only English anywhere in this interface. A triangle pointing
+     right and two upright bars are read the same way by someone who has never met
+     an English word, the station is on the open internet, and this button is the
+     one control it has, so the word was costing a reader in another language the
+     whole of the control and buying a reader in this one nothing the symbol was
+     not already saying. What it cost is easy to state and what it bought is not,
+     which is the shape of an argument that ends in a deletion.
+
+     Losing it does not shrink the paper by anything like the width of a word, and
+     what moved the paper since is a different thing altogether: the symbol is
+     printed around the spindle hole now instead of hanging below it. The label is a
+     circle centred on that hole either way, so what sets its radius is how far the
+     furthest corner of the symbol reaches from the centre. Stacked below the hole
+     that corner was the lower outer end of the pause bars, 22.10px out, and the
+     paper had to be fifty-seven and a half per cent of the diameter to cover it.
+     Centred on the hole it is the upper outer end of the same bars, and that is the
+     number this round moved: the bars are set wider apart so the spindle hole has
+     red on either side of it and they are set larger so the symbol still dominates
+     the paper, and the corner goes from 10.73px out to 12.52px. The label follows
+     it out from thirty and a half per cent of the diameter to thirty-five, which is
+     that reach plus 2.17px of red - a tenth of a pixel more than the 2.07px the
+     last two pressings both carried, which is as near as thirty-five per cent lands
+     to it and nearer than any rounder number does. The paper can only grow into the
+     grooves, and one ring is what it took.
+
+     That is the arithmetic of an eighty-four pixel pressing and it no longer runs.
+     Once the disc went to a hundred and twelve and the control stayed where it was,
+     the paper stopped being cut to the symbol's reach: it is 23.52px of radius
+     against a corner that has since gone out to 13.31px, so the forty-two per cent
+     below is a fraction of the disc and not a fit to the ink any more. The three
+     places that forty-two appears still have to move together - they are about
+     where the paper's edge is, and the run-out and the glint have to meet it - but
+     the symbol no longer has a vote in what it is. The bars were free to move out
+     this round for exactly that reason.
+
+     One row rather than three, and the spindle hole is still the reason there is a
+     grid here at all rather than a stacked column. Both children are placed in the
+     same single cell and centred in it, so each is centred on the label and
+     therefore on the disc, and the hole cannot leave the middle whatever size the
+     symbol is set to. That is what the three rows were for as well; they were the
+     answer to the same question asked of a symbol that had to sit somewhere else,
+     and with the symbol on the centre too there is nothing left for an empty row to
+     hold apart. The minmax(0, 1fr) they were written with goes with them. It was
+     there because a track written 1fr may not be smaller than its own contents, and
+     the pause symbol's line box was 0.07px taller than the row it had to fit in, so
+     the bottom row would quietly steal that 0.07px from the empty top one and carry
+     the hole off centre with it; a single cell has no neighbour to steal from and
+     cannot fail that way. Measured off the rendered raster the hole is within a
+     hundredth of a pixel of the centre of the disc in both states, and it has to
+     be: a hole that is off centre orbits visibly the moment the record turns, and
+     it is the one thing on a record nobody can look past.
+
+     An earlier pressing put the hole and the triangle concentric, found that a hole
+     punched through a triangle reads as a triangle with a bite out of it, and
+     stacked them instead. That was true of the drawing it was made from and not of
+     the arrangement in general, and the two things it missed are both measurable.
+     The first is that the hole was being put at the triangle's bounding box centre,
+     and on the pressing that argument was made from the triangle's inradius about
+     that point - the distance from it to the nearest edge of the ink - was 1.99px,
+     which is less than the 2.73px radius of the hole then in use. The hole was not
+     sitting in the triangle at all; it was crossing its edge, and a bite is exactly
+     what that draws. A right pointing triangle's visual centre is not the middle of
+     its box but its centroid, a third of the way from base to apex, and about the
+     centroid the clearance on the triangle drawn here measures 4.36 to 4.81px. The
+     second is that the hole was wider than it had to be. At 4.61px across it leaves
+     between 2.05 and 2.51px of white all the way round at the tightest point, and
+     at true size that reads as a spindle hole showing through printed label art,
+     which is what it is. That white was 1.80px two rounds ago and the triangle has
+     grown twice while the hole has not, which is the whole of the difference. A
+     hole of 5.21px was rendered against the
+     smaller triangle and thinned the white to about a pixel, which was enough to
+     make it look eaten; the same hole against this one would leave over two, so
+     what that test established was a ratio between hole and triangle and not a
+     width in pixels.
+
+     The pause state asks for none of that argument, because a spindle hole falling
+     in the gap between two upright bars is where a spindle shows on any real label.
+     It does ask for the bars to be set a good deal further apart than the font sets
+     them: at the size they are drawn the font's own gap is 4.06px and the hole is
+     4.61px, so left alone the hole would rest on both bars at once rather than
+     between them.
+
+     A gap of 7.50px was where that landed for two rounds, and it was not enough.
+     It left 1.51px of red on either side - the same at every layout phase, which is
+     the one mercy of a measurement that comes out of letter-spacing rather than out
+     of where the button lands - and at true size a pixel and a half of
+     red between a dark hole and a white bar does not read as three things with two
+     gaps; it reads as one accidental stripe across the middle of the label, which
+     is exactly what an owner of this page said when he first looked at it. The
+     letter-spacing below opens the gap to 9.50px instead, leaving 2.45px of red
+     each side, and the two ways of getting there are worth setting down because
+     only one of them was taken.
+
+     The other was to let the hole BITE the bars - to pull them in until the hole
+     crosses the ink and reads as punched through it rather than fitted between it,
+     which is a real thing a spindle does to label art. It was rejected on three
+     counts. It is not available at a usable depth: reaching the ink at all means a
+     gap under the hole's own 4.61px, which is below the 4.06px the font already
+     sets, and the deepest bite that leaves a recognisable pause glyph takes about
+     half a pixel out of a six pixel bar - a nick, which reads as a rendering fault
+     and not as a punch. This file has already lost that argument once in the other
+     state, twenty lines up: a hole punched through a triangle read as a triangle
+     with a bite out of it. And it would make the two states disagree about what the
+     hole is, floating clear in one and cutting in the other, when it is one hole
+     that never moves and the symbol is what changes around it.
+
+     Red between is also what a record looks like. Label art is laid out AROUND the
+     spindle, because the hole is punched before the sleeve ever sees it; ink that
+     ran into the hole would be ink the press was going to destroy. Two bars either
+     side of a bare spindle is a real label. A bar with a bite in it is a misprint.
+
+     What the wider gap costs is nothing this time. It carries the bars outward, and
+     at eighty-four pixels the paper had to follow them and the grooves paid for the
+     paper - which is why the gap stopped at 7.50px in the first place. At a hundred
+     and twelve the paper is already 23.52px and the ink's furthest corner only
+     13.31px, so the bars move out into red the record already had. Ten pixels of it
+     are still there afterwards.
+
+     The hairline round the paper is --lp divided by EIGHTY-FOUR, which is the
+     diameter it was cut at and not the diameter it is drawn at now: one pixel on
+     an eighty-four pixel pressing, and 1.33px on the hundred and twelve this is
+     set to. That is the formula doing what it was written to do rather than
+     drifting - a hairline that stayed at one pixel while the record grew by a
+     third would read as a finer line on a bigger object, which is not what a cut
+     paper edge does. Divide by the current diameter instead and it would be
+     pinned at a pixel for ever, which is the version this deliberately is not. */
+  .lp-label {
+    width: calc(var(--lp) * .42); height: calc(var(--lp) * .42); border-radius: 50%;
+    display: grid; grid-template: 1fr / 1fr;
+    justify-items: center; align-items: center;
+    line-height: 1; color: #fff4ef;
+    background: radial-gradient(circle closest-side, #e02a3e 0 58%, #c4142a 100%);
+    box-shadow: 0 0 0 calc(var(--lp) / 84) rgba(0,0,0,.5);
+  }
+  /* A hole, not a dot: it takes the colour of the panel behind the button rather
+     than a dark grey of its own, so it reads as the page showing through. It is
+     4.61px across where it used to be 5.45px, and that pixel was not given up for
+     looks. It is the width at which the hole still fits between the pause bars
+     without the bars having to be pushed so far apart that the label grows further
+     than the grooves can pay for, and it is the one measurement this round was not
+     allowed to touch: the whole of the change is the symbol growing around a hole
+     that stayed where it was and stayed the size it was, and a hole that grew with
+     the symbol would have bought no clearance at all. What that fixed width now
+     leaves is 2.05 to 2.51px of white all round it inside the triangle and 2.45px
+     of red on either side of it between the bars - near enough the same margin
+     whichever symbol is printed round it, where before this round the pause got
+     barely half what the play did.
+
+     Those two margins do not have to be equal to read as equal, and in neither
+     theme do they. Measured off the rendered button, in the dark theme the hole's
+     edge against the triangle is a step of 227 levels of luminance and its edge
+     against the paper is a step of 63 - the red gap carries 28 per cent of the
+     contrast the white one does, and a low-contrast gap of the same width reads as
+     the narrower gap. That is the argument for red being the margin worth spending
+     on, and it is the one the pause state got.
+
+     The light theme inverts it exactly, and measures 9 levels against the ink and
+     173 against the paper: there the red gap is the strong one and it is the white
+     one that has no contrast left to give, which is what the cut edge two
+     paragraphs down exists to answer. So no one margin can be the one to widen,
+     and the answer is to give both states enough of their own rather than to tune
+     either to a ratio.
+
+     It is written last inside the label and given a position of its own so that it
+     paints over the symbol, because a spindle hole is punched through whatever is
+     printed on the paper and not printed under it. Being written last is not enough
+     on its own: the symbol carries a transform, which puts it in the late painting
+     pass that positioned elements are painted in, and an ordinary in-flow hole would
+     be painted before it and disappear underneath. Giving the hole a position puts
+     the two in the same pass, where the one written second wins, and no z-index is
+     needed to say so - which is the same argument the glint above is placed by.
+
+     The dark line round the inside of it is the cut edge of the paper, and it had
+     to be darkened from a rgba(0,0,0,.45) to a .9 the moment the symbol moved onto
+     the hole. In the dark theme the change is invisible, because the hole is filled
+     with the panel colour and the panel is darker than the line drawn over it. In
+     the light theme the panel is white, and in the play state the hole is now
+     surrounded by the white of the triangle rather than by red paper: at .45 the
+     two whites met across a grey so faint that the hole read as a smudge on the ink
+     rather than as a hole through it, which was rendered before this was changed.
+     At .9 the edge carries the whole of the hole in that one case and is not
+     noticeable in any of the others, which is what an edge that is a cut rather
+     than a shading should do. */
+  .lp-hole { grid-area: 1 / 1; position: relative;
+             width: var(--hole); height: var(--hole);
+             border-radius: 50%; background: var(--panel);
+             box-shadow: inset 0 0 0 1px rgba(0,0,0,.9); }
+  /* The symbol is the one thing on this button that was not free to be whatever
+     the disc had left. It used to be a play triangle fourteen pixels tall, which is
+     what a play button looks like everywhere else and which every other measurement
+     on the record was once worked back from; it is sixteen now, and what decided
+     sixteen was not another icon but the spindle hole. The symbol is printed around
+     that hole, the hole is fixed, and the red between the two is the thing being
+     protected, so the symbol is drawn as large as it can be while the pause bars
+     still clear the hole by a pixel and a half and the paper that has to cover them
+     still costs the grooves only one ring. Fourteen pixels is where that argument
+     landed when the symbol first moved onto the hole and nobody had yet looked at
+     how little red was left; sixteen is where it lands now that somebody has.
+
+     The paper's half of that argument is over. It was true at eighty-four pixels,
+     where the label was cut to the symbol's own reach plus two pixels of red and
+     the grooves paid for every pixel the symbol grew by. At a hundred and twelve
+     the paper grew and the control did not, so the ink's furthest corner is 13.31px
+     out on a paper of 23.52px and there are ten pixels of red beyond it. Nothing
+     the symbol does below is paid for by a groove any more, and the ring count is
+     untouched by this round. What still binds is the hole, which has not moved and
+     is not allowed to.
+
+     It takes two font sizes to get one symbol size: U+25B6 inks 0.783 of its em
+     and the pair of U+275A bars inks 0.700 of theirs, so set at a single size the
+     bars come out a pixel and a half shorter than the triangle and the pause reads
+     as the smaller of the two controls. Set at these two, the ink of both measures
+     sixteen pixels tall to the eighth of a pixel the raster can resolve, which is
+     the thing being compared. They stay fractions of --lp rather than becoming
+     fixed pixels so that the symbol still travels if the record is ever resized,
+     even though here it was the symbol that decided the record's size.
+
+     The height is the axis the two symbols share, and the scaleX below is written
+     the way it is so that they go on sharing it. Equal height had been taken for
+     equal size, and on the raster it was not: the triangle inked 14.25px wide at
+     15.94px tall, near enough square to read as square, where the pair of bars it
+     turns into inked 19.50px at the same height and now inks 21.38px. One portrait
+     and one landscape, so pressing the control swapped between two different
+     footprints with nothing in the resting shape to say which way it would go.
+     Stretching the triangle to 18.00px wide, nine eighths of its own height, is
+     what puts that warning in - not all the way to the bars' own width, which
+     blunts the apex and stops it reading as a triangle at all, but far enough that
+     the eye reads it as the same landscape shape. It is a stretch and not a larger font
+     size on purpose: a larger font size would have taken the height with it and
+     made the pause the smaller of the two controls again, which is the thing the
+     paragraph above buys with two font sizes and is not for sale. What the triangle
+     gains is 26 per cent of width and 26 per cent of ink, and the eye gets a shape
+     that already sits across the ground the bars will stand on.
+
+     Stretching it also pays the hole, which is the one thing about this that is
+     not obvious. A right pointing triangle's clearance about its centroid is set by
+     its two slanted edges, and stretching it horizontally lays those edges flatter
+     without moving the centroid off the hole - so the white round the hole goes UP
+     as the triangle widens rather than being spent. Rendered at every sixteenth of
+     a pixel of layout phase, it gains 0.165px at every one of them: 1.90 to 2.33px
+     of white before the stretch and 2.05 to 2.51px after it. The base edge is not
+     close to binding either way; it stands 6.06px off the hole where the slants
+     stand 4.81px at their best and 4.36px at their worst.
+
+     The transforms are what put the hole inside the symbol rather than merely near
+     it, and they differ between the states because the two shapes do. Horizontally,
+     a pair of upright bars is symmetric about that axis, so centring the box centres
+     the ink and the only correction wanted is half of the letter-spacing that opens
+     the gap: that space is added after the second bar as well as between the two,
+     and without the correction it would carry the pair that far to the left of the
+     hole. A right pointing triangle is not symmetric about that axis, and its visual
+     centre along it is its centroid rather than the middle of its box, a third of
+     the way from base to apex and so further right. Both are written in em rather
+     than as fractions of --lp, because they are corrections to a glyph and should
+     follow the size that glyph is set at, and both are read off a button rendered
+     at sixteen times scale rather than taken from the font's published metrics,
+     because what is being lined up is where the pixels land.
+
+     The horizontal one does not simply follow the stretch. Scaling about the box
+     centre multiplies the centroid's offset from it, so .1211em ought to become
+     .1211 x 1.2632 = .1530em; at .1530em the ink comes out an eighth of a pixel to
+     the left and at .1570em it measures right. That eighth of a pixel is glyph
+     positions landing on the raster, and it is why these are measurements of this
+     size and of no other. If --lp or --ctl is ever changed they are the first
+     things to re-read, off the rendered button in both states, never taken from
+     the font's metrics or from the shape's own geometry.
+
+     The vertical one is a different animal and this round found out why. It is NOT
+     a constant of the design and cannot be made one. Text ink snaps to whole device
+     pixels; the spindle hole is a painted box and does not. So the distance between
+     them is decided by where the button happens to land on the page, and the button
+     lands wherever the lines above it leave it - a track title that wraps moves it.
+     Swept through a whole pixel of that layout phase, the ink sits at one of three
+     places against the hole, half a pixel apart, and .0087em only chooses WHICH
+     three. It cannot close the gap, because moving the glyph by a fraction of a
+     pixel just re-labels which phases land where: measured at every sixteenth of a
+     pixel of phase, the white inside the triangle averages 2.27px whatever this
+     number is, and the whole of the effect is on the spread. .0087em keeps that
+     spread at 2.05 to 2.51px. Values that centre the ink at the commonest phase
+     were rendered and rejected for making the worst phase worse - .0300em looks
+     perfect on the page as it usually loads and drops to 1.65px when a title wraps.
+     The best any value can do for the worst case is 2.09px, so .0087em is within a
+     thirtieth of a pixel of the best there is and stays.
+
+     Two things follow that should not be quietly forgotten. The first is that
+     2.39px of white was never rendered by anything; it was derived from an ideal
+     triangle's inradius rather than measured, which is the one thing every other
+     number in this file is not, and the button was drawing between 1.90 and 2.33px.
+     The second is that the two symbols snap independently - they are set at
+     different sizes, so their line boxes round to different pixels - and at three
+     phases in seventeen the ink JUMPS a whole pixel vertically as the state flips.
+     That is not caused by anything here and is not fixed by anything here; it was
+     already happening, it costs nothing measurable in clearance, and closing it
+     would mean giving both symbols one font size and equalising their ink height
+     some other way. Written down because it is invisible until it is looked for.
+
+     The red between the hole and the bars has none of this trouble. It comes from
+     letter-spacing, which is horizontal, and horizontal glyph placement is not
+     snapped: 2.445px at every one of the seventeen phases, to the thousandth. */
+  .lp-sym { grid-area: 1 / 1; font-size: var(--ctl);
+            transform: translate(.1570em, .0087em) scaleX(1.2632); }
+  button.play.spinning .lp-sym { font-size: calc(var(--ctl) * 1.1152);
+                                 letter-spacing: .2348em;
+                                 transform: translate(.1174em, 0); }
+  /* The record is the whole face of the button turning with a symbol printed on
+     it, which is a great deal of motion, so under reduced-motion it stops
+     outright. It is named here rather than being left to
+     the universal animation kill at the foot of this sheet: that rule does reach
+     the disc now the disc is a real element, but relying on it would mean relying
+     on a rule written for something else. There used to be a thin loading ring
+     here too, slowed rather than stopped because an arc can afford it; the record
+     was replaced by a line of words under the button, so there is nothing
+     left here to slow. */
+  @media (prefers-reduced-motion: reduce) {
+    .lp-disc { animation: none; }
+  }
+  /* The counter goes under the button rather than beside it so the row keeps its
+     shape on a phone. It used to appear when playback started and vanish when it
+     stopped, and the track line inside it used to wait for a title, so the block
+     changed both width and height as you played and paused and the whole row
+     jumped. Now it is always rendered and always exactly as wide as the button
+     above it, which is what makes it steady: the column is given the diameter of
+     the record explicitly, so no string this line can hold is able to widen it,
+     and the line is centred inside that fixed box. Tabular figures keep the
+     digits from shuffling sideways as the seconds turn over, and the placeholder
+     occupies the same shape as a real reading so there is no empty box waiting
+     to be filled. */
+  .deck { flex: none; width: var(--lp);
+          display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .clocks { width: 100%; text-align: center; white-space: nowrap;
+            font-size: .72rem; color: var(--dim);
+            font-variant-numeric: tabular-nums; }
+  /* Pinned to the height of the button rather than centred in the row, so
+     that the slider stays level with the record whether or not the counter
+     underneath it is there. Centring would drop it half the height of the
+     counter every time playback started. */
+  .vol { flex: 1; align-self: flex-start; height: var(--lp);
+         display: flex; align-items: center; gap: 9px; color: var(--dim); }
   input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  .narrator { margin-top: 8px; font-size: .8rem; color: var(--dim); line-height: 1.45; }
 
   .meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px;
           padding-top: 16px; border-top: 1px solid var(--line); font-size: .76rem; color: var(--dim); }
@@ -102,6 +844,68 @@
   .findrow a:hover, .findrow button:hover { color: var(--accent); background: rgba(127,127,127,.12); }
   .findrow .done { color: var(--accent); }
   .findrow[hidden] { display: none; }
+  /* the like pill reuses button.vote below; this only centres it */
+  .likerow { display: flex; justify-content: center; margin: -6px 0 18px; }
+  .likerow[hidden] { display: none; }
+  /* The tug of war: two buttons with the counter drawn between them. The
+     buttons are button.vote again, so the thing you press to move a number
+     looks the same here as it does on the heart and in the guestbook.
+
+     One pip per click, filled from the left, with the same count in digits
+     beside them. The pips are the picture - how far it has got, how much rope
+     is left - and past about four dots a picture stops answering "how many is
+     that" without counting five-pixel circles one at a time, which is the
+     question the digits take. They are not the two-copies-of-one-number the
+     heart was cured of: those sat a hundred pixels apart and were written by
+     different lines, and these sit nine pixels apart and are written from
+     pullNow and rope in the same pair of statements as the pips, so there is
+     no moment in which either of them is the newer. */
+  .tugrow { display: flex; justify-content: center; align-items: center; gap: 9px;
+            margin: -10px 0 18px; }
+  .tugrow[hidden] { display: none; }
+  .rope { display: flex; align-items: center; gap: 3px; }
+  .rope .pip { width: 5px; height: 5px; border-radius: 50%; background: var(--line);
+               transition: background-color .18s ease, opacity .18s ease; }
+  .rope .pip.on { background: var(--accent); }
+  /* The cool-off after a track change, while the counter refuses every click.
+     The pips go faint and both buttons disable themselves, which is the whole
+     message: not yet. No word for it and no countdown - a figure ticking down
+     would be a second clock on a page that already has one, about a wait of
+     five seconds. */
+  .rope.cool .pip { opacity: .3; }
+  /* The count in digits, beside the pips rather than instead of them. .72rem is
+     button.vote's own size, so it stands between the two glyphs at their weight
+     instead of reading as a heading over the row, and var(--dim) is the pips'
+     UNLIT colour rather than the lit one: it reports the number, it is not a
+     thirteenth pip.
+
+     A floor under the width, because the row is centred and so pays for every
+     character twice. 12/12 measures 29.34px against 23.13px for 7/12 - four
+     tabular digits of 6.22px and a solidus of 4.47px - so with no floor the
+     pips would jump 3.11px sideways on the click from 9 to 10 and back again
+     on the one that undoes it, which is the click a listener is watching
+     hardest. The floor is written in ch rather than in that 29.34px so that it
+     follows the font instead of recording the one this stack happens to resolve
+     to. 4.74 and not the 4.7186 the division gives, because ch is the advance
+     of the ZERO and these figures are tabular, which are a hair wider here -
+     6.20px against 6.22px. At 4.72 the box came out 0.05px short of 12/12 and
+     the pips still moved, by a sixty-fourth of a pixel. Invisible, but it was
+     the whole point of the floor, so it is cleared outright instead.
+
+     Right-aligned in that box so the /12 does not move at all and only the
+     column that is really changing changes.
+
+     The fade is the pips' own .18s. It matters that it is theirs and not
+     nought: with no transition the digits went out on the frame the class
+     landed while the dots took most of a fifth of a second after them, and two
+     halves of one object leaving at different times reads as two objects. */
+  .tugnum { font-size: .72rem; color: var(--dim); font-variant-numeric: tabular-nums;
+            min-width: 4.74ch; text-align: right; transition: opacity .18s ease; }
+  /* Faded with the pips during the cool-off, off the one class drawTug already
+     toggles and by the pips' own .3 rather than a constant of its own. The
+     figure is part of the rope, so it goes out by exactly what the rope goes
+     out by and cannot be left looking live over a pair of dead buttons. */
+  .rope.cool + .tugnum { opacity: .3; }
   .recent { margin-top: 20px; }
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
@@ -131,6 +935,8 @@
     border: 0; padding: 0; font: inherit; font-size: .72rem; cursor: pointer; }
   footer a:hover, footer .flink:hover { color: var(--fg); }
   footer .sep { color: var(--line); }
+  /* the bitrate: plumbing, so it sits down here with the rest of the plumbing */
+  footer .quality { color: var(--dim); }
 
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -142,6 +948,9 @@
     <div class="live" id="live"><span class="dot"></span><span class="lbl" id="lbl">connecting</span></div>
     <h1 id="name">&nbsp;</h1>
     <div class="desc" id="desc">&nbsp;</div>
+    <!-- Whoever is broadcasting, in their own words, and only while they
+         are. Empty and hidden the rest of the time - a station between
+         shows says nothing about shows. -->
   </header>
 
   <div class="cols">
@@ -149,7 +958,17 @@
    <div class="col">
     <!-- player -->
     <div class="panel">
-      <div class="np-label">NOW PLAYING</div>
+      <div class="np-label" id="npLabel">NOW PLAYING</div>
+      <!-- The show, when there is one, IS this panel. It is not a second
+           announcement above it: two blocks describing what is on is two
+           things to disagree, and during a show they did - the header named
+           the host while this named a track that had been paused for an
+           hour. -->
+      <div class="show" id="showwrap" role="status" hidden>
+        <div class="showname"><span class="dot"></span><span id="showname"></span></div>
+        <div class="showtitle" id="showtitle" hidden></div>
+        <div class="shownote" id="shownote" hidden></div>
+      </div>
       <div class="np" id="np">—</div>
       <div class="findrow" id="findrow" hidden>
         <a id="findLink" target="_blank" rel="noopener" title="find this song in the library">♫ find this song</a>
@@ -158,17 +977,45 @@
                stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
         </button>
       </div>
+      <div class="likerow" id="likerow" hidden>
+        <button type="button" class="vote" id="likeBtn" title="like this song" aria-label="like this song"><span id="likeHeart">&#9825;</span> <span id="likeCount">0</span></button>
+      </div>
+      <!-- The tug of war. No words anywhere in it, deliberately: the anchor
+           pulls the counter down, the skip glyph pushes it up, and the pips
+           between them are the counter. Every one of those is a symbol or a
+           countable thing, so there is nothing here to translate - the same
+           rule the play button follows. The variation selector on both glyphs
+           asks for the text form rather than the colour emoji, so they sit
+           beside the hollow heart instead of shouting over it.
+           The pips are built by the script, not written here: how many there
+           are is the station's number and the page is told it - and so is the
+           12 in the reading beside them, for that same reason.
+           The digits break none of the rule above them. 7/12 is figures and a
+           solidus, which say the one thing they say to a reader of any of the
+           languages the words this row refuses would have had to be translated
+           into. They are a span of their own rather than a child of .rope
+           because showTug lights the pips by walking that element's children by
+           index, and anything else living in there would be pip thirteen. -->
+      <div class="tugrow" id="tugrow" hidden>
+        <button type="button" class="vote" id="tugKeep" title="pull the skip counter back down" aria-label="pull the skip counter back down">&#9875;&#65038;</button>
+        <div class="rope" id="rope"></div>
+        <span class="tugnum" id="tugNum"></span>
+        <button type="button" class="vote" id="tugSkip" title="push the skip counter up" aria-label="push the skip counter up">&#9197;&#65038;</button>
+      </div>
       <div class="controls">
-        <button class="play" id="btn" disabled aria-label="Play or pause">▶</button>
+        <div class="deck">
+          <button class="play" id="btn" disabled aria-label="Play or pause"><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-sym" id="btnsym">▶</span><span class="lp-hole"></span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
+          <div class="clocks" id="intotrack">--:-- / --:--</div>
+        </div>
         <div class="vol">
           <span aria-hidden="true">🔉</span>
           <input type="range" id="vol" min="0" max="100" value="85" aria-label="Volume">
         </div>
       </div>
+      <div class="narrator" id="narrator" hidden></div>
       <div class="meta">
         <div>listeners <b id="listeners">–</b></div>
         <div>on air <b id="uptime">–</b></div>
-        <div>quality <b id="bitrate">–</b></div>
       </div>
     </div>
 
@@ -214,10 +1061,14 @@
 
   <footer>
     <a href="/stream" title="open the raw stream in VLC or any audio player">stream</a>
+    <span class="sep">&middot;</span>
+    <span class="quality" id="bitrate" title="stream quality">&ndash;</span>
     <span class="sep">·</span>
     <button class="flink" id="share">copy link</button>
     <span class="sep">·</span>
-    <a href="/">back to the stable version</a>
+    <a href="/host/">i'm a radio host</a>
+    <span class="sep">·</span>
+    <a href="/next/">try the newest version &rarr;</a>
   </footer>
 </div>
 
@@ -227,6 +1078,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const audio = $('audio'), btn = $('btn'), vol = $('vol');
+  const sym = $('btnsym');
   let lastTitle = null, titleSince = Date.now();
   let replyTo = null;   // filename of the message being replied to
 
@@ -238,12 +1090,103 @@
     audio.load();
     return audio.play();
   }
+  // One line, always on screen, and only ever about the track. There used to be
+  // two counters here and the other one was how long this browser had been
+  // listening, which is a private stopwatch nobody asked to see; it was also the
+  // wider of the two by a long way, and the row on a phone cannot afford it next
+  // to a volume slider. The position and the duration are what a player shows and
+  // what the operator sketched, they come from the station rather than from a
+  // guess made here, and they are therefore right for someone who arrived in the
+  // middle of a song, which a count started at page load never could be.
+  //
+  // The line is never hidden and never empty. When the station has not said where
+  // it is, or has stopped answering, the line says so in the shape of a reading
+  // rather than going blank, because a box that empties and refills is exactly
+  // the jumping this replaces. A duration of zero is a live input saying it does
+  // not know the length, and the honest answer to that is the same placeholder in
+  // the second half only - inventing a total would be worse than admitting there
+  // is none.
+  const NOTIME = '--:--';
+  // What the station last said about the track, and when it said it.
+  let trackElapsed = 0, trackTotal = 0, trackAt = null;
+  // True means the page is not listening and has stopped fetching.
+  let quiet = true;
+  // Numbers only. There was briefly a "putting on a new record" here and it was
+  // wrong for a reason that has nothing to do with how it read: the button lost
+  // its PLAY and PAUSE words on purpose, so that nothing on this control needs
+  // translating, and a status line in English puts that straight back. Waiting
+  // is said by the record pulsing instead - see the button rules in the sheet.
+  //
+  //   3:41 / 5:02     playing, and where in the track
+  //   --:-- / --:--   anything else
+  //
+  // Nothing dated either. A timestamp of when the page last heard from the
+  // station read as information and was not: what a paused page wants to say
+  // is that it is paused, which the placeholder already says.
+  function tick() {
+    // /likes/now answers with elapsed and duration off the frame being played.
+    // Carried forward between polls by the wall clock so the seconds move every
+    // second rather than in jumps every five.
+    $('intotrack').textContent = (quiet || trackAt === null)
+      ? NOTIME + ' / ' + NOTIME
+      : mmss(trackElapsed + (Date.now() - trackAt) / 1000) + ' / ' +
+        (trackTotal > 0 ? mmss(trackTotal) : NOTIME);
+    // The tug's cool-off ends between polls, and this is the second hand that
+    // already exists. It rides here rather than on a timer of its own for the
+    // reason the whole PULSE block exists.
+    drawTug();
+  }
+
+  // Three states, one place, and the place is still here. 'loading' is set by the
+  // press itself and cleared only by sound actually arriving, or by giving up -
+  // never on a timer, because a timer would lie in whichever direction the
+  // network did not go. What changed is where the state gets written: the label
+  // has to turn with the record, so it lives inside the disc, and a
+  // pseudo-element could never have held text that this function sets. The symbol
+  // is therefore a span addressed by id. While the stream is still coming it is
+  // cleared rather than the disc being taken away - a blank pressing with a ring
+  // turning over it is the record on the platter and not yet playing, which is
+  // exactly what is true at that moment. The aria-label was always the whole
+  // accessible name of this button and it is now the only text naming the control
+  // anywhere, because the word that used to sit above the symbol has gone; the
+  // disc is hidden from assistive technology precisely so that the name never
+  // becomes a decoration that happens to be upside down half the time.
+  const GLYPH_PLAY = '▶', GLYPH_PAUSE = '❚❚';
+  function setBtn(state) {
+    btn.classList.toggle('loading', state === 'loading');
+    btn.classList.toggle('spinning', state === 'pause');   // the record turns only while sound is coming out
+    sym.textContent = state === 'loading' ? '' :
+                      state === 'pause'   ? GLYPH_PAUSE : GLYPH_PLAY;
+    btn.setAttribute('aria-label', state === 'loading' ? 'Connecting to the stream' :
+                                   state === 'pause'   ? 'Pause' : 'Play');
+  }
+  // wake()/sleep() are declared at the foot of this file with the rest of the
+  // polling; function declarations hoist, so calling them from here is fine.
   btn.addEventListener('click', () => {
-    if (audio.paused) start().catch(() => setLive(false, 'could not start'));
-    else { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+    if (audio.paused) {
+      setBtn('loading');          // before anything else, on the press itself
+      tick();                     // and say so, while no poller is running yet
+
+      start().catch(() => { setBtn('play'); setLive(false, 'could not start'); });
+    } else {
+      // sleep() by hand rather than trusting the pause EVENT. pause() only
+      // QUEUES that event, and load() on the next statement restarts the media
+      // load algorithm in the same tick, which cancels the element's queued
+      // events - so it never arrives and the pollers ran on. It looked correct
+      // from the outside because setBtn('play') is called right here, so the
+      // record showed the play glyph while the page went on fetching: paused,
+      // zero listeners, clock still counting.
+      //
+      // The listener below stays, for every pause this button does not make -
+      // the lock screen, a headset button, a stream that drops.
+      audio.pause(); audio.removeAttribute('src'); audio.load();
+      setBtn('play'); sleep();
+    }
   });
-  audio.addEventListener('playing', () => { btn.textContent = '❚❚'; });
-  audio.addEventListener('pause',   () => { btn.textContent = '▶'; });
+
+  audio.addEventListener('playing', () => setBtn('pause'));
+  audio.addEventListener('pause',   () => setBtn('play'));
+  audio.addEventListener('error',   () => { if (audio.paused) setBtn('play'); });
 
   function setLive(on, label) {
     $('live').className = 'live' + (on ? ' on' : '');
@@ -461,7 +1404,18 @@
     const stamp = now.toISOString().replace(/[:.]/g, '');
     const rand  = Math.random().toString(36).slice(2, 8);
     const file  = stamp + '-' + rand + '.md';
-    const into  = mmss((Date.now() - titleSince) / 1000);
+    // The station's own position, the same number the clock under the button
+    // shows. This used to be measured from when THIS browser first saw the
+    // title change, which is the moment the reader arrived rather than the
+    // moment the track began - so every note left by someone who tuned in
+    // mid-song recorded a position earlier than the one they were actually
+    // hearing, and recorded it into a file that is kept. There is no guess to
+    // make any more: /likes/now answers with the elapsed time off the frame
+    // being played. An empty field when the station has not answered yet,
+    // because a blank is honest and a zero is a claim.
+    const into  = trackAt === null
+      ? ''
+      : mmss(trackElapsed + (Date.now() - trackAt) / 1000);
 
     const md =
       '---\n' +
@@ -657,10 +1611,409 @@
     } catch {}
   });
 
-  poll(); loadMessages(); pollChat();
-  setInterval(poll, 8000);
-  setInterval(loadMessages, 30000);
-  setInterval(pollChat, 4000);
+  // What the narrator is saying. Liquidsoap writes the line to a static file
+  // at the web root - this page is public and cannot use the /control
+  // endpoints, which sit behind the speaker credential. It carries its own
+  // timestamp so a line ages out here rather than needing anything to come
+  // back and clear it: a stale "that was" parked under the volume slider all
+  // evening would be worse than showing nothing.
+  const NARRATOR_TTL = 45000;
+  async function pollNarrator() {
+    const el = $('narrator');
+    try {
+      const res = await fetch('/live/narrator.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const n = await res.json();
+      const age = Date.now() - Date.parse(n.at);
+      if (n.words && age >= 0 && age < NARRATOR_TTL) {
+        el.textContent = '\uD83D\uDCE2 ' + n.words;
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+      }
+    } catch (e) { el.hidden = true; }
+  }
+
+  // --- likes -------------------------------------------------------------
+  // Anyone listening can like. No login, no account, no identity: the count
+  // is one number against one song. Liquidsoap keeps it against the FILE
+  // PATH, because an untagged track has no title to key on, and hands back an
+  // opaque id for that path instead of the path itself - which is all this
+  // page needs to remember what it has already liked, and keeps the layout of
+  // the library off the public internet.
+  //
+  // One like per browser per track, remembered in localStorage. It is
+  // defeatable by anyone who cares to clear it, and that is fine - it is a
+  // song, not a ballot.
+  const LIKED_KEY = 'radio.liked';
+  let liked = [];
+  try { liked = JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'); } catch { liked = []; }
+  let likeId = '';
+
+  // The count belongs to the song on the air, not to the station: it is the
+  // number a listener can move, and it changes when the track does. The two
+  // places that carry it, the heart there is to press and the figure in the
+  // meta row, are written here from the same response, so a vote and a track
+  // change move both at once and neither can be caught telling a different
+  // story than the other. The response also carries a station-wide total of
+  // every like ever given to anything, which this page no longer shows: beside
+  // a number about this song it only muddied which of the two was which.
+  //
+  // One counter, and it is the heart. It was briefly written in two places at
+  // once, which cannot disagree - both are set here from the same response -
+  // but two copies of one number a hundred pixels apart is not reassurance,
+  // it is a question about whether they might ever differ. The count belongs
+  // on the thing you press to change it; the row below stays about the
+  // station, which is a different subject.
+
+  // Whoever is on the microphone, from the same response as everything else
+  // here and for the reason the station gives for putting it there: a poll of
+  // its own would disagree with this one for as long as a poll takes at the
+  // one moment that matters, which is a host leaving the air.
+  //
+  // textContent, never innerHTML, and here that is not a habit - these three
+  // strings were typed by one person and are being shown to everybody else.
+  // It is the rule the guestbook and the chat already follow, and the station
+  // caps the three lengths on its own side as well.
+  //
+  // A host who has typed nothing still gets the dot. That is the honest
+  // reading of what the station said - somebody is live, and they chose to
+  // say nothing about it - and it is the half of this that survives a
+  // listener who reads no English at all.
+  function showShow(sh) {
+    const on = !!(sh && sh.live);
+    $('showname').textContent  = on ? (sh.name  || '') : '';
+    $('showtitle').textContent = on ? (sh.title || '') : '';
+    $('shownote').textContent  = on ? (sh.note  || '') : '';
+    $('showtitle').hidden = !$('showtitle').textContent;
+    $('shownote').hidden  = !$('shownote').textContent;
+    $('showwrap').hidden  = !on;
+  }
+
+  // A paused station is not playing the track it is showing, and for the
+  // length of a bucket set that is every listener seeing a name for something
+  // they cannot hear. The operator caught this one on the live page.
+  //
+  // The label loses its words rather than gaining different ones. Every
+  // control on this page is wordless on purpose - the tug is two glyphs and a
+  // row of dots - because it has to work for somebody who reads no English,
+  // and swapping one English phrase for another English phrase would have
+  // made this the one piece of state that only reads in one language. The
+  // pause glyph is the same character the tug row uses for skip, from the
+  // same block, and it needs no translation.
+  //
+  // The title itself is deliberately kept. It is still the track the station
+  // is standing on and will resume, and showing nothing would lose that.
+  // What this panel says is on, in one place, because it has exactly one
+  // subject and used to have two.
+  //
+  // Three states, and the middle one is the one worth spelling out:
+  //
+  //   no show          the track, as it always was
+  //   show, music on   the show, with the track beneath it in the weight the
+  //                    page uses for context - a host talking over the
+  //                    station is genuinely hearing both, so both are named
+  //   show, paused     the show alone. The track is not audible, and a track
+  //                    that cannot be heard has no place on a panel that says
+  //                    what is on. That is the lie the pause glyph was added
+  //                    to stop telling and it would be told again here.
+  //
+  // No word of ours appears in the live state. The dot carries it, as it did
+  // in the header, and the words are the host's own.
+  function showHold(j) {
+    const held = !!(j && j.paused);
+    const live = !!(j && j.show && j.show.live);
+    $('npLabel').hidden = live;
+    $('npLabel').textContent = held ? '\u23F8\uFE0F' : 'NOW PLAYING';
+    $('np').classList.toggle('hold', held && !live);
+    $('np').classList.toggle('under', live);
+    // Hidden rather than emptied, so the panel closes up instead of leaving a
+    // gap where a track used to be named.
+    $('np').hidden = live && held;
+  }
+
+  // --- a record being changed ---------------------------------------------
+  // /likes/now's id is a digest of the file playing, so a change in it IS a
+  // track change and there is nothing else to ask. showLikes already keys the
+  // heart off that value; this keys the record off the same one.
+  //
+  // Cleared in sleep() for the reason that block already gives about the
+  // clock: a change this page did not witness is not one it may act out.
+  // Without that, pressing play after an hour away would open with a shove for
+  // a record that went half an album ago.
+  //
+  // Reduced motion is refused HERE rather than left to the blanket rule at the
+  // foot of the sheet. That rule does reach .lp-shove, and that is exactly the
+  // trouble: the carriage takes itself out on its own animationend, so taking
+  // the animation away would leave a copy of the outgoing record sitting over
+  // the real one for good. An element that exists only for the length of its
+  // animation must not be built where there is no animation to end.
+  let shownId = '';
+  const stillness = matchMedia('(prefers-reduced-motion: reduce)');
+
+  function showRecord(id) {
+    const was = shownId;
+    shownId = id;
+    if (!id || !was || id === was || stillness.matches) return;
+    // A second change inside the first shove replaces it outright. Queueing
+    // would spend 420ms pushing off a record that is already two behind.
+    const running = btn.querySelector('.lp-shove');
+    if (running) running.remove();
+    const disc = btn.querySelector('.lp-disc');
+    const car = document.createElement('span'); car.className = 'lp-shove';
+    car.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 2; i++) {
+      const d = car.appendChild(document.createElement('span')); d.className = 'lp-disc';
+      const lab = d.appendChild(document.createElement('span')); lab.className = 'lp-label';
+      const s = lab.appendChild(document.createElement('span')); s.className = 'lp-sym';
+      s.textContent = sym.textContent;
+      lab.appendChild(document.createElement('span')).className = 'lp-hole';
+    }
+    btn.insertBefore(car, btn.querySelector('.lp-glint'));
+    btn.classList.add('shoving');
+    // Both copies are put at the angle the record is at instead of starting
+    // upright, so the outgoing one takes over where the record was and the real
+    // one comes back where the incoming one got to. Each of these elements
+    // carries exactly one animation and it is spin.
+    const phase = disc.getAnimations()[0].currentTime;
+    for (const d of car.querySelectorAll('.lp-disc')) d.getAnimations()[0].currentTime = phase;
+    car.addEventListener('animationend', () => {
+      car.remove();
+      btn.classList.remove('shoving');
+    }, { once: true });
+  }
+
+  function showLikes(j) {
+    // Before the early return below, because the two are about different
+    // things: that one is "is a track on", and a host can be live over a
+    // station playing nothing at all - which is exactly what the music being
+    // paused for a bucket set looks like from here.
+    showShow(j && j.show);
+    showHold(j);
+    likeId = (j && j.id) || '';
+    showRecord(likeId);
+    if (!likeId) { $('likerow').hidden = true; $('tugrow').hidden = true; return; }
+    const mine = liked.includes(likeId);
+    $('likeCount').textContent = j.likes;
+    $('likeHeart').textContent = mine ? '\u2665' : '\u2661';
+    $('likeBtn').disabled = mine;
+    $('likerow').hidden = false;
+    // Same response, same track: the position rides along with the likes
+    // because this is the one endpoint a page with no password may ask.
+    if (typeof j.elapsed === 'number') {
+      trackElapsed = j.elapsed;
+      trackTotal = typeof j.duration === 'number' ? j.duration : 0;
+      trackAt = Date.now();
+    }
+    showTug(j);
+    if (j && j.show && j.show.live && j.paused) {
+      $('likerow').hidden = true;
+      $('tugrow').hidden = true;
+      $('findrow').hidden = true;
+    }
+  }
+
+  async function pollLikes() {
+    try { showLikes(await (await fetch('/likes/now', { cache: 'no-store' })).json()); }
+    catch {
+      $('likerow').hidden = true;
+      $('tugrow').hidden = true;
+      // The same rule as the clock below: a show this page was told about
+      // before the station stopped answering is not a show it may keep
+      // drawing.
+      showShow(null);
+      showHold(null);
+      // Stop rather than keep counting from the last thing it was told. A
+      // position that goes on climbing after the station stopped answering is
+      // a number this page has no right to.
+      trackAt = null;
+    }
+  }
+
+  $('likeBtn').addEventListener('click', async () => {
+    if (!likeId || liked.includes(likeId)) return;
+    liked.push(likeId);
+    liked = liked.slice(-50);
+    try { localStorage.setItem(LIKED_KEY, JSON.stringify(liked)); } catch {}
+    try { showLikes(await (await fetch('/likes/add', { method: 'POST' })).json()); }
+    catch { pollLikes(); }
+  });
+
+  // --- the skip tug of war -----------------------------------------------
+  // Same standard as the likes above: no login, no account, no identity. One
+  // counter per track, from 0 to 12, shared by everybody listening - the skip
+  // glyph adds one, the anchor takes one away, and at 12 the station skips.
+  //
+  // There is no per-browser budget here and that is not an oversight. A
+  // listener who is alone can click twelve times and skip the song; that has to
+  // be possible, or "somebody who does not want the skip has to keep the
+  // counter down" is about nothing. Keeping a song is not a veto, it is effort,
+  // and the effort is the feature: you cannot object once and be done, so a
+  // brief loud opinion does not win and nobody holds the track.
+  //
+  // Nothing is stored. There is no localStorage key, because there is nothing
+  // per-browser worth remembering - the counter belongs to the room, not to
+  // this browser, and it arrives fresh in every response.
+  //
+  // GAP is the one piece of per-browser bookkeeping, and it is metering rather
+  // than a budget: it bounds how fast this page can click, never how many times
+  // it may. Without it a held Enter key, whose auto-repeat runs at about thirty
+  // a second, walks the counter to twelve from one press nobody meant as twelve.
+  //
+  // 400 WAS WRONG AND WAS WRONG IN THE DIRECTION THAT HURTS. It is slower than
+  // anybody taps a button they want something to happen on - deliberate tapping
+  // sits near 300ms - so roughly every second click was swallowed here and
+  // never sent. Reported as "it is taking me two clicks to do one click", which
+  // is precisely what a 400ms floor does to a 300ms hand. The old comment
+  // claimed twelve clicks took under five seconds; that was arithmetic at
+  // exactly 400ms apart, and no hand is a metronome.
+  //
+  // 120 bounds this page to about eight clicks a second: still far under a key
+  // repeat, and now comfortably above a hand. The cost of getting it wrong this
+  // way is one dropped click out of an accident; the cost of the other way was
+  // half of every honest click.
+  //
+  // No poller of its own. The counter arrives on /likes/now, which pollLikes
+  // already asks for and which only runs while sound is coming out. A second
+  // timer here would be the exact bug that block was written to fix.
+  const GAP = 120;
+  let rope = 0, pullNow = 0, lastPull = 0, coolUntil = 0;
+
+  // One pip per click, and the same count in digits beside them. The page is
+  // told how many there are rather than knowing, so twelve lives in exactly one
+  // place and that place is the station - which is also why the reading is
+  // built out of j.rope and why "/12" is written nowhere in this file.
+  function showTug(j) {
+    if (typeof j.pull !== 'number' || typeof j.rope !== 'number' || j.rope <= 0) {
+      $('tugrow').hidden = true; return;
+    }
+    const el = $('rope');
+    if (rope !== j.rope) {
+      rope = j.rope;
+      el.textContent = '';
+      for (let i = 0; i < rope; i++) el.appendChild(document.createElement('i')).className = 'pip';
+    }
+    pullNow = j.pull;
+    // The cool-off after a track change, during which the station refuses every
+    // click, because the audio a listener is hearing is several seconds behind
+    // what this page has already been told is playing - so a click now is a
+    // vote on a song they have not reached yet.
+    //
+    // A deadline of our own, in two parts. The station hands over the LENGTH of
+    // the window and its own position in the track, so what is left is the one
+    // minus the other, worked out from the same two numbers the station uses.
+    //
+    // And then the part that is not arithmetic: the answer to the click that
+    // takes the counter to the top is the answer to a skip that has just been
+    // ordered but has not landed yet, so it still reports the OLD track's
+    // position and truthfully says the window has not started. Believing it
+    // leaves the buttons live until the next poll - measured at 3672 ms of a
+    // 5000 ms window spent looking live while every click was refused. Nothing
+    // but a click can take the counter to the top, so seeing it there IS proof
+    // that a change has this moment happened, and the window is armed whole
+    // from here rather than waiting to be told about it.
+    const cool = typeof j.cool === 'number' ? j.cool : 0;
+    const into = typeof j.elapsed === 'number' ? j.elapsed : 0;
+    const left = pullNow >= rope ? cool
+               : (into >= 0 && into < cool) ? cool - into
+               : 0;
+    coolUntil = Date.now() + left * 1000;
+    [...el.children].forEach((p, i) => p.classList.toggle('on', i < pullNow));
+    // The digits, off the same two variables as the line above and in the same
+    // breath as it, so no redraw can leave the reading and the picture holding
+    // different numbers. drawTug does not touch this and nothing else writes
+    // it: the only other thing that happens to the figure is the fade, and the
+    // fade is CSS hanging off the class drawTug already puts on the rope.
+    $('tugNum').textContent = pullNow + '/' + rope;
+    drawTug();
+    $('tugrow').hidden = false;
+  }
+
+  // Split out of showTug because the cool-off ends between polls. tick() calls
+  // this every second - the timer that already runs, and only while sound is
+  // coming out - so the buttons come back when the wait is actually over
+  // instead of at the next poll. Nothing new is on a timer.
+  function drawTug() {
+    const cool = Date.now() < coolUntil;
+    $('rope').classList.toggle('cool', cool);
+    $('tugSkip').disabled = cool;
+    // Nought is the floor and nothing else - no saved state, no veto, just a
+    // click with nowhere to go. Saying so with the button is kinder than taking
+    // the click and doing nothing with it.
+    $('tugKeep').disabled = cool || pullNow === 0;
+  }
+
+  // The answer is the whole public state, so one response redraws the counter,
+  // the heart and the clock together and none of them can be caught disagreeing
+  // with the others.
+  //
+  // The cool-off is checked here as well as drawn, because a click can arrive
+  // between the button disabling and the eye noticing - and because the station
+  // refuses it anyway. This only saves the round trip; it is not the rule.
+  async function tugPull(path) {
+    const now = Date.now();
+    if (!likeId || now < coolUntil || now - lastPull < GAP) return;
+    lastPull = now;
+    try { showLikes(await (await fetch(path, { method: 'POST' })).json()); }
+    catch { pollLikes(); }
+  }
+
+  $('tugSkip').addEventListener('click', () => tugPull('/tug/skip'));
+  $('tugKeep').addEventListener('click', () => tugPull('/tug/keep'));
+
+  // Everything on a timer, in one place, because "is sound coming out" is now
+  // the only question that decides whether this page talks to the station at
+  // all. Measured before this existed: one open tab made 691 requests in ten
+  // minutes - 69 a minute, forever, whether or not anybody was listening. A tab
+  // left open overnight was a tab downloading the guestbook two thousand times.
+  //
+  // The audio element is the switch rather than the button, so a pause from the
+  // keyboard, the lock screen, a headset button or the stream dropping all stop
+  // it too - the button is one way in and it was never the only one.
+  const PULSE = [
+    [poll,          8000],
+    [loadMessages, 30000],
+    [pollChat,      4000],
+    [pollNarrator,  4000],
+    [pollLikes,     5000],
+    [tick,          1000],
+  ];
+  let timers = [];
+
+  function wake() {
+    if (timers.length) return;
+    quiet = false;
+    for (const [fn] of PULSE) fn();   // catch up now, do not wait out a cycle
+    timers = PULSE.map(([fn, ms]) => setInterval(fn, ms));
+  }
+
+  function sleep() {
+    if (!timers.length) return;
+    timers.forEach(clearInterval);
+    timers = [];
+    // The clock stops rather than counting on from the last reading it was
+    // given. A position that keeps climbing while nothing is being fetched is
+    // a number this page has no right to - the same rule pollLikes already
+    // follows when the station stops answering.
+    trackAt = null;
+    // And the record forgets what it was last showing, for the same reason.
+    shownId = '';
+    quiet = true;
+    tick();
+  }
+
+  audio.addEventListener('playing', wake);
+  audio.addEventListener('pause',   sleep);
+  audio.addEventListener('ended',   sleep);
+  audio.addEventListener('error',   () => { if (audio.paused) sleep(); });
+
+  // One round at load and then silence until someone presses play. Without it
+  // the page would open blank - no track, no guestbook, no chat - and asking a
+  // visitor to press play to find out what is playing is the wrong way round.
+  // One round is not traffic; sixty-nine a minute was.
+  poll(); loadMessages(); pollChat(); pollNarrator(); pollLikes();
+  quiet = true;
+  tick();
 })();
 </script>
 </body>

@@ -1191,20 +1191,18 @@ tug_span = 12
 # skip that the counter said had happened.
 tug_cool = 5.0 + air_delay()
 
-# The silence between one record and the next when the room votes one off.
+# There is deliberately NO gap here, and there was one for about an hour.
 #
-# A jukebox does not cut. It stops, moves, and starts, and the moving is the
-# part you hear as a decision rather than as a glitch - which is the whole
-# difference between a track ending and a track being taken off. The operator
-# asked for it in that order: "first pause the music, then change record".
+# A jukebox pause before the change was tried - stop, move, start - on the
+# theory that the moving is what makes a change read as a decision rather than
+# a glitch. On the air it is a fake: the station is not moving anything, and
+# 0.8s of manufactured silence is 0.8s less music. The operator's verdict was
+# "no pause, no fake 0.8s".
 #
-# Only the tug does this. The host's own Skip is a hand on the deck and cuts
-# as it always has; this is the room voting, and the room is told.
-#
-# 0.8s. Long enough to read as a gap rather than a dropout, short enough that
-# nobody reaches for the tuning dial. It is added to what a skip already costs
-# a listener, which is icecast's burst plus air_delay.
-tug_gap = 0.8
+# What sells the change belongs on the LISTENER PAGE, where a record can
+# visibly be swapped while the next one buffers and it costs nobody any audio.
+# Here the only correct behaviour is to leave the old track as fast as the
+# encoder allows, which was measured at 20ms from the twelfth click.
 
 # The counter, and the song it belongs to. `tug_track` is held as the path,
 # which is what /likes/now already keys on - it hands the page a digest of this
@@ -1314,32 +1312,7 @@ def tug(dir) =
           "⏭️ twelve pulls - #{np.title} by #{np.artist} is out 🎶"
         end
       chat_say("the rope 🪢", msg)
-      # Pause, change the record, play - in that order.
-      #
-      # Only when the station is actually playing. A host who has already
-      # paused it is mid-bucket-set: the gap would be inaudible under their
-      # show, and unpausing afterwards would start the station's own music
-      # underneath them, which is the one thing this must never do.
-      #
-      # on_error puts the music back. Everything after `paused := true` runs
-      # in another thread, and a throw in there with no handler would leave
-      # this station silent until somebody noticed - which, for a paused
-      # station streaming silence at full bitrate, could be a long time.
-      if paused() then
-        library.skip()
-      else
-        paused := true
-        thread.run(
-          delay = tug_gap,
-          on_error = fun (_) -> begin
-            log.important(label = "tug", "the gap failed - putting the music back")
-            paused := false
-          end,
-          fun () -> begin
-            library.skip()
-            paused := false
-          end)
-      end
+      library.skip()
     end
   end
 end
