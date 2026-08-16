@@ -53,10 +53,13 @@
        the symbol somebody presses and the hole it is printed around. A control is
        the size a control is, on a small pressing or a large one, so both hold the
        exact measurements they were cut to at eighty-four - 20.41px of symbol and
-       4.61px of hole - and the red grows around them instead of with them. Every
-       clearance the round below them was spent on survives untouched: 2.39px of
-       white inside the triangle, 1.51px of red between the hole and each pause
-       bar. Scale them with the disc and the bars grow by a third too, and the
+       4.61px of hole - and the red grows around them instead of with them. The
+       clearances round that hole are the reason both numbers are frozen, and they
+       are now 2.05 to 2.51px of white inside the triangle and 2.45px of red
+       between the hole and each pause bar, measured off the rendered button and
+       not derived. The white is a range and the red is not, which is a fact about
+       the raster rather than about the drawing; the symbol explains it.
+       Scale them with the disc and the bars grow by a third too, and the
        label ends up exactly as full as it started, which is what was asked to
        change. */
     --lp: 112px;
@@ -263,7 +266,10 @@
      What the ring cost buys back is worth stating beside it, because it is the
      reason the trade was taken. The pause bars went from two thirds of a pixel
      clear of the spindle hole to a pixel and a half, and the play triangle from
-     1.80px of white around it to 2.39px. Measured off the rendered button over the
+     1.80px of white around it to 2.39px. Both of those numbers have since moved
+     and the second of them was never rendered by anything: the clearances the
+     button actually draws are 2.45px of red and 2.05 to 2.51px of white, and
+     where they come from is set out down at the symbol. Measured off the rendered button over the
      band each field actually occupies, the sixteen come out at 16.8 levels of
      contrast against the seventeen's 18.1, with the angular scatter that tells a
      ring field from a hash unchanged at 6.1 against 6.0 and the median pitch
@@ -448,6 +454,16 @@
      to it and nearer than any rounder number does. The paper can only grow into the
      grooves, and one ring is what it took.
 
+     That is the arithmetic of an eighty-four pixel pressing and it no longer runs.
+     Once the disc went to a hundred and twelve and the control stayed where it was,
+     the paper stopped being cut to the symbol's reach: it is 23.52px of radius
+     against a corner that has since gone out to 13.31px, so the forty-two per cent
+     below is a fraction of the disc and not a fit to the ink any more. The three
+     places that forty-two appears still have to move together - they are about
+     where the paper's edge is, and the run-out and the glint have to meet it - but
+     the symbol no longer has a vote in what it is. The bars were free to move out
+     this round for exactly that reason.
+
      One row rather than three, and the spindle hole is still the reason there is a
      grid here at all rather than a stacked column. Both children are placed in the
      same single cell and centred in it, so each is centred on the label and
@@ -476,12 +492,13 @@
      sitting in the triangle at all; it was crossing its edge, and a bite is exactly
      what that draws. A right pointing triangle's visual centre is not the middle of
      its box but its centroid, a third of the way from base to apex, and about the
-     centroid the inradius on the triangle drawn here is 4.70px. The second is that
-     the hole was wider than it had to be. At 4.61px across it leaves 2.39px of white
-     all the way round at the tightest point, and at true size that reads as a
-     spindle hole showing through printed label art, which is what it is. That white
-     was 1.80px before this round and the triangle has grown while the hole has not,
-     which is the whole of the difference. A hole of 5.21px was rendered against the
+     centroid the clearance on the triangle drawn here measures 4.36 to 4.81px. The
+     second is that the hole was wider than it had to be. At 4.61px across it leaves
+     between 2.05 and 2.51px of white all the way round at the tightest point, and
+     at true size that reads as a spindle hole showing through printed label art,
+     which is what it is. That white was 1.80px two rounds ago and the triangle has
+     grown twice while the hole has not, which is the whole of the difference. A
+     hole of 5.21px was rendered against the
      smaller triangle and thinned the white to about a pixel, which was enough to
      make it look eaten; the same hole against this one would leave over two, so
      what that test established was a ratio between hole and triangle and not a
@@ -490,15 +507,45 @@
      The pause state asks for none of that argument, because a spindle hole falling
      in the gap between two upright bars is where a spindle shows on any real label.
      It does ask for the bars to be set a good deal further apart than the font sets
-     them, and it asks for more of that now than it did: at the size they are drawn
-     the gap is 4.25px and the hole is 4.61px, so left alone the hole would still
-     rest on both bars at once rather than between them. The letter-spacing below
-     opens the gap to 7.63px, which leaves 1.51px of red between the hole and each
-     bar where it used to leave 0.63px. Opening the gap is not free either, because
-     it carries the bars outward and the paper has to follow them, and it is the
-     larger half of why the label grew: of the 1.79px the corner moved out by, a
-     little under nine tenths of a pixel is the wider gap and the rest is the larger
-     bars.
+     them: at the size they are drawn the font's own gap is 4.06px and the hole is
+     4.61px, so left alone the hole would rest on both bars at once rather than
+     between them.
+
+     A gap of 7.50px was where that landed for two rounds, and it was not enough.
+     It left 1.51px of red on either side - the same at every layout phase, which is
+     the one mercy of a measurement that comes out of letter-spacing rather than out
+     of where the button lands - and at true size a pixel and a half of
+     red between a dark hole and a white bar does not read as three things with two
+     gaps; it reads as one accidental stripe across the middle of the label, which
+     is exactly what an owner of this page said when he first looked at it. The
+     letter-spacing below opens the gap to 9.50px instead, leaving 2.45px of red
+     each side, and the two ways of getting there are worth setting down because
+     only one of them was taken.
+
+     The other was to let the hole BITE the bars - to pull them in until the hole
+     crosses the ink and reads as punched through it rather than fitted between it,
+     which is a real thing a spindle does to label art. It was rejected on three
+     counts. It is not available at a usable depth: reaching the ink at all means a
+     gap under the hole's own 4.61px, which is below the 4.06px the font already
+     sets, and the deepest bite that leaves a recognisable pause glyph takes about
+     half a pixel out of a six pixel bar - a nick, which reads as a rendering fault
+     and not as a punch. This file has already lost that argument once in the other
+     state, twenty lines up: a hole punched through a triangle read as a triangle
+     with a bite out of it. And it would make the two states disagree about what the
+     hole is, floating clear in one and cutting in the other, when it is one hole
+     that never moves and the symbol is what changes around it.
+
+     Red between is also what a record looks like. Label art is laid out AROUND the
+     spindle, because the hole is punched before the sleeve ever sees it; ink that
+     ran into the hole would be ink the press was going to destroy. Two bars either
+     side of a bare spindle is a real label. A bar with a bite in it is a misprint.
+
+     What the wider gap costs is nothing this time. It carries the bars outward, and
+     at eighty-four pixels the paper had to follow them and the grooves paid for the
+     paper - which is why the gap stopped at 7.50px in the first place. At a hundred
+     and twelve the paper is already 23.52px and the ink's furthest corner only
+     13.31px, so the bars move out into red the record already had. Ten pixels of it
+     are still there afterwards.
 
      The hairline round the paper is --lp divided by EIGHTY-FOUR, which is the
      diameter it was cut at and not the diameter it is drawn at now: one pixel on
@@ -525,8 +572,25 @@
      allowed to touch: the whole of the change is the symbol growing around a hole
      that stayed where it was and stayed the size it was, and a hole that grew with
      the symbol would have bought no clearance at all. What that fixed width now
-     leaves is 2.39px of white all round it inside the triangle and 1.51px of red on
-     either side of it between the bars.
+     leaves is 2.05 to 2.51px of white all round it inside the triangle and 2.45px
+     of red on either side of it between the bars - near enough the same margin
+     whichever symbol is printed round it, where before this round the pause got
+     barely half what the play did.
+
+     Those two margins do not have to be equal to read as equal, and in neither
+     theme do they. Measured off the rendered button, in the dark theme the hole's
+     edge against the triangle is a step of 227 levels of luminance and its edge
+     against the paper is a step of 63 - the red gap carries 28 per cent of the
+     contrast the white one does, and a low-contrast gap of the same width reads as
+     the narrower gap. That is the argument for red being the margin worth spending
+     on, and it is the one the pause state got.
+
+     The light theme inverts it exactly, and measures 9 levels against the ink and
+     173 against the paper: there the red gap is the strong one and it is the white
+     one that has no contrast left to give, which is what the cut edge two
+     paragraphs down exists to answer. So no one margin can be the one to widen,
+     and the answer is to give both states enough of their own rather than to tune
+     either to a ratio.
 
      It is written last inside the label and given a position of its own so that it
      paints over the symbol, because a spindle hole is punched through whatever is
@@ -564,6 +628,15 @@
      landed when the symbol first moved onto the hole and nobody had yet looked at
      how little red was left; sixteen is where it lands now that somebody has.
 
+     The paper's half of that argument is over. It was true at eighty-four pixels,
+     where the label was cut to the symbol's own reach plus two pixels of red and
+     the grooves paid for every pixel the symbol grew by. At a hundred and twelve
+     the paper grew and the control did not, so the ink's furthest corner is 13.31px
+     out on a paper of 23.52px and there are ten pixels of red beyond it. Nothing
+     the symbol does below is paid for by a groove any more, and the ring count is
+     untouched by this round. What still binds is the hole, which has not moved and
+     is not allowed to.
+
      It takes two font sizes to get one symbol size: U+25B6 inks 0.783 of its em
      and the pair of U+275A bars inks 0.700 of theirs, so set at a single size the
      bars come out a pixel and a half shorter than the triangle and the pause reads
@@ -573,37 +646,93 @@
      fixed pixels so that the symbol still travels if the record is ever resized,
      even though here it was the symbol that decided the record's size.
 
+     The height is the axis the two symbols share, and the scaleX below is written
+     the way it is so that they go on sharing it. Equal height had been taken for
+     equal size, and on the raster it was not: the triangle inked 14.25px wide at
+     15.94px tall, near enough square to read as square, where the pair of bars it
+     turns into inked 19.50px at the same height and now inks 21.38px. One portrait
+     and one landscape, so pressing the control swapped between two different
+     footprints with nothing in the resting shape to say which way it would go.
+     Stretching the triangle to 18.00px wide, nine eighths of its own height, is
+     what puts that warning in - not all the way to the bars' own width, which
+     blunts the apex and stops it reading as a triangle at all, but far enough that
+     the eye reads it as the same landscape shape. It is a stretch and not a larger font
+     size on purpose: a larger font size would have taken the height with it and
+     made the pause the smaller of the two controls again, which is the thing the
+     paragraph above buys with two font sizes and is not for sale. What the triangle
+     gains is 26 per cent of width and 26 per cent of ink, and the eye gets a shape
+     that already sits across the ground the bars will stand on.
+
+     Stretching it also pays the hole, which is the one thing about this that is
+     not obvious. A right pointing triangle's clearance about its centroid is set by
+     its two slanted edges, and stretching it horizontally lays those edges flatter
+     without moving the centroid off the hole - so the white round the hole goes UP
+     as the triangle widens rather than being spent. Rendered at every sixteenth of
+     a pixel of layout phase, it gains 0.165px at every one of them: 1.90 to 2.33px
+     of white before the stretch and 2.05 to 2.51px after it. The base edge is not
+     close to binding either way; it stands 6.06px off the hole where the slants
+     stand 4.81px at their best and 4.36px at their worst.
+
      The transforms are what put the hole inside the symbol rather than merely near
-     it, and they differ between the states because the two shapes do. A pair of
-     upright bars is symmetric about both of its axes, so centring the box centres
-     the ink, and the only correction wanted is half of the letter-spacing that opens
+     it, and they differ between the states because the two shapes do. Horizontally,
+     a pair of upright bars is symmetric about that axis, so centring the box centres
+     the ink and the only correction wanted is half of the letter-spacing that opens
      the gap: that space is added after the second bar as well as between the two,
      and without the correction it would carry the pair that far to the left of the
-     hole. A right pointing triangle is symmetric about one axis only, and its visual
-     centre along the other is its centroid rather than the middle of its box, which
-     at this size is 2.47px further right; the line box adds 0.18px of its own
-     downward, because a glyph does not sit centred in the em it is set in. Both are
-     written in em rather than as fractions of --lp, because they are corrections to
-     a glyph and should follow the size that glyph is set at, and both were read off
-     a button rendered at eight times scale rather than taken from the font's
-     published metrics, because what is being lined up is where the pixels land.
+     hole. A right pointing triangle is not symmetric about that axis, and its visual
+     centre along it is its centroid rather than the middle of its box, a third of
+     the way from base to apex and so further right. Both are written in em rather
+     than as fractions of --lp, because they are corrections to a glyph and should
+     follow the size that glyph is set at, and both are read off a button rendered
+     at sixteen times scale rather than taken from the font's published metrics,
+     because what is being lined up is where the pixels land.
 
-     The horizontal one did follow the size and the vertical one did not, and that
-     is worth writing down because it is the trap this round nearly fell into. The
-     centroid is a property of the shape, so .1211em is still the right number and
-     the ink still comes out with the hole a sixteenth of a pixel off its centroid.
-     Where the glyph sits inside its line box is a property of the rasteriser, and
-     it does not scale: the 1.25px that centred the ink at 17.892px left it 1.25px
-     low at 20.412px, and the correction had to be re-read rather than rescaled. A
-     sweep of sixteen sizes between the two showed the ink's centre wandering by as
-     much as a pixel and jumping by nearly a whole one between neighbouring sizes,
-     with no trend to fit, so .0087em is a measurement of this size and of no other.
-     If --lp is ever changed, this is the number to re-read first; it is also the
-     reason the ink is measured off the raster in both states every round rather
-     than being taken on trust from the font size. */
-  .lp-sym { grid-area: 1 / 1; font-size: var(--ctl); transform: translate(.1211em, .0087em); }
+     The horizontal one does not simply follow the stretch. Scaling about the box
+     centre multiplies the centroid's offset from it, so .1211em ought to become
+     .1211 x 1.2632 = .1530em; at .1530em the ink comes out an eighth of a pixel to
+     the left and at .1570em it measures right. That eighth of a pixel is glyph
+     positions landing on the raster, and it is why these are measurements of this
+     size and of no other. If --lp or --ctl is ever changed they are the first
+     things to re-read, off the rendered button in both states, never taken from
+     the font's metrics or from the shape's own geometry.
+
+     The vertical one is a different animal and this round found out why. It is NOT
+     a constant of the design and cannot be made one. Text ink snaps to whole device
+     pixels; the spindle hole is a painted box and does not. So the distance between
+     them is decided by where the button happens to land on the page, and the button
+     lands wherever the lines above it leave it - a track title that wraps moves it.
+     Swept through a whole pixel of that layout phase, the ink sits at one of three
+     places against the hole, half a pixel apart, and .0087em only chooses WHICH
+     three. It cannot close the gap, because moving the glyph by a fraction of a
+     pixel just re-labels which phases land where: measured at every sixteenth of a
+     pixel of phase, the white inside the triangle averages 2.27px whatever this
+     number is, and the whole of the effect is on the spread. .0087em keeps that
+     spread at 2.05 to 2.51px. Values that centre the ink at the commonest phase
+     were rendered and rejected for making the worst phase worse - .0300em looks
+     perfect on the page as it usually loads and drops to 1.65px when a title wraps.
+     The best any value can do for the worst case is 2.09px, so .0087em is within a
+     thirtieth of a pixel of the best there is and stays.
+
+     Two things follow that should not be quietly forgotten. The first is that
+     2.39px of white was never rendered by anything; it was derived from an ideal
+     triangle's inradius rather than measured, which is the one thing every other
+     number in this file is not, and the button was drawing between 1.90 and 2.33px.
+     The second is that the two symbols snap independently - they are set at
+     different sizes, so their line boxes round to different pixels - and at three
+     phases in seventeen the ink JUMPS a whole pixel vertically as the state flips.
+     That is not caused by anything here and is not fixed by anything here; it was
+     already happening, it costs nothing measurable in clearance, and closing it
+     would mean giving both symbols one font size and equalising their ink height
+     some other way. Written down because it is invisible until it is looked for.
+
+     The red between the hole and the bars has none of this trouble. It comes from
+     letter-spacing, which is horizontal, and horizontal glyph placement is not
+     snapped: 2.445px at every one of the seventeen phases, to the thousandth. */
+  .lp-sym { grid-area: 1 / 1; font-size: var(--ctl);
+            transform: translate(.1570em, .0087em) scaleX(1.2632); }
   button.play.spinning .lp-sym { font-size: calc(var(--ctl) * 1.1152);
-                                 letter-spacing: .1513em; transform: translate(.07565em, 0); }
+                                 letter-spacing: .2348em;
+                                 transform: translate(.1174em, 0); }
   /* The record is the whole face of the button turning with a symbol printed on
      it, which is a great deal of motion, so under reduced-motion it stops
      outright. It is named here rather than being left to
