@@ -3402,6 +3402,26 @@
     parked = false;
     // Cleared after parkish has been taken off it, not before.
     changeMode = '';
+    // THE SYMBOL COMES BACK WITH THE RECORD, and it is the bars, because a record
+    // on this deck carries the bars whatever the button is doing - the rule the
+    // carriage copies have followed since they were written, now applied to the
+    // disc a copy hands over to.
+    //
+    // `off` is the press saying connecting, and it used to be invisible: while a
+    // record travels the thing on screen is the copy, which carries the bars on
+    // its own account, and the real disc under it is hidden. SEAT_LEAD opened a
+    // window that had never existed - the record is down, the real disc is on
+    // screen, and the button is still `loading` because the sound has not started
+    // yet - and in it the label was red with a spindle and nothing printed on it.
+    //
+    // `bars` and not merely the removal of `off`, because setBtn('loading') also
+    // clears `bars`, so uncovering the symbol without setting it would put the
+    // TRIANGLE on a record that is on the pin and about to play.
+    //
+    // A no-op for every landing but an arrival's. A change and a tug land while
+    // the button is already in its pause state, and the two lines write what is
+    // already there.
+    if (landed) { sym.classList.remove('off'); sym.classList.add('bars'); }
     if (landed && changeArriving) btn.classList.remove('empty');
     changeArriving = false;
     changeUntil = 0;
