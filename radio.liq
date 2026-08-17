@@ -1616,10 +1616,25 @@ end
 def show_settle(offer) =
   if connected() and show_posts() == "" then
     show_id := "#{show_slug(offer, show_name())}/#{show_began()}"
+    dir = "#{radio_home}/posts/#{show_id()}"
     try
-      file.mkdir(parents = true, "#{radio_home}/posts/#{show_id()}")
+      file.mkdir(parents = true, dir)
     catch _ do
-      log.important(label = "posts", "could not make #{show_id()}")
+      ()
+    end
+    # ASKED, NOT ASSUMED. The first version of this trusted the catch, and when
+    # the station turned out to have no write access to posts/ the catch never
+    # fired: there was no log line anywhere, the folder was simply absent, and
+    # the only symptom was a bare "HTTP 409" on the console an hour later.
+    # Whatever file.mkdir does on a permission error is not what `try` was
+    # waiting for, so this asks the filesystem the question it actually cares
+    # about - is the directory there - which no unforeseen error type can
+    # answer wrongly.
+    if not file.exists(dir) then
+      log.important(label = "posts",
+        "CANNOT MAKE #{dir} - posts/ must be writable by the account this "
+        ^ "service runs as, the way live/ already is. Every post will answer 409 "
+        ^ "until it is.")
     end
   end
 end

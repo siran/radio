@@ -2846,13 +2846,28 @@
     return q ? JF + encodeURIComponent(q) : '';
   }
 
-  function updateFind(title) {
+  // ONE OWNER FOR THIS ROW, and it used to have two. updateFind showed it
+  // whenever a title arrived, off the status poll every eight seconds;
+  // showLikes hid it while the station was paused under a live show, off the
+  // likes poll every five. Neither was wrong alone. Together they were a row
+  // that appeared and disappeared for the whole of a bucket set, at the beat of
+  // whichever poller had spoken last.
+  //
+  // So visibility is one answer given in one place, fed by two facts that are
+  // written from the two places that know them: WHAT is playing, and whether
+  // anybody can hear it. Neither writer touches the element.
+  let findTitle = '', findHush = false;
+  function drawFind() {
     const row = document.getElementById('findrow');
     const a = document.getElementById('findLink');
     if (!row || !a) return;
-    const url = songLink(title);
+    // Hushed beats titled. A track the station is naming while its music is
+    // paused under a live show is not a track anybody in the room is hearing,
+    // and a link to find it is an invitation to go looking for the wrong song.
+    const url = findHush ? '' : songLink(findTitle);
     if (url) { a.href = url; row.hidden = false; } else { row.hidden = true; }
   }
+  function updateFind(title) { findTitle = title; drawFind(); }
 
   const copyBtn = document.getElementById('copySong');
   if (copyBtn) copyBtn.addEventListener('click', async () => {
@@ -4257,11 +4272,18 @@
     // in, so nothing here has to check for either.
     aimNatural(j);
     showTug(j);
-    if (j && j.show && j.show.live && j.paused) {
+    // The other two rows are hidden HERE and shown here, so one pass of this
+    // function is the whole of their answer and they cannot be caught
+    // disagreeing with themselves. The find row is the one that had a second
+    // writer on another timer, so it is told a fact rather than hidden: see
+    // drawFind, which is now the only thing that touches it.
+    const hush = !!(j && j.show && j.show.live && j.paused);
+    if (hush) {
       $('likerow').hidden = true;
       $('tugrow').hidden = true;
-      $('findrow').hidden = true;
     }
+    findHush = hush;
+    drawFind();
   }
 
   async function pollLikes() {
