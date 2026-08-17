@@ -3898,11 +3898,40 @@
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include'
     });
+    // WHICH SURFACE CAME BACK, read off the video track before that track is
+    // stopped. It is the only reliable answer: audio tracks do not all report
+    // displaySurface, and the video one always does.
+    const vid = st.getVideoTracks()[0];
+    const surface = (vid && vid.getSettings) ? (vid.getSettings().displaySurface || '') : '';
     // The video track is stopped immediately. It is asked for because the API
     // demands it, it is never read, and leaving it running would keep the
     // browser announcing that this page is watching a tab when it is only
     // listening to one.
     st.getVideoTracks().forEach(t => t.stop());
+    // AND ANYTHING THAT IS NOT A TAB IS REFUSED HERE, because the dialog cannot
+    // be trusted to have removed it. monitorTypeSurfaces did its job - Entire
+    // Screen is gone - but systemAudio is not honoured on every pane: Brave's
+    // WINDOW pane still offers "Also share system audio. This device will be
+    // muted to prevent feedback", which is the whole machine going on the air and
+    // the host's own speakers going dead to stop it howling. That is the fault
+    // this was all meant to remove, reachable through a second door.
+    //
+    // There is no windowTypeSurfaces to shut that door with, and displaySurface
+    // is advisory - Chromium picks the opening pane with it and does not filter
+    // on it. So the refusal lives where it cannot be ignored: after the share
+    // comes back, before anything is connected to anything.
+    //
+    // Nothing is lost by refusing. A window carries no audio of its own on any
+    // browser, so the only sound a window share can offer IS the system mix - the
+    // one thing this must not broadcast.
+    if (surface && surface !== 'browser') {
+      st.getTracks().forEach(t => t.stop());
+      throw new Error(
+        'That is a ' + (surface === 'monitor' ? 'screen' : 'window') +
+        ' share, and its only sound is your whole machine - which would put every' +
+        ' beep and notification on the air and mute your own speakers. Pick a tab' +
+        ' from the first pane of the dialog instead.');
+    }
     if (!st.getAudioTracks().length) {
       st.getTracks().forEach(t => t.stop());
       throw new Error(
