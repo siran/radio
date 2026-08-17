@@ -1601,6 +1601,27 @@ def show_slug(offer, name) =
   end
 end
 
+# A directory and then its parent, each only if it is EMPTY, and that check is
+# not tidiness - file.rmdir removes a directory AND ITS CONTENT, so emptiness
+# is the entire safety of calling it. Nothing that holds anything is removed,
+# at either level, ever.
+#
+# Both levels because the show folder above the stamp is left behind too: an
+# "untitled" holding nothing is the same litter one directory up.
+def show_sweep(dir) =
+  try
+    if file.exists(dir) and list.length(file.ls(dir)) == 0 then
+      file.rmdir(dir)
+      parent = path.dirname(dir)
+      if file.exists(parent) and list.length(file.ls(parent)) == 0 then
+        file.rmdir(parent)
+      end
+    end
+  catch _ do
+    ()
+  end
+end
+
 # Settled at connect and re-settled on every show_set FOR AS LONG AS THE FOLDER
 # IS EMPTY. A host presses Go on air and names the show afterwards, so the
 # first answer is usually "untitled" and the second one is right; once a post
@@ -1615,6 +1636,11 @@ end
 # a host can act on it.
 def show_settle(offer) =
   if connected() and show_posts() == "" then
+    # What it was, if it was anything. A show settles at connect under whatever
+    # name exists - usually none - and again when the host types one, and the
+    # first folder has to go or every broadcast leaves an empty "untitled"
+    # behind it in an archive somebody is going to browse.
+    was = show_id()
     show_id := "#{show_slug(offer, show_name())}/#{show_began()}"
     dir = "#{radio_home}/posts/#{show_id()}"
     try
@@ -1635,6 +1661,9 @@ def show_settle(offer) =
         "CANNOT MAKE #{dir} - posts/ must be writable by the account this "
         ^ "service runs as, the way live/ already is. Every post will answer 409 "
         ^ "until it is.")
+    end
+    if was != "" and was != show_id() then
+      show_sweep("#{radio_home}/posts/#{was}")
     end
   end
 end
