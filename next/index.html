@@ -437,11 +437,26 @@
          the vinyl itself, so it is on .lp-disc and every disc gets it: the real
          one, the copy sliding in, and the one parked half out of the window.
 
-         6.5% of the radius, 3.6px at this diameter - enough to read as an edge
+         IT IS A BEVEL AND NOT A HIGHLIGHT, which is what lets it be here at all.
+         A bevel is rotationally symmetric: a bright shoulder where the lip rises
+         and a dark fall to the outer edge, correct at every angle. A specular
+         highlight is not - it comes from one lamp in one place, has to sit still
+         while the vinyl turns under it, and is why the lip on .lp-glint::after
+         lives on an element that does not rotate. A record sliding across the
+         deck is not spinning, so a bevel is all it needs and all it can have.
+
+         The first stop was too quiet to see: dark grey against dark grey with
+         nothing to catch. The shoulder is what makes an edge legible - a thin
+         light line at the inside of the rim, the way any raised edge reads -
+         and the operator's own note is the confirmation, that a spinning record
+         is easier to see because its texture moves.
+
+         8% of the radius, 4.5px at this diameter - enough to read as an edge
          at true size, and the outermost stop is darker than the vinyl beside it
          so the circle's own antialiasing has something quiet to blend into. */
-      radial-gradient(circle closest-side, transparent 0 93.5%, #101017 95%,
-                      #0a0a0f 98%, #06060a 100%),
+      radial-gradient(circle closest-side, transparent 0 92%,
+                      rgba(255,255,255,.13) 93.2%,
+                      #15151d 94.6%, #0d0d13 97.4%, #050509 100%),
       radial-gradient(circle closest-side, transparent 0 42%, #0f0f14 42% 46.5%, transparent 46.5%),
       repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0,
                                 rgba(255,255,255,.12) .805px, rgba(0,0,0,.86) 1.61px),
