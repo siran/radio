@@ -1567,12 +1567,61 @@ show_id    = ref("")
 # and everything else is not.
 show_posts = ref("")
 
-# A folder name a person can read in a directory listing, which is what the
-# archive will be browsing later. UTC like every other stamp the station
-# writes, and no punctuation that a path would have to escape.
+# When this broadcast started, frozen at connect. A folder name a person can
+# read in a directory listing, which is what the archive will be browsing later.
+# UTC like every other stamp the station writes, and no punctuation a path
+# would have to escape.
+show_began = ref("")
 def show_stamp() =
   t = time.utc()
   "#{t.year}#{pad2(t.month)}#{pad2(t.day)}-#{pad2(t.hour)}#{pad2(t.min)}#{pad2(t.sec)}"
+end
+
+# The console offers a slug and this decides whether to take it. It is offered
+# rather than computed here because a browser folds accents in one line and
+# this language does not: "oir esto" out of "oír esto" is worth having, and a
+# regex over bytes would give "o-r-esto".
+#
+# Offered is not granted. What comes back becomes a PATH, so it is checked
+# against a shape rather than cleaned into one - lowercase, digits, hyphens,
+# and a first character that is not a hyphen so no folder can be mistaken for
+# a flag. Anything else falls back to the crude version below, which cannot
+# produce a bad path because it can only produce those same characters.
+def show_slug(offer, name) =
+  if string.match(pattern = "^[a-z0-9][a-z0-9-]{0,47}$", offer) then
+    offer
+  else
+    t = string.case(lower = true, name)
+    t = string.replace(pattern = "[^a-z0-9]+", fun (_) -> "-", t)
+    t = string.replace(pattern = "^-+", fun (_) -> "", t)
+    t = string.replace(pattern = "-+$", fun (_) -> "", t)
+    t = if string.length(t) > 48 then string.sub(t, start = 0, length = 48) else t end
+    t = string.replace(pattern = "-+$", fun (_) -> "", t)
+    if t == "" then "untitled" else t end
+  end
+end
+
+# Settled at connect and re-settled on every show_set FOR AS LONG AS THE FOLDER
+# IS EMPTY. A host presses Go on air and names the show afterwards, so the
+# first answer is usually "untitled" and the second one is right; once a post
+# has been written the folder can no longer move, because moving it would
+# orphan what is already in it. show_posts being "" is exactly "nothing has
+# been written yet", so the rule needs no flag of its own.
+#
+# The directory is made HERE. A PUT does not create a missing parent - webdav
+# answers 409 - and the alternative was allowing MKCOL through a write route
+# that is deliberately four extensions wide. A failure is logged and not
+# raised: the console will hear about it from its own PUT, which is the place
+# a host can act on it.
+def show_settle(offer) =
+  if connected() and show_posts() == "" then
+    show_id := "#{show_slug(offer, show_name())}/#{show_began()}"
+    try
+      file.mkdir(parents = true, "#{radio_home}/posts/#{show_id()}")
+    catch _ do
+      log.important(label = "posts", "could not make #{show_id()}")
+    end
+  end
 end
 
 # Characters, not bytes, and which of the two has to be said out loud because
@@ -1638,8 +1687,9 @@ def show_set(req) =
   posts = show_clip(600, req.query["posts"])
   show_posts :=
     if string.match(pattern = "^[0-9:,]*$", posts) then posts else "" end
-  # Not touched here. The folder belongs to the broadcast and not to anything
-  # a console says; on_connect below is the only place it is written.
+  # The folder, which may still move while it is empty - a host names the show
+  # after going on air far more often than before it.
+  show_settle(show_clip(48, req.query["slug"]))
   # Into the log the first time a live show is given a name. Not on every
   # keystroke - the console saves as you type - and not when nobody is live,
   # which is a host filling the boxes in before they go on.
@@ -1947,8 +1997,12 @@ live = input.harbor(
     # into it. Minted before the earlier entry below so that anything reading
     # the show record on the strength of that entry already has somewhere to
     # write.
-    show_id    := show_stamp()
+    show_began := show_stamp()
     show_posts := ""
+    # With whatever name is already typed, which is usually none - so this is
+    # normally "untitled/..." until the console says otherwise, and the folder
+    # moves under it while it is still empty.
+    show_settle("")
     # The show metadata is almost always empty at this instant - a host presses
     # Go on air first and names the show afterwards, if at all - so this says
     # somebody went live and show_set records what they called it. Two events,
@@ -1973,6 +2027,7 @@ live = input.harbor(
     # deleted: the folder and every .md in it stay exactly where they were,
     # which is what makes an archive possible later.
     show_id     := ""
+    show_began  := ""
     show_posts  := ""
     show_name   := ""
     show_title  := ""

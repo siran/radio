@@ -4485,6 +4485,7 @@
               '&title='  + encodeURIComponent($('showtitle').value.trim()) +
               '&artist=' + encodeURIComponent($('showartist').value.trim()) +
               '&note='   + encodeURIComponent($('shownote').value.trim()) +
+              '&slug='   + encodeURIComponent(postSlug($('showname').value)) +
               '&posts='  + encodeURIComponent(postJoin(postHas));
     const res = await fetch('/control/show?' + q,
       { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
@@ -4911,6 +4912,25 @@
   // comment there says three and this says four: the station caps every one of
   // them and the maxlengths here are set to the same numbers, so the cut is
   // impossible from this side rather than tidied up afterwards.
+  // OFFERED TO THE STATION, WHICH DECIDES WHETHER TO TAKE IT. The folder a show
+  // writes into is named after the show, and the naming happens here rather than
+  // at the station for one reason: a browser folds accents in a line and
+  // liquidsoap does not. "oir esto puede ser ilegal" is worth having out of
+  // "oír esto puede ser ilegal"; a regex over bytes at the other end gives
+  // "o-r-esto-puede-ser-ilegal".
+  //
+  // It is an OFFER because this string becomes a path. The station checks it
+  // against a shape and falls back to its own cruder answer if it does not fit,
+  // so nothing a console sends can decide where files land.
+  function postSlug(name) {
+    return String(name || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+/, '')
+      .slice(0, 48)
+      .replace(/-+$/, '');
+  }
   const SHOW_FIELDS = ['showname', 'showtitle', 'showartist', 'shownote'];
   let showTimer = 0, showSending = false, showAgain = false;
 
@@ -4935,7 +4955,12 @@
     const q = 'name='    + encodeURIComponent($('showname').value.trim()) +
               '&title='  + encodeURIComponent($('showtitle').value.trim()) +
               '&artist=' + encodeURIComponent($('showartist').value.trim()) +
-              '&note='   + encodeURIComponent($('shownote').value.trim());
+              '&note='   + encodeURIComponent($('shownote').value.trim()) +
+              '&slug='   + encodeURIComponent(postSlug($('showname').value)) +
+              // The list travels on every push, because the station takes the
+              // whole show in one call - and a push that left it out would be a
+              // push that took every post off the radio.
+              '&posts='  + encodeURIComponent(postJoin(postHas));
     try {
       const res = await fetch('/control/show?' + q,
         { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
