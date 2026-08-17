@@ -244,13 +244,19 @@
       <option value="mic">My microphone</option>
       <option value="bucket">A browser tab &mdash; whatever is playing in it</option>
     </select>
+    <!-- Over the buttons rather than under everything, because it is the answer
+         to the question the buttons ask. A host presses Go on air and the next
+         thing they want to know is whether anything is moving; at the foot of the
+         panel that answer was below four paragraphs of notes and a mixing desk. -->
+    <div class="meter" id="airlevel"><i id="airvu"></i></div>
     <div class="btns">
       <button class="tbtn" id="airbtn">Go on air</button>
       <button class="tbtn" id="airtalk" hidden disabled>Talk over it</button>
+      <button class="tbtn" id="airswap" hidden disabled>Change tab</button>
     </div>
     <div class="btns" id="airhprow" hidden>
-      <button class="tbtn" id="airtabmon" disabled>Tab in my headphones</button>
-      <button class="tbtn" id="airmicmon" disabled>My mic in my headphones</button>
+      <button class="tbtn" id="airtabmon" disabled>Tab: not in my headphones</button>
+      <button class="tbtn" id="airmicmon" disabled>My mic: not in my headphones</button>
     </div>
     <div class="status" id="airhpnote" hidden></div>
     <!-- The show. Three boxes that are never disabled, and that is the whole
@@ -352,7 +358,6 @@
       and drop the sound. Nothing is watched or recorded: the picture is thrown away the instant it arrives
       and only the sound leaves this page.
       <br>Use headphones. On speakers the tab feeds your microphone and the microphone feeds the tab.</div>
-    <div class="meter" id="airlevel"><i id="airvu"></i></div>
     <div class="status" id="airstat">off air</div>
     <div class="status" id="airmsg"></div>
     <div class="err" id="airerr"></div>
@@ -3734,6 +3739,15 @@
   let airTabGain = null, airMicGain = null, airMicFn = null, airTalking = false;
   // The two headphone taps, and the EQ chain feeding the air.
   let airTabMon = null, airMicMon = null, airEq = null;
+  // Whether each tap is up, kept here rather than read back off the gain it
+  // moves. setTargetAtTime RAMPS, so gain.value one line after a press is still
+  // most of the way to the old answer - which is why the captions used to be
+  // written by hand at the three places that could change them, and why they
+  // drifted out of step with the thing they were describing.
+  let airTabHp = false, airMicHp = false;
+  // The node feeding the tab into the graph, and the stream behind it, so the
+  // shared tab can be swapped for another one without rebuilding anything.
+  let airTabSrc = null, airTabStream = null, airTabEnded = null, airSwapping = false;
   // Whether this console ever told the station the microphone was shut, so
   // that leaving the air only puts it back if it was ever moved.
   let airWasOpen = false;
@@ -3932,6 +3946,8 @@
       // tone in one evening.
       airMicGain.gain.value = 0;
       airMicMon.gain.value = 0;
+      airMicHp = false;
+      airTapDraw();
       airAC.createMediaStreamSource(st).connect(airEq.input);
       airEq.output.connect(airMicGain).connect(dest);
       airMicGain.connect(airMicMon).connect(airAC.destination);
@@ -3947,10 +3963,15 @@
       // open and the station goes on being fed a stream with no sound in it,
       // which is worse than an error because the red bar up top still says ON
       // AIR. So the track ending takes the whole broadcast down with it.
-      tab.getAudioTracks()[0].addEventListener('ended', () => {
+      // Named, so a tab being swapped out can have it taken off first. Retiring a
+      // stream stops its tracks, and a stop fires `ended` exactly like a host
+      // pressing Chrome's own Stop sharing - so leaving this attached would end
+      // the broadcast every time somebody changed the record.
+      airTabEnded = () => {
         if (airOn) airLeave();
         airSay('The tab stopped sharing, so the broadcast ended.');
-      });
+      };
+      tab.getAudioTracks()[0].addEventListener('ended', airTabEnded);
       // ALWAYS through the graph, even with no microphone in it yet, because
       // the microphone can arrive at any moment during the broadcast and a
       // MediaRecorder cannot be handed a different stream once it is running.
@@ -3964,11 +3985,18 @@
       // The headphone feed is tapped AFTER the duck, so what a host hears is
       // what the room hears rather than an undipped copy of it.
       airTabMon.gain.value = airSuppressed ? 1 : 0;
-      airAC.createMediaStreamSource(tab).connect(airTabGain).connect(dest);
+      airTabHp = !!airSuppressed;
+      // Kept as nodes rather than left anonymous, because Change tab below has to
+      // take this one out and put another in its place.
+      airTabSrc = airAC.createMediaStreamSource(tab);
+      airTabStream = tab;
+      airTabSrc.connect(airTabGain).connect(dest);
       airTabGain.connect(airTabMon).connect(airAC.destination);
       airMicGain.connect(dest);
       airMicGain.connect(airMicMon).connect(airAC.destination);
       airMicMon.gain.value = 0;
+      airMicHp = false;
+      airTapDraw();
       airStream = dest.stream;
       airMicFn = mic;
     }
@@ -4111,25 +4139,99 @@
     $('airtabmon').hidden = !tab;
     $('airtabmon').disabled = !tab || !airSuppressed;
     $('airmicmon').disabled = !airOn || !airMicMon;
+    $('airswap').hidden = !tab;
+    $('airswap').disabled = !tab || airSwapping;
     if (!airOn) return;
-    $('airhpnote').textContent = !tab
+    // The mic tap is tapped AFTER the gate that opens on Talk over it, on purpose:
+    // what a host hears through it is what the room hears. The cost is that it is
+    // armed and silent until the mic is open, which looks exactly like a broken
+    // switch unless it is said out loud, so it is said out loud.
+    const armed = airMicHp && !airTalking
+      ? ' Your mic reaches your headphones only while it is open, so this is armed and silent until you press Talk over it.'
+      : '';
+    $('airhpnote').textContent = (!tab
       ? 'Your microphone is what is going out, so hearing it here is a rehearsal of it, at no delay.'
       : (airSuppressed
         ? 'Your browser has stopped playing this tab through your speakers, so what you hear is this switch.'
-        : 'Your browser is playing the tab itself and will not let this page take it over, so the switch is off. Chrome and Edge allow it; the tab is audible either way.');
+        : 'Your browser is playing the tab itself and will not let this page take it over, so the switch is off. Chrome and Edge allow it; the tab is audible either way.')) + armed;
   }
 
-  function airTapToggle(node, btn, onText, offText) {
-    if (!node || !airAC) return;
-    const on = node.gain.value < 0.5;
-    node.gain.setTargetAtTime(on ? 1 : 0, airAC.currentTime, 0.02);
-    $(btn).classList.toggle('on', on);
-    $(btn).textContent = on ? onText : offText;
+  // ONE PLACE THAT WRITES THESE TWO CAPTIONS, and it reads the flags rather than
+  // the gains. "muted here" is gone with the hand-written captions: "here" was
+  // the page asking a host to work out which of four things it meant, where "not
+  // in my headphones" is the same fact with the subject in it.
+  function airTapDraw() {
+    $('airtabmon').classList.toggle('on', airTabHp);
+    $('airtabmon').textContent =
+      'Tab: ' + (airTabHp ? 'in my headphones' : 'not in my headphones');
+    $('airmicmon').classList.toggle('on', airMicHp);
+    $('airmicmon').textContent =
+      'My mic: ' + (airMicHp ? 'in my headphones' : 'not in my headphones');
   }
-  $('airtabmon').addEventListener('click', () =>
-    airTapToggle(airTabMon, 'airtabmon', 'Tab: in my headphones', 'Tab: muted here'));
-  $('airmicmon').addEventListener('click', () =>
-    airTapToggle(airMicMon, 'airmicmon', 'My mic: in my headphones', 'My mic: muted here'));
+  function airTapToggle(which) {
+    const node = which === 'tab' ? airTabMon : airMicMon;
+    if (!node || !airAC) return;
+    const on = !(which === 'tab' ? airTabHp : airMicHp);
+    if (which === 'tab') airTabHp = on; else airMicHp = on;
+    node.gain.setTargetAtTime(on ? 1 : 0, airAC.currentTime, 0.02);
+    airTapDraw();
+    airHpLook();
+  }
+  $('airtabmon').addEventListener('click', () => airTapToggle('tab'));
+  $('airmicmon').addEventListener('click', () => airTapToggle('mic'));
+
+  // CHANGING THE RECORD WITHOUT GOING OFF AIR. Chrome offers this on its own
+  // sharing bar when surfaceSwitching is asked for, and that bar is somewhere
+  // else on the screen, belongs to the browser, and is easy not to find - which
+  // is how the question got asked. This is the same move, on the console, beside
+  // the button that started the broadcast.
+  //
+  // Nothing is torn down and rebuilt. The encoder, the socket and the mount are
+  // downstream of airTabGain and never learn it happened: only the SOURCE feeding
+  // that gain is exchanged, which is one connect and one disconnect.
+  //
+  // The old tab is retired only once the new one is in hand. A picker somebody
+  // cancels has to leave the broadcast exactly as it was, so every line that
+  // could throw runs before any line that destroys something.
+  async function airSwapTab() {
+    if (!airOn || !airTabGain || !airAC || airSwapping) return;
+    airSwapping = true;
+    $('airswap').disabled = true;
+    try {
+      const next = await airGrabTab();          // throws, or is cancelled, first
+      const prev = airTabStream, prevSrc = airTabSrc;
+      if (prev && airTabEnded)
+        prev.getAudioTracks().forEach(t => t.removeEventListener('ended', airTabEnded));
+      airTabSrc = airAC.createMediaStreamSource(next);
+      airTabSrc.connect(airTabGain);
+      if (prevSrc) try { prevSrc.disconnect(); } catch {}
+      if (prev) {
+        try { prev.getTracks().forEach(t => t.stop()); } catch {}
+        const i = airSrcStreams.indexOf(prev);
+        if (i >= 0) airSrcStreams.splice(i, 1);
+      }
+      airSrcStreams.push(next);
+      airTabStream = next;
+      if (airTabEnded) next.getAudioTracks()[0].addEventListener('ended', airTabEnded);
+      // The new tab answers the suppression question for itself, and a host who
+      // switches from a tab the browser silenced to one it will not has to be
+      // told - the headphone switch means something different on each.
+      airTabMon.gain.setTargetAtTime(airSuppressed && airTabHp ? 1 : 0,
+                                     airAC.currentTime, 0.02);
+      airTabHp = airTabHp && !!airSuppressed;
+      airTapDraw();
+      airHpLook();
+      airSay('Now sharing a different tab. You did not leave the air.');
+    } catch (e) {
+      airSay(e && e.name === 'NotAllowedError'
+        ? 'Left as it was - no new tab was picked.'
+        : 'Could not change tab: ' + ((e && e.message) || e));
+    } finally {
+      airSwapping = false;
+      $('airswap').disabled = !airOn || !airTabGain;
+    }
+  }
+  $('airswap').addEventListener('click', airSwapTab);
   // Moving the dip while talking should be audible now, not at the next press.
   $('airduck').addEventListener('change', () => {
     if (!airTabGain || !airAC) return;
@@ -4149,13 +4251,13 @@
     try { airTab && airTab.getTracks().forEach(t => t.stop()); } catch {}
     airTab = null;
     airTabGain = null; airMicGain = null; airTalking = false;
+    airTabSrc = null; airTabStream = null; airTabEnded = null; airSwapping = false;
     // Off the live list, or a slider moved later would ramp a filter belonging
     // to a context that has been closed.
     eqChains = eqChains.filter(c => c !== airEq);
     airEq = null; airTabMon = null; airMicMon = null; airSuppressed = false;
-    for (const b of ['airtabmon', 'airmicmon']) $(b).classList.remove('on');
-    $('airtabmon').textContent = 'Tab in my headphones';
-    $('airmicmon').textContent = 'My mic in my headphones';
+    airTabHp = false; airMicHp = false;
+    airTapDraw();
     if (airMicFn) airMicFn.opened = false;
     airMicFn = null;
     $('airtalk').classList.remove('on');
