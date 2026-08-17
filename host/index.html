@@ -2339,7 +2339,12 @@
 
   // Read-modify-write: the volume and the duck live in the same file, so
   // always PUT the whole object - a partial one would erase the other field.
-  const showDuck = () => flag('duck', settings.duck, 'Music dips');
+  // The words are here and not in the markup, because this is what actually
+  // reaches the button: flag() rewrites its text on every read of settings.json.
+  // Named for what it dips and what it dips UNDER - it is the station's music
+  // under your voice NOTES, and nothing to do with the shared tab dipping under
+  // your mic while you broadcast, which is its own tick in the air panel.
+  const showDuck = () => flag('duck', settings.duck, 'Music dips under my notes');
 
   async function loadSettings() {
     try {
