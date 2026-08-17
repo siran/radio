@@ -2781,7 +2781,22 @@
   // gives and is the point at which silence has stopped being the mechanism
   // working and started being the mechanism stuck. Once a change HAS begun the
   // change's own deadline takes over and this stops applying.
-  const MUTE_MAX = 6000;
+  //
+  // TEN SECONDS, AND IT WAS SIX. What this has to outlast is not a change - a
+  // change owns the mute the moment it is booked - it is the gap between the
+  // counter topping out and this page LEARNING what replaced the song, which is
+  // one round trip in the ordinary case and was measured at 4.0s once, when the
+  // catch-up polls straddled the skip. Six left two seconds between the two.
+  //
+  // The two failures are not the same size. Firing early puts the old song back
+  // out for the second before the record lands, which is precisely the overlap
+  // the whole skip was built to remove, and it happens whenever a poll is slow.
+  // Firing late leaves a listener silent a few seconds longer in the rare case
+  // where the station genuinely never names a replacement - and the record is
+  // visibly being changed on screen throughout, so the silence has something
+  // saying why. Ten is past the worst answer this station has been seen to give
+  // by more than twice the margin six had.
+  const MUTE_MAX = 10000;
 
   let airS = 0;           // /likes/now's air_delay, seconds the station holds back
   let recordMinMs = 0;    // /likes/now's record_min, the station's floor in ms
