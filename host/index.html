@@ -292,8 +292,18 @@
                 placeholder="a line for whoever is listening"></textarea>
       <div class="status" id="showstat"></div>
     </div>
+    <!-- Named for what it dips and what it dips UNDER, because this console has
+         two of these and the operator read them as one control written twice.
+         They are not: this one is the shared TAB going under YOUR MIC, here in
+         this browser, for this broadcast only. The other is the station's music
+         going under your voice NOTES, is a per-speaker setting, and lives at the
+         foot of the voice panel. Neither can do the other's job.
+
+         The third thing that dips is not a control at all: the station always
+         puts its music under a live microphone, for as long as one is open, and
+         nobody gets a say in that. How FAR it goes is the desk's duck knob. -->
     <label class="chk" id="airduckwrap" hidden>
-      <input type="checkbox" id="airduck" checked> Dip the tab while I talk
+      <input type="checkbox" id="airduck" checked> Dip the shared tab under my mic
     </label>
     <label class="chk">
       <input type="checkbox" id="airmute"> Pause the station&rsquo;s autoDJ while I am on air
@@ -551,8 +561,11 @@
         <input id="eqf6300" type="range" min="-9" max="9" step="0.5" value="0" disabled>
       </div>
       <div class="duckrow">
-        <button class="tbtn" id="duck" title="whether the music dips under your notes">Music dips</button>
-        <span class="when">whether the music drops under your notes, or plays on behind them</span>
+        <button class="tbtn" id="duck" title="whether the station's music dips under your voice notes">Music dips under my notes</button>
+        <span class="when">whether the station&rsquo;s music drops under your voice notes, or plays on
+          behind them. It is about NOTES and nothing else: a live microphone always puts the music
+          down for as long as it is open, and dipping the shared tab under your mic while you
+          broadcast is its own tick up in the air panel.</span>
       </div>
   </details>
 
@@ -3832,9 +3845,39 @@
     // over the browser's own.
     const aud = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
     if (canSuppress) aud.suppressLocalAudioPlayback = true;
+    // A TAB, AND THE MACHINE'S OWN AUDIO KEPT OUT OF IT. Asked for with nothing
+    // but { video, audio }, this picker offers all three surfaces, and one of
+    // them is a trap: share ENTIRE SCREEN with its audio box ticked and what
+    // goes out is the system mix - everything the machine is playing, at
+    // whatever the machine's volume is, and silent the moment the machine is
+    // muted. A host turning their own speakers down would take the broadcast
+    // with them, which is exactly what was reported. Nothing in the graph below
+    // was ever wrong; the dialog let the wrong thing be chosen.
+    //
+    //   systemAudio 'exclude'        no system-audio option is offered at all
+    //   monitorTypeSurfaces 'exclude'  screens are not in the picker to pick
+    //   displaySurface 'browser'     the tab pane is what opens
+    //   selfBrowserSurface 'exclude' this console cannot be shared with itself,
+    //                                which would put its own monitor back into
+    //                                its own encoder - a feedback loop that
+    //                                nothing downstream could untangle
+    //
+    // displaySurface is a hint and not a filter - Chrome preselects on it and
+    // does not enforce it - so a Window can still be chosen. A window share
+    // carries no audio on any browser, which the check below already catches
+    // and now says so in as many words.
+    //
+    // surfaceSwitching lets a host change which tab is going out WITHOUT
+    // dropping the mount: the track object survives the switch, so the graph,
+    // the encoder and the socket never learn it happened. For a bucket set that
+    // is changing the record rather than going off air to do it.
     const st = await navigator.mediaDevices.getDisplayMedia({
-      video: true,          // not optional: audio-only capture is refused
-      audio: aud
+      video: { displaySurface: 'browser' },   // not optional: audio-only is refused
+      audio: aud,
+      systemAudio: 'exclude',
+      monitorTypeSurfaces: 'exclude',
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include'
     });
     // The video track is stopped immediately. It is asked for because the API
     // demands it, it is never read, and leaving it running would keep the
@@ -3844,7 +3887,7 @@
     if (!st.getAudioTracks().length) {
       st.getTracks().forEach(t => t.stop());
       throw new Error(
-        'That share has no sound in it. Pick a tab and tick "Share tab audio" in the dialog - and note that Firefox and Safari drop the audio whatever you tick.');
+        'That share has no sound in it. Pick a TAB - not a window, which carries no audio on any browser - and tick "Also share tab audio" in the dialog. Firefox and Safari drop the audio whatever you tick.');
     }
     // Asked for is not granted, and only the track knows which. A browser
     // without it ignores the constraint silently and goes on playing the tab.
