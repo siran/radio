@@ -423,6 +423,25 @@
     position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     background:
+      /* THE RIM, and it is part of the record rather than part of the light.
+         A pressed disc has a smooth margin outside its last groove; without one
+         the groove field runs into the antialiased edge of the circle and
+         fringes, which is what a record slid halfway out of the window or
+         carried across the deck was showing - a hatched crescent instead of an
+         edge.
+
+         There is already a lip, on .lp-glint::after, and it stays where it is:
+         that one is a specular highlight - light from the room catching the
+         raised edge - and it is rightly hidden while a record is moving, and it
+         belongs to an element the carriage copies do not have at all. This is
+         the vinyl itself, so it is on .lp-disc and every disc gets it: the real
+         one, the copy sliding in, and the one parked half out of the window.
+
+         6.5% of the radius, 3.6px at this diameter - enough to read as an edge
+         at true size, and the outermost stop is darker than the vinyl beside it
+         so the circle's own antialiasing has something quiet to blend into. */
+      radial-gradient(circle closest-side, transparent 0 93.5%, #101017 95%,
+                      #0a0a0f 98%, #06060a 100%),
       radial-gradient(circle closest-side, transparent 0 42%, #0f0f14 42% 46.5%, transparent 46.5%),
       repeating-radial-gradient(circle closest-side, rgba(0,0,0,.86) 0,
                                 rgba(255,255,255,.12) .805px, rgba(0,0,0,.86) 1.61px),
