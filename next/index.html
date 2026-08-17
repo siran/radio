@@ -1465,6 +1465,10 @@
      than a 7 makes a ragged edge out of a straight one. Never wrapped and never
      shrunk: the title gives way, because a title that loses its last word is
      still readable and a count that loses a digit is a different number. */
+  /* The vote-off mark, at the likes' weight rather than louder. It is a fact
+     about how a song ended, not a verdict on it, and a row of them shouting
+     would make Earlier read as a list of failures. */
+  .recent li .k { flex: none; color: var(--dim); font-size: .82em; margin-left: 6px; }
   .recent li .l { flex: none; font-variant-numeric: tabular-nums;
                   letter-spacing: .04em; white-space: nowrap; }
   .empty { font-size: .84rem; color: var(--dim); padding: 12px 0; }
@@ -2365,6 +2369,11 @@
   // zero on it would erase a real count left in localStorage by the session
   // before.
   let rollLikes = null, rollUp = false;
+  // Whether the song that is ending is ending because the room took it off.
+  // Caught at the top-out, spent by noteTrack several seconds later with the
+  // title it belongs to - the same reason the two like readings are caught
+  // early and spent late, and for the same gap.
+  let rollSkipped = false;
 
   function renderRecent() {
     const ol = document.getElementById('recent');
@@ -2392,6 +2401,15 @@
         l.className = 'l';
         l.textContent = (e.u ? '↑♥ ' : '') + e.l;
       }
+      // The skip glyph the tug row itself is drawn with, so a song the room
+      // took off is marked with the button that took it off. A word would
+      // have had to be translated; this one is already the page's vocabulary.
+      if (e.s) {
+        const k = li.appendChild(document.createElement('span'));
+        k.className = 'k';
+        k.textContent = '\u23ED\uFE0E';
+        k.title = 'voted off';
+      }
       ol.appendChild(li);
     });
     wrap.hidden = past.length === 0;
@@ -2402,6 +2420,12 @@
     if (rollLikes !== null && recent[0]) {
       recent[0].l = rollLikes; recent[0].u = rollUp;
       rollLikes = null; rollUp = false;
+    }
+    // Cleared whether or not there was an entry to mark, so a vote-off cannot
+    // be held over and land on the wrong song later.
+    if (rollSkipped) {
+      if (recent[0]) recent[0].s = true;
+      rollSkipped = false;
     }
     recent.unshift({ t: t });
     recent = recent.slice(0, 8);
@@ -2946,6 +2970,10 @@
   // the stream never came - leaves the deck exactly as empty as it found it,
   // which is the truth about what happened.
   function endChange(landed) {
+    // What the move WAS, read before the classes that say so are taken off
+    // below. A park and a return move the same record; a change and an arrival
+    // bring a new one.
+    const parkish = parked || btn.classList.contains('parked');
     // Anything still booked goes with it, and a booking that got as far as
     // being DRAWN is remembered rather than forgotten: servedAim is what tells
     // a second booking for the same boundary that the record is already on.
@@ -2970,6 +2998,20 @@
     // beginChange starts by ending the change it is replacing and ends it as NOT
     // landed, so an unmute written unconditionally here would let the old song
     // back out for one poll every time a change was superseded.
+    // The record that lands is a new one, so the disc it becomes starts its
+    // revolution where the copy left off - which is nought, because that is
+    // where the copy started and it was frozen for the whole travel. Without
+    // this the label would jump from upright to wherever the outgoing record
+    // had stopped, in the one frame a listener is looking straight at it.
+    //
+    // Only for a change or an arrival. A park and a return are the SAME record
+    // going off the pin and coming back, and snapping that one upright would
+    // be the fault the spin has been protected from since it was written: a
+    // record does not lose its place because somebody paused it.
+    if (landed && !parkish) {
+      const sp = btn.querySelector('.lp-disc').getAnimations()[0];
+      if (sp) sp.currentTime = 0;
+    }
     if (landed) unmute();
     settle();
   }
@@ -3035,11 +3077,20 @@
     // the other, and the real one is unpaused - never restarted - at the
     // landing. Each of these elements carries exactly one animation and it is
     // spin.
-    if (spin) {
-      const phase = spin.currentTime;
-      const a = d.getAnimations()[0];
-      if (a) a.currentTime = phase;
-    }
+    // UPRIGHT, at nought degrees, because the copy is always the record
+    // ARRIVING and a record arriving has not been played yet. It used to be
+    // put at the angle of the one already turning, which is the right answer
+    // for the disc being covered - that one is mid-song and stays where it is
+    // - and the wrong answer for a fresh pressing carried in over it.
+    //
+    // Nought is also what the real disc is set to when it takes over at the
+    // landing, below, so the record a listener watches come down and the record
+    // that starts turning are at the same angle and there is no jump between
+    // them. Set explicitly rather than left alone: the element is built by
+    // cloning one that is part-way through the spin, so its animation arrives
+    // carrying that phase.
+    const a = d.getAnimations()[0];
+    if (a) a.currentTime = 0;
     changeCar = car;
     // In, and down. That is the whole of a change now, and of an arrival, and
     // they share these keyframes because they are the same move over different
@@ -3511,6 +3562,9 @@
     mutedAt = Date.now();
     mutedId = likeId;
     audio.muted = true;
+    // The song on the air now is the one being taken off, and by the time it
+    // is written into Earlier the endpoint is describing its replacement.
+    rollSkipped = true;
     blank();
     setTimeout(pollLikes, 300);
     setTimeout(pollLikes, 1000);
