@@ -14,6 +14,12 @@
        signal and reads the same on both, exactly as the host console's own
        on-air red does with no light theme at all to check it against. */
     --air: #ef4444;
+    /* What the room did to a track it would not sit through, and out of the
+       light block for the same reason as the red above it: it is a signal and
+       not a shade of the page. Amber rather than another red, because red on
+       this page already means ON AIR, and a mark that borrowed it would be
+       saying something was live when it is saying something was cut. */
+    --cut: #f59e0b;
     /* The diameter of the record, and through it the height of the volume row
        and the width of the column under the button. This number is no longer the
        one chosen first, and what is chosen first has changed again. It used to be
@@ -1538,11 +1544,11 @@
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
   .recent ol { list-style: none; margin: 0; padding: 0; }
-  /* No `gap`. The marks now sit in front of the name rather than at the far
-     end of the row, and a single gap between every pair of children cannot
-     hold them tight to it: what is wanted is two marks close to each other and
-     close to the name, not three evenly spaced things. So the spacing is on the
-     marks themselves and a row with no marks has none of it. */
+  /* No `gap`. There are two flex children left - the live dot and the line of
+     text - because the marks went INSIDE the text, so the one gap a flex
+     container has would be spacing a dot off a title rather than doing any work
+     between marks. The dot carries its own margin and a row without one pays
+     nothing. */
   .recent li { font-size: .82rem; color: var(--dim); padding: 4px 0;
                border-bottom: 1px solid var(--line);
                display: flex; align-items: baseline; }
@@ -1550,32 +1556,53 @@
   .recent li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   /* What a song was liked to, in the mark you press to like one. The heart is
      U+2665, the same character the like button carries when it is filled and
-     from the same block, rather than an emoji: an emoji renders in colour and in
-     somebody else's design at a size where this list is deliberately quiet, and
-     it would be the only coloured thing in a column of grey. The number rides
-     beside it with no word of any language between them, which is the standing
-     rule for every control and reading on this page.
-     Tabular figures, though the column they were straightening has gone: the
-     marks are in front of the name now, so what a narrow 1 moves is where the
-     TITLE starts, and titles that start at different places down a list read as
-     a ragged left edge. Same reason, other side of the number.
+     from the same block, rather than an emoji. That argument was never against
+     COLOUR, it was against somebody else's: an emoji arrives in a foundry's own
+     palette and drawing, at a size where this list is deliberately quiet. A
+     glyph takes the colour this sheet gives it, which is how the heart below is
+     red without being a picture of a heart. The number rides beside it with no
+     word of any language between them, which is the standing rule for every
+     control and reading on this page.
 
-     The names do still start at different places, because a row carrying a
-     heart and a count is wider than a row carrying a count alone and most rows
-     carry neither. That is accepted rather than fixed. Fixing it means a mark
-     column of a fixed width, which indents every title in the list by a column
-     that is empty four rows in five - paying in every row for the alignment of
-     the few, when the request was for the marks to sit TIGHT to the name.
+     THREE POSITIONS HAVE BEEN TRIED AND THIS IS THE THIRD. At the far right they
+     were a column, which is a promise that every row has one when four rows in
+     five have nothing to put in it: a list of names and, a hand's width away,
+     some marks to travel to and match up by eye. In FRONT of the name they were
+     tight, and they moved the names - a row carrying a heart and a count starts
+     further in than a row carrying nothing, and most rows carry nothing, so the
+     list lost its left edge to align a handful of marks.
 
-     Never wrapped and never shrunk: the title gives way, because a title that
-     loses its last word is still readable and a count that loses a digit is a
-     different number. */
-  /* The vote-off mark, at the likes' weight rather than louder. It is a fact
-     about how a song ended, not a verdict on it, and a row of them shouting
-     would make Earlier read as a list of failures. */
-  .recent li .k { flex: none; color: var(--dim); font-size: .82em; margin-right: 6px; }
-  .recent li .l { flex: none; font-variant-numeric: tabular-nums;
-                  letter-spacing: .04em; white-space: nowrap; margin-right: 6px; }
+     At the end of the title they are neither. They are part of the line rather
+     than a column beside it, they are read with the name because they follow it,
+     and every name starts in the same place. Which is what a mark is: a note
+     about the song, written after it.
+
+     They are INSIDE the title element and not siblings of it, and that is what
+     keeps this from being a third arrangement of flex items. As siblings they
+     need an order, a shrink rule and a spacing, and a title long enough to wrap
+     puts them somewhere nobody chose. As text after text they wrap with the
+     title, sit on its baseline, and need none of it.
+
+     Tabular figures because the counts are read down a list even when they are
+     not in a column, and never wrapped: a title that loses its last word to a
+     line break is still readable, and a count split from its heart is a number
+     with nothing left saying what it counts. */
+  .recent li .l { font-variant-numeric: tabular-nums; letter-spacing: .04em;
+                  white-space: nowrap; margin-left: 7px; }
+  /* The glyph and not the number. A count is a reading and reads at the list's
+     own weight; the heart is what the reading is ABOUT, and it is the thing in
+     the row worth a colour. Red because a heart is red - the same red the page
+     already uses for on air, which is the only other signal in it.
+
+     The arrow takes the red with it because it is part of the same mark. It says
+     this number MOVED while you were listening, which is a fact about the hearts
+     rather than a second thing being reported. */
+  .recent li .l .g { color: var(--air); margin-right: 3px; }
+  /* A skip in the colour of a track cut off, drawn with the tug's own glyph, so a
+     song the room took off is marked with the button that took it off. No number
+     beside it: how many pulls it took is about the room that afternoon and not
+     about the song, and the song is what this list is. */
+  .recent li .k { color: var(--cut); font-size: .82em; margin-left: 7px; }
   /* A host was on the microphone. The same dot, in the same red, that the panel
      and the header already use for that fact, so it needs no word and no
      translation - a listener has seen this mark mean exactly this. It does NOT
@@ -2661,23 +2688,34 @@
                 heard.find(r => r.t === key);
       if (h) {
         done.push(key);
-        const l = li.appendChild(document.createElement('span'));
+        // Appended to the TITLE, so it is the end of that line rather than a
+        // column beside it. Two elements and not one string, because the glyph is
+        // coloured and the number is not, and a colour cannot be given to half of
+        // a text node.
+        const l = t.appendChild(document.createElement('span'));
         l.className = 'l';
-        l.textContent = (h.u ? '↑♥ ' : '') + h.l;
+        const g = l.appendChild(document.createElement('span'));
+        g.className = 'g';
+        g.textContent = (h.u ? '\u2191' : '') + '\u2665';
+        l.appendChild(document.createTextNode(String(h.l)));
       }
       // The skip glyph the tug row itself is drawn with, so a song the room
       // took off is marked with the button that took it off. A word would
       // have had to be translated; this one is already the page's vocabulary.
       if (e.s) {
-        const k = li.appendChild(document.createElement('span'));
+        const k = t.appendChild(document.createElement('span'));
         k.className = 'k';
+        // U+FE0E, the text presentation selector, and it earns its place now: it
+        // keeps this a GLYPH rather than an emoji, and only a glyph takes the
+        // colour the sheet gives it. Left in its emoji form it would arrive in
+        // somebody else's palette and ignore --cut entirely.
         k.textContent = '\u23ED\uFE0E';
         k.title = 'voted off';
       }
-      // Last, so everything that is a MARK about this row is in front of it. The
-      // dot is the exception and is already there: it is drawn before the name
-      // because it says what KIND of row this is rather than what happened to it,
-      // and a live row has to be recognisable before it is read.
+      // After the marks, because they are appended INTO it and it has to exist
+      // first. The dot is already on the row and stays in front of the name: it
+      // says what KIND of row this is rather than what happened to the song, and a
+      // live row has to be recognisable before it is read.
       li.appendChild(t);
       ol.appendChild(li);
     });
