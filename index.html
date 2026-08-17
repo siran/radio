@@ -153,6 +153,29 @@
 
      The show block simply is not there when nobody is live, so nothing has
      to be dimmed, greyed or explained away in the off state. */
+  /* WHILE A SHOW IS ON, THE PAGE IS THE SHOW. The station keeps its name and its
+     strapline - somebody arriving still has to learn where they are - but they
+     stop being the headline for as long as the headline belongs to somebody
+     else. Demoted rather than hidden, which is the same treatment the now
+     playing line gets three rules up and for the same reason: it is still true,
+     it is just no longer the point.
+
+     The class is on the BODY because two separate things in the header answer
+     to it, and a state that reaches more than one element is not that element's
+     state. */
+  header .show { margin: 0 0 4px; }
+  header .show .showname { font-size: 1.42rem; letter-spacing: -.01em; }
+  header .show .showtitle { font-size: 1rem; margin-top: 4px; }
+  header .show .shownote { margin-top: 4px; }
+  body.onshow h1 { font-size: .92rem; font-weight: 500; color: var(--dim);
+                   margin: 12px 0 2px; }
+  body.onshow .desc { font-size: .78rem; }
+  /* Up out of the basement. They were below both columns - under a chat and a
+     guestbook on a wide screen - and they are the reason a listener is reading
+     this page during a show. Directly under the player is as high as they can
+     go without pushing the play button off a phone: somebody who arrives
+     mid-show should not have to scroll to start the sound. */
+  .col > .posts { margin-top: 0; }
   .show { margin: 2px 0 6px; text-align: center; }
   .show .showname { justify-content: center; }
   /* The station's own track while a show is on: still audible, so still
@@ -1554,7 +1577,13 @@
   .card { font-size: .9rem; line-height: 1.55; color: var(--fg); overflow-wrap: anywhere; }
   .card > :first-child { margin-top: 0; }
   .card > :last-child { margin-bottom: 0; }
-  .card h1, .card h2, .card h3 { line-height: 1.25; margin: .7em 0 .35em; }
+  /* The three properties undone by name are the ones `.panel h2` lends: this
+     block carries `panel`, so the station's small-caps label style - dim, and
+     letter-spaced for signs like CHAT and EARLIER - reaches every heading a
+     host writes inside a card. Right for a sign, wrong for a sentence. */
+  .card h1, .card h2, .card h3 { line-height: 1.25; margin: .7em 0 .35em;
+                                 letter-spacing: normal; text-transform: none;
+                                 color: var(--fg); font-weight: 650; }
   .card h1 { font-size: 1.2em; } .card h2 { font-size: 1.1em; } .card h3 { font-size: 1em; }
   .card p { margin: .5em 0; }
   .card a { color: var(--accent); }
@@ -1677,6 +1706,19 @@
 
   <header>
     <div class="live" id="live"><span class="dot"></span><span class="lbl" id="lbl">connecting</span></div>
+    <!-- THE SHOW, AT THE TOP, FOR AS LONG AS THERE IS ONE. Moved here from the
+         middle of the player panel rather than copied: the comment it used to
+         live under said why in advance, that two blocks describing what is on
+         are two things to disagree, and during a show they did. Same element,
+         same single writer, higher up.
+
+         Name, then subtitle, then what is going out - which is the order a bill
+         outside a venue is written in, and the order it was asked for. -->
+    <div class="show" id="showwrap" role="status" hidden>
+      <div class="showname"><span class="dot"></span><span id="showname"></span></div>
+      <div class="shownote" id="shownote" hidden></div>
+      <div class="showtitle" id="showtitle" hidden></div>
+    </div>
     <h1 id="name">&nbsp;</h1>
     <div class="desc" id="desc">&nbsp;</div>
     <!-- Whoever is broadcasting, in their own words, and only while they
@@ -1690,16 +1732,12 @@
     <!-- player -->
     <div class="panel">
       <div class="np-label" id="npLabel">NOW PLAYING</div>
-      <!-- The show, when there is one, IS this panel. It is not a second
-           announcement above it: two blocks describing what is on is two
-           things to disagree, and during a show they did - the header named
-           the host while this named a track that had been paused for an
-           hour. -->
-      <div class="show" id="showwrap" role="status" hidden>
-        <div class="showname"><span class="dot"></span><span id="showname"></span></div>
-        <div class="showtitle" id="showtitle" hidden></div>
-        <div class="shownote" id="shownote" hidden></div>
-      </div>
+      <!-- The show used to be here, and the rule it was written under still
+           holds: ONE block describes what is on, never two. It is in the header
+           now, because while a show is running it is the billing rather than a
+           note inside the player - and what is left in this panel is the
+           station's own track, which during a show is the bed and not the
+           billing. `under` below is what says so. -->
       <div class="np" id="np">—</div>
       <div class="findrow" id="findrow" hidden>
         <a id="findLink" target="_blank" rel="noopener" title="find this song in the library">♫ find this song</a>
@@ -1752,6 +1790,14 @@
       </div>
     </div>
 
+    <!-- What the host is showing the room, directly under the player. Cards
+         rather than a running page: each one was posted as a thing, and a
+         listener arriving halfway through should see where one ends and the
+         next begins. -->
+    <div class="posts panel" id="postsWrap" hidden>
+      <ol id="posts"></ol>
+    </div>
+
     <!-- chat -->
     <div class="panel">
       <h2>CHAT</h2>
@@ -1787,13 +1833,6 @@
 
   </div>
 
-
-  <!-- What the host is showing the room. Cards rather than a running page: each
-       one was posted as a thing, and a listener who arrives halfway through
-       should be able to see where one ends and the next begins. -->
-  <div class="posts panel" id="postsWrap" hidden>
-    <ol id="posts"></ol>
-  </div>
 
   <div class="recent panel" id="recentWrap" hidden>
     <h3>EARLIER</h3>
@@ -3232,6 +3271,10 @@
     $('npLabel').textContent = held ? '\u23F8\uFE0F' : 'NOW PLAYING';
     $('np').classList.toggle('hold', held && !live);
     $('np').classList.toggle('under', live);
+    // The whole page answers to this, not one element, so it is written where
+    // the whole page can read it. It is what demotes the station's own name and
+    // strapline while somebody else's show is the headline.
+    document.body.classList.toggle('onshow', live);
     // Hidden rather than emptied, so the panel closes up instead of leaving a
     // gap where a track used to be named.
     $('np').hidden = live && held;
