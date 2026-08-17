@@ -3003,6 +3003,17 @@
   // what the page has been told but is not showing yet.
   let changeUntil = 0, changeCar = null, changeAnim = null, changeTimer = 0;
   let changeArriving = false;
+  // WHICH OF THE FOUR MOVES is on the button: 'change', 'arrive', 'park' or
+  // 'return', and empty when nothing is moving. Two decisions turn on it and
+  // neither can be reached any other way.
+  //
+  // It exists because the obvious substitute is a lie. `parked` looks like it
+  // answers "is this a park or a return", and it does not answer it for a
+  // return: a return begins by ending the park, and ending a park clears
+  // `parked` - so by the time the return lands, the flag that would have told
+  // its own landing what it was has been false for the whole of the travel.
+  // The move knows its name from the moment it is drawn; nothing else does.
+  let changeMode = '';
   // What the arrival in progress was BOOKED for: the length it is being drawn
   // over, and how much of a window its record has to cross. Kept because the
   // booking is a guess at how long this browser will take to make a sound, and
@@ -3226,10 +3237,17 @@
   // the stream never came - leaves the deck exactly as empty as it found it,
   // which is the truth about what happened.
   function endChange(landed) {
-    // What the move WAS, read before the classes that say so are taken off
-    // below. A park and a return move the same record; a change and an arrival
-    // bring a new one.
-    const parkish = parked || btn.classList.contains('parked');
+    // What the move WAS. A park and a return move the same record; a change and
+    // an arrival bring a new one.
+    //
+    // Off changeMode and not off `parked`, which is what this used to read and
+    // which is false here for the one move that most needs it to be true. A
+    // return starts by calling this function to take the park down, and that
+    // call clears `parked`; the return's OWN landing then arrives to find no
+    // park anywhere in the state and resets the record to upright - a record
+    // losing its place because somebody paused it, which is the precise fault
+    // the test below was written to prevent.
+    const parkish = changeMode === 'park' || changeMode === 'return';
     // Anything still booked goes with it, and a booking that got as far as
     // being DRAWN is remembered rather than forgotten: servedAim is what tells
     // a second booking for the same boundary that the record is already on.
@@ -3247,6 +3265,8 @@
     // doing before it draws the same record travelling in.
     btn.classList.remove('shoving', 'arriving', 'parked', 'away');
     parked = false;
+    // Cleared after parkish has been taken off it, not before.
+    changeMode = '';
     if (landed && changeArriving) btn.classList.remove('empty');
     changeArriving = false;
     changeUntil = 0;
@@ -3333,20 +3353,34 @@
     // the other, and the real one is unpaused - never restarted - at the
     // landing. Each of these elements carries exactly one animation and it is
     // spin.
-    // UPRIGHT, at nought degrees, because the copy is always the record
-    // ARRIVING and a record arriving has not been played yet. It used to be
-    // put at the angle of the one already turning, which is the right answer
-    // for the disc being covered - that one is mid-song and stays where it is
-    // - and the wrong answer for a fresh pressing carried in over it.
+    // THE ANGLE DEPENDS ON WHICH RECORD THIS COPY IS, and the four moves do not
+    // agree about that.
     //
-    // Nought is also what the real disc is set to when it takes over at the
-    // landing, below, so the record a listener watches come down and the record
-    // that starts turning are at the same angle and there is no jump between
-    // them. Set explicitly rather than left alone: the element is built by
-    // cloning one that is part-way through the spin, so its animation arrives
-    // carrying that phase.
+    // In a change and an arrival the copy is a record ARRIVING, and a record
+    // arriving has not been played: it comes in upright, at nought. It used to
+    // inherit the angle of the one already turning, which is the right answer
+    // for the disc being COVERED - that one is mid-song and stays where it is -
+    // and the wrong answer for a fresh pressing carried in over it. Nought is
+    // also what the real disc is set to when it takes over at the landing, so
+    // the record a listener watches come down and the record that starts
+    // turning are at the same angle and nothing jumps between them.
+    //
+    // In a park and a return the copy is THE SAME RECORD, taken off the pin and
+    // put back on it, so it keeps the angle it was turning at. A record does not
+    // lose its place because somebody paused it - the whole reason the real disc
+    // is only ever unpaused and never restarted - and for a while this line
+    // undid that for the copy while the real one underneath went on being
+    // careful about it. The pause snapped it upright as it lifted.
+    //
+    // Set explicitly in both cases rather than left alone: the element is built
+    // by cloning one that is part-way through the spin, so its animation arrives
+    // carrying a phase either way and "leave it" means "whatever the clone
+    // happened to inherit".
+    changeMode = mode;
     const a = d.getAnimations()[0];
-    if (a) a.currentTime = 0;
+    const keep = (mode === 'park' || mode === 'return') &&
+                 spin && spin.currentTime !== null;
+    if (a) a.currentTime = keep ? spin.currentTime : 0;
     changeCar = car;
     // In, and down. That is the whole of a change now, and of an arrival, and
     // they share these keyframes because they are the same move over different
