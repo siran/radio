@@ -1540,6 +1540,40 @@
      figure is part of the rope, so it goes out by exactly what the rope goes
      out by and cannot be left looking live over a pair of dead buttons. */
   .rope.cool + .tugnum { opacity: .3; }
+  /* THE CARDS. Newest at the top, everything else pushed down - a show reads
+     forwards for the host writing it and backwards for a listener arriving in
+     the middle, and the listener is who this is for.
+
+     They sit between the player and Earlier on purpose: what is being said now
+     belongs nearer the sound than the log of what is over. */
+  .posts { margin-top: 20px; }
+  .posts ol { list-style: none; margin: 0; padding: 0; }
+  .posts li { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+              margin-bottom: 12px; background: var(--panel); position: relative; }
+  .posts li:last-child { margin-bottom: 0; }
+  .card { font-size: .9rem; line-height: 1.55; color: var(--fg); overflow-wrap: anywhere; }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .card h1, .card h2, .card h3 { line-height: 1.25; margin: .7em 0 .35em; }
+  .card h1 { font-size: 1.2em; } .card h2 { font-size: 1.1em; } .card h3 { font-size: 1em; }
+  .card p { margin: .5em 0; }
+  .card a { color: var(--accent); }
+  .card img { max-width: 100%; height: auto; border-radius: 8px; display: block;
+              margin: .6em 0; }
+  .card ul, .card ol { margin: .5em 0; padding-left: 1.3em; list-style: revert; }
+  .card blockquote { margin: .5em 0; padding-left: 10px; border-left: 2px solid var(--line);
+                     color: var(--dim); }
+  .card pre { overflow-x: auto; }
+  .card code, .card pre { font-family: ui-monospace, Consolas, monospace; font-size: .92em; }
+  /* Quiet until the card is touched, because it is a convenience and not part of
+     what was written. Always present for a keyboard, which cannot hover. */
+  .posts .copy { position: absolute; top: 10px; right: 10px; background: none;
+                 border: 1px solid var(--line); border-radius: 7px; color: var(--dim);
+                 padding: 4px 8px; font-size: .7rem; cursor: pointer; opacity: 0;
+                 transition: opacity 160ms ease, color 160ms ease; }
+  .posts li:hover .copy, .posts .copy:focus-visible { opacity: 1; }
+  .posts .copy:hover { color: var(--fg); }
+  .posts .copy.done { opacity: 1; color: var(--accent); border-color: var(--accent); }
   .recent { margin-top: 20px; }
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
@@ -1751,6 +1785,14 @@
       <div class="msgs" id="msgs"><div class="empty">no messages yet</div></div>
     </div>
 
+  </div>
+
+
+  <!-- What the host is showing the room. Cards rather than a running page: each
+       one was posted as a thing, and a listener who arrives halfway through
+       should be able to see where one ends and the next begins. -->
+  <div class="posts panel" id="postsWrap" hidden>
+    <ol id="posts"></ol>
   </div>
 
   <div class="recent panel" id="recentWrap" hidden>
@@ -2901,6 +2943,223 @@
   // reading of what the station said - somebody is live, and they chose to
   // say nothing about it - and it is the half of this that survives a
   // listener who reads no English at all.
+
+  // ===== the cards a host posts ===========================================
+  //
+  // SANITISED HERE TOO, AND THAT IS NOT BELT AND BRACES. The console cleaned
+  // this before writing it; /posts/ is nevertheless a public folder holding
+  // whatever anything with a speaker credential last put there, and this page
+  // has one rule it has never broken - words one person typed and everybody else
+  // is shown do not become markup until they have been walked.
+  //
+  // The walk builds NODES, not a string. The console serialises because it hands
+  // its result to execCommand; there is no reason here to turn a clean tree back
+  // into text and parse it again, and one reason not to - a tree built with
+  // createElement and given only allow-listed attributes is clean by
+  // construction, where a string is clean only by argument.
+  const CARD_KEEP = new Set(['P', 'BR', 'H1', 'H2', 'H3', 'STRONG', 'EM', 'U',
+                             'A', 'UL', 'OL', 'LI', 'IMG', 'BLOCKQUOTE',
+                             'CODE', 'PRE', 'HR']);
+  const CARD_AS = { B: 'STRONG', I: 'EM', H4: 'H3', H5: 'H3', H6: 'H3',
+                    DIV: null, SPAN: null };
+  const CARD_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED',
+                             'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'SELECT',
+                             'TEXTAREA', 'LINK', 'META', 'BASE', 'NOSCRIPT',
+                             'TEMPLATE', 'CANVAS', 'AUDIO', 'VIDEO', 'SOURCE',
+                             'TRACK', 'FRAME', 'FRAMESET', 'APPLET']);
+  const CARD_ATTR = { A: ['href', 'title'], IMG: ['src', 'alt', 'title'] };
+  const CARD_DEEP = 24;
+
+  function cardUrl(u, isImg) {
+    const t = String(u == null ? '' : u).replace(/[\u0000-\u0020]/g, '');
+    if (/^https?:\/\/[^\s]+$/i.test(t)) return t;
+    if (isImg && /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(t))
+      return t;
+    return '';
+  }
+
+  // DOMParser and not innerHTML on anything attached: a document made this way
+  // is inert, so the markup is never live in this page even for the instant it
+  // takes to read it. Its images are not fetched and its handlers are not wired,
+  // which is the difference between reading a thing and running it.
+  function cardBuild(text) {
+    const doc = new DOMParser().parseFromString(String(text || ''), 'text/html');
+    const out = document.createElement('div');
+    out.className = 'card';
+    cardWalk(doc.body, out, 0);
+    return out;
+  }
+
+  function cardWalk(from, to, depth) {
+    const kids = Array.prototype.slice.call(from.childNodes);
+    for (let i = 0; i < kids.length; i++) {
+      const ch = kids[i];
+      if (ch.nodeType === 3) { to.appendChild(document.createTextNode(ch.nodeValue)); continue; }
+      if (ch.nodeType !== 1) continue;
+      // Uppercased because tagName is uppercase for HTML elements and LOWERCASE
+      // for foreign ones - svg, math. Without this the drop list misses a whole
+      // namespace, which is exactly what it did on the console until a paste of
+      // <svg><script> came back as the words alert(1).
+      const raw = String(ch.tagName || '').toUpperCase();
+      if (CARD_DROP.has(raw)) continue;
+      const tag = Object.prototype.hasOwnProperty.call(CARD_AS, raw) ? CARD_AS[raw] : raw;
+      if (!tag || !CARD_KEEP.has(tag) || depth > CARD_DEEP) {
+        cardWalk(ch, to, depth + 1);
+        continue;
+      }
+      const el = document.createElement(tag);
+      const allow = CARD_ATTR[tag] || [];
+      for (let j = 0; j < allow.length; j++) {
+        const a = allow[j], v = ch.getAttribute(a);
+        if (v == null) continue;
+        if (a === 'href' || a === 'src') {
+          const u = cardUrl(v, tag === 'IMG');
+          if (u) el.setAttribute(a, u);
+        } else {
+          el.setAttribute(a, String(v).slice(0, 300));
+        }
+      }
+      if (tag === 'A') {
+        if (!el.getAttribute('href')) { cardWalk(ch, to, depth + 1); continue; }
+        el.setAttribute('rel', 'noopener noreferrer nofollow ugc');
+        el.setAttribute('target', '_blank');
+      }
+      if (tag === 'IMG') {
+        if (!el.getAttribute('src')) continue;
+        // Neither of these is decoration. A referrer would tell whatever host a
+        // pasted picture came from which radio its readers are listening to, and
+        // lazy keeps a long show from fetching a screen of pictures nobody has
+        // scrolled to yet.
+        el.setAttribute('referrerpolicy', 'no-referrer');
+        el.setAttribute('loading', 'lazy');
+        el.setAttribute('decoding', 'async');
+      }
+      cardWalk(ch, el, depth + 1);
+      to.appendChild(el);
+    }
+  }
+
+  // --- what is on, and what of it has been read ---------------------------
+  // Keyed by folder, number AND rev, so an edit is a fetch and everything else
+  // is not. The station changes the rev when a host reposts; nothing else can
+  // make this page ask for the same file twice.
+  let cardShow = '', cardSeen = '', cardBusy = false;
+  const cardHave = new Map();
+
+  function cardKey(n, rev) { return cardShow + '/' + n + '/' + rev; }
+
+  // Called from the same response as everything else on this page, for the
+  // reason the show block gives: a poll of its own would disagree with this one
+  // for as long as a poll takes, at the one moment that matters.
+  function showPosts(sh) {
+    const on = !!(sh && sh.live && sh.id);
+    const id = on ? String(sh.id) : '';
+    const list = on ? String(sh.posts || '') : '';
+    // A new broadcast is a new folder, and nothing read from the last one
+    // belongs to it. Dropped rather than left to fall out of use, because the
+    // cache is keyed by folder and would otherwise hold an evening at a time.
+    if (id !== cardShow) { cardShow = id; cardHave.clear(); cardSeen = ''; }
+    if (!on) {
+      if ($('postsWrap').hidden) return;
+      $('posts').textContent = '';
+      $('postsWrap').hidden = true;
+      return;
+    }
+    if (list === cardSeen) return;
+    cardFill(id, list);
+  }
+
+  // The path is built from the station's string, so it is checked HERE as well
+  // as at the station: two numbers and nothing else. A page that will happily
+  // fetch whatever it is told to fetch is a page waiting for the day something
+  // else is telling it.
+  async function cardFill(id, list) {
+    if (cardBusy) return;
+    cardBusy = true;
+    try {
+      const want = list.split(',').filter(Boolean).map(t => {
+        const b = t.split(':');
+        return { n: parseInt(b[0], 10), rev: parseInt(b[1], 10) || 1 };
+      }).filter(x => x.n > 0 && x.n < 100000 && x.rev > 0 && x.rev < 100000);
+      for (const it of want) {
+        if (cardHave.has(cardKey(it.n, it.rev))) continue;
+        try {
+          const res = await fetch('/posts/' + id.split('/').map(encodeURIComponent).join('/') +
+                                  '/' + it.n + '.md?r=' + it.rev, { cache: 'no-store' });
+          if (!res.ok) continue;                     // it will be there next poll, or it will not
+          cardHave.set(cardKey(it.n, it.rev), cardBuild(await res.text()));
+        } catch {}
+      }
+      // Only once every one of them is in hand, so a card never appears at the
+      // bottom of the stack and jumps to the top a moment later.
+      if (cardShow !== id) return;
+      cardDraw(want);
+      cardSeen = list;
+    } finally { cardBusy = false; }
+  }
+
+  function cardDraw(want) {
+    const ol = $('posts');
+    ol.textContent = '';
+    const order = want.slice().reverse();            // newest first
+    for (const it of order) {
+      const built = cardHave.get(cardKey(it.n, it.rev));
+      if (!built) continue;
+      const li = ol.appendChild(document.createElement('li'));
+      // cloneNode, because the same built tree is drawn again on every redraw
+      // and a node can only be in one document position at a time.
+      li.appendChild(built.cloneNode(true));
+      const b = li.appendChild(document.createElement('button'));
+      b.type = 'button';
+      b.className = 'copy';
+      b.textContent = 'copy';
+      b.title = 'copy this, formatting and all';
+      b.addEventListener('click', () => cardCopy(built, b));
+    }
+    $('postsWrap').hidden = !ol.firstChild;
+  }
+
+  // BOTH FLAVOURS, because the point is that it lands in a rich editor as what
+  // it looks like here and in a plain one as words. Written as text/html and
+  // text/plain together in one item: an editor takes the richest thing it
+  // understands, and nothing has to guess which that is.
+  //
+  // The fallback exists because navigator.clipboard is secure-context only, and
+  // this station answers on http as well as https. Selecting a hidden copy and
+  // asking the document to copy it is the older way and keeps the formatting;
+  // it is not better, it is what is left where the good one is absent.
+  async function cardCopy(built, btn) {
+    const html = built.innerHTML;
+    const text = built.textContent.replace(/\n{3,}/g, '\n\n').trim();
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' })
+        })]);
+        ok = true;
+      }
+    } catch {}
+    if (!ok) {
+      const ghost = document.createElement('div');
+      ghost.setAttribute('contenteditable', 'true');
+      ghost.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+      ghost.appendChild(built.cloneNode(true));
+      document.body.appendChild(ghost);
+      const r = document.createRange();
+      r.selectNodeContents(ghost);
+      const sel = getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      try { ok = document.execCommand('copy'); } catch {}
+      sel.removeAllRanges();
+      ghost.remove();
+    }
+    btn.textContent = ok ? 'copied' : 'could not copy';
+    btn.classList.toggle('done', ok);
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('done'); }, 1600);
+  }
+
   function showShow(sh) {
     const on = !!(sh && sh.live);
     $('showname').textContent  = on ? (sh.name  || '') : '';
@@ -3933,6 +4192,7 @@
     // station playing nothing at all - which is exactly what the music being
     // paused for a bucket set looks like from here.
     showShow(j && j.show);
+    showPosts(j && j.show);
     showHold(j);
     const wasId = likeId;
     likeId = (j && j.id) || '';
