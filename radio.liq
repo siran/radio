@@ -1549,6 +1549,32 @@ show_title = ref("")
 show_artist = ref("")
 show_note  = ref("")
 
+# The folder this broadcast writes its posts into, minted on connect and
+# cleared on disconnect - so it is the same thing a show IS, and no console
+# can choose it. A console that picked its own would disagree with a second
+# console, and with itself after a reload, about where the evening was going.
+show_id    = ref("")
+
+# What has been written into that folder: "n:rev" pairs, comma separated, in
+# the order they were posted. A list and not an index FILE, because the show
+# record is already polled by every listener every five seconds - so this
+# costs no fetch, has no second write to fall out of step with the first, and
+# is cleared by the one thing that ends a show. The .md files stay on disk;
+# the cards leave the page because the station stopped mentioning them.
+#
+# The rev is what makes an edit visible. A listener caches a post by folder,
+# number and rev, so a repost of the same number under a new rev is a fetch
+# and everything else is not.
+show_posts = ref("")
+
+# A folder name a person can read in a directory listing, which is what the
+# archive will be browsing later. UTC like every other stamp the station
+# writes, and no punctuation that a path would have to escape.
+def show_stamp() =
+  t = time.utc()
+  "#{t.year}#{pad2(t.month)}#{pad2(t.day)}-#{pad2(t.hour)}#{pad2(t.min)}#{pad2(t.sec)}"
+end
+
 # Characters, not bytes, and which of the two has to be said out loud because
 # they differ for every host who names a show in Spanish. Measured on this
 # build: ten e-acutes are 10 characters and 20 bytes, and cutting at 8
@@ -1581,7 +1607,9 @@ def show_state() =
     name   = show_name(),
     title  = show_title(),
     artist = show_artist(),
-    note   = show_note() }
+    note   = show_note(),
+    id     = show_id(),
+    posts  = show_posts() }
 end
 
 # One call carries the whole show, and a parameter left out means an empty
@@ -1601,6 +1629,17 @@ def show_set(req) =
   show_title  := show_clip(120, req.query["title"])
   show_artist := show_clip(120, req.query["artist"])
   show_note   := show_clip(240, req.query["note"])
+  # Digits, colons and commas or nothing at all. This string is handed to
+  # every listener and each of them builds a URL out of it, so it is checked
+  # HERE as well as there: one bad character at this end would be a path
+  # somebody else's browser goes and asks for. Refused whole rather than
+  # filtered, because a list that has had characters quietly removed from it
+  # is a list whose numbers may have changed.
+  posts = show_clip(600, req.query["posts"])
+  show_posts :=
+    if string.match(pattern = "^[0-9:,]*$", posts) then posts else "" end
+  # Not touched here. The folder belongs to the broadcast and not to anything
+  # a console says; on_connect below is the only place it is written.
   # Into the log the first time a live show is given a name. Not on every
   # keystroke - the console saves as you type - and not when nobody is live,
   # which is a host filling the boxes in before they go on.
@@ -1904,6 +1943,12 @@ live = input.harbor(
   timeout       = 5.0,
   on_connect    = fun (_) -> begin
     connected := true
+    # The folder for this broadcast, and it is empty until something is posted
+    # into it. Minted before the earlier entry below so that anything reading
+    # the show record on the strength of that entry already has somewhere to
+    # write.
+    show_id    := show_stamp()
+    show_posts := ""
     # The show metadata is almost always empty at this instant - a host presses
     # Go on air first and names the show afterwards, if at all - so this says
     # somebody went live and show_set records what they called it. Two events,
@@ -1924,6 +1969,11 @@ live = input.harbor(
     # unable to duck the music.
     live_open  := true
     show_logged := ""
+    # The cards go off the listener page here, and only here. Nothing is
+    # deleted: the folder and every .md in it stay exactly where they were,
+    # which is what makes an archive possible later.
+    show_id     := ""
+    show_posts  := ""
     show_name   := ""
     show_title  := ""
     show_artist := ""

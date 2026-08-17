@@ -213,6 +213,32 @@
   #airbtn { flex:1 1 auto; font-weight:600; }
   #airbtn.on { background:var(--rec); border-color:var(--rec); color:#fff; }
   #airlevel { margin-top:12px; }
+  /* The composer. A box that looks like the other inputs on this console and
+     behaves like a page, because that is what is going into it: headings and
+     paragraphs and pictures rather than a line of text. Tall enough to hold a
+     paste without scrolling on the first one, and it grows. */
+  #postbox { min-height:120px; max-height:420px; overflow:auto; padding:11px 12px;
+             margin:10px 0; background:#101013; border:1px solid #26262e;
+             border-radius:8px; color:#e8e8ea; font-size:14px; line-height:1.5; }
+  #postbox:focus { outline:none; border-color:#4a4a55; }
+  #postbox:empty::before { content:attr(data-empty); color:#5d5d68; }
+  #postbox h1, #postbox h2, #postbox h3 { margin:.6em 0 .3em; line-height:1.25; }
+  #postbox h1 { font-size:1.35em; } #postbox h2 { font-size:1.2em; }
+  #postbox h3 { font-size:1.06em; }
+  #postbox p { margin:.5em 0; }
+  #postbox img { max-width:100%; height:auto; border-radius:6px; }
+  #postbox a { color:#7aa2f7; }
+  #postbox blockquote { margin:.5em 0; padding-left:10px; border-left:2px solid #2f2f39;
+                        color:#a9a9b4; }
+  #postbox pre, #postbox code { font-family:ui-monospace,Consolas,monospace; font-size:.92em; }
+  #posttools .tbtn { min-width:34px; padding:5px 9px; }
+  .postlist { list-style:none; margin:12px 0 0; padding:0; }
+  .postlist li { border-top:1px solid #24242c; padding:8px 0; display:flex;
+                 gap:10px; align-items:baseline; }
+  .postlist .pn { flex:none; color:#5d5d68; font-variant-numeric:tabular-nums; }
+  .postlist .pt { flex:1; min-width:0; color:#a9a9b4; overflow:hidden;
+                  text-overflow:ellipsis; white-space:nowrap; }
+  .postlist .tbtn { padding:4px 9px; font-size:12px; }
 </style>
 </head>
 <body>
@@ -362,6 +388,35 @@
     <div class="status" id="airmsg"></div>
     <div class="err" id="airerr"></div>
   </div>
+
+  <!-- What the room sees while a show is on. Open by default only when there is
+       something in it to see; a console that greets a host with an empty editor
+       every time is a console asking them to close something. -->
+  <details class="panel" id="postwrap">
+    <summary>Posts <span class="when">&mdash; what the room reads while you are on the air.
+      Paste from anywhere, tidy it up, press Post. It appears on the radio and goes
+      when your show does; the file stays on Dolly.</span></summary>
+    <div class="btns" id="posttools">
+      <button class="tbtn" data-cmd="formatBlock" data-arg="&lt;h2&gt;" title="heading">H</button>
+      <button class="tbtn" data-cmd="bold" title="bold"><b>B</b></button>
+      <button class="tbtn" data-cmd="italic" title="italic"><i>I</i></button>
+      <button class="tbtn" data-cmd="underline" title="underline"><u>U</u></button>
+      <button class="tbtn" data-cmd="insertUnorderedList" title="list">&bull;</button>
+      <button class="tbtn" id="postlink" title="turn the selected words into a link">Link</button>
+      <button class="tbtn" data-cmd="removeFormat" title="strip the formatting from the selection">Plain</button>
+    </div>
+    <div id="postbox" contenteditable="true" role="textbox" aria-multiline="true"
+         aria-label="What to post" data-empty="Paste or write what the room should see"></div>
+    <div class="btns">
+      <button class="tbtn" id="postbtn" disabled>Post</button>
+      <button class="tbtn" id="postcancel" hidden>Cancel the edit</button>
+      <button class="tbtn" id="postclear">Clear</button>
+    </div>
+    <div class="status" id="poststat"></div>
+    <div class="status" id="postmsg"></div>
+    <div class="err" id="posterr"></div>
+    <ol class="postlist" id="postlist"></ol>
+  </details>
 
   <details class="panel" id="musicpanel" open>
     <summary>Now playing <span class="when">&mdash; what is on the air, and the controls that change it for everyone listening</span></summary>
@@ -1238,7 +1293,8 @@
     micMonOff();
     try { monStop(); } catch (e) {}
   });
-  const SAY_ELS = ['monmsg', 'presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr', 'airmsg'];
+  const SAY_ELS = ['monmsg', 'presmsg', 'iomsg', 'preserr', 'plmsg', 'plerr', 'qerr', 'airmsg',
+                   'postmsg', 'posterr'];
   function say(id, msg) {
     const el = $(id);
     if (!el) return;
@@ -4266,6 +4322,361 @@
     }
   }
   $('airswap').addEventListener('click', airSwapTab);
+
+  // ===== posts: what the room reads while a show is on =====================
+  //
+  // THE SANITISER IS THE FEATURE AND THE REST IS A FORM AROUND IT. What a host
+  // pastes comes out of a web AI or off somebody's page: nobody wrote it
+  // deliberately, nobody will read every byte before pressing Post, and whatever
+  // survives is shown to every listener. So it is an ALLOW-LIST WALK. A tag that
+  // is not named is not kept. An attribute that is not named is not kept. A URL
+  // whose scheme is not named is not kept. A deny-list would be a promise that I
+  // thought of everything, and this console lost that bet once already today,
+  // over a picker that went on offering a surface the constraints excluded.
+  //
+  // Three outcomes for a tag and they are deliberately different:
+  //
+  //   KEPT      the ones a post is made of
+  //   UNWRAPPED anything else - its CHILDREN survive, its box does not. This is
+  //             what makes a paste out of a rich editor readable: those come
+  //             wrapped in divs and spans carrying nothing but styling, and
+  //             throwing the wrapper away keeps the words
+  //   DROPPED   subtree and all. Only for tags whose CONTENT is the danger -
+  //             a script's text is the script
+  const POST_KEEP = new Set(['P', 'BR', 'H1', 'H2', 'H3', 'STRONG', 'EM', 'U',
+                             'A', 'UL', 'OL', 'LI', 'IMG', 'BLOCKQUOTE',
+                             'CODE', 'PRE', 'HR']);
+  // Normalised on the way in, so the sheet has one name per thing to style and
+  // execCommand's older spellings do not leak through as a second vocabulary.
+  const POST_AS = { B: 'STRONG', I: 'EM', STRONG: 'STRONG', EM: 'EM',
+                    H4: 'H3', H5: 'H3', H6: 'H3', DIV: null, SPAN: null };
+  const POST_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED',
+                             'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'SELECT',
+                             'TEXTAREA', 'LINK', 'META', 'BASE', 'NOSCRIPT',
+                             'TEMPLATE', 'CANVAS', 'AUDIO', 'VIDEO', 'SOURCE',
+                             'TRACK', 'FRAME', 'FRAMESET', 'APPLET']);
+  const POST_ATTR = { A: ['href', 'title'], IMG: ['src', 'alt', 'title'] };
+  const POST_MAX = 60000;   // characters of markup, well under the route's 4MB
+  const POST_DEEP = 24;     // nesting past which a document is being pathological
+
+  // SCHEMES BY NAME, and everything else refused. javascript: is the obvious one
+  // and is not the only one - vbscript:, data:text/html and a protocol-relative
+  // //host are all URLs that do something other than what they look like. An
+  // allow-list of three does not have to know their names.
+  //
+  // data: is allowed for IMAGES ONLY and only for the four raster types the post
+  // route itself accepts, because that is what a picture off the clipboard
+  // arrives as and there is nowhere else for it to live until it is uploaded.
+  function postUrl(u, isImg) {
+    const t = String(u == null ? '' : u).replace(/[\u0000-\u0020]/g, '');
+    if (/^https?:\/\/[^\s]+$/i.test(t)) return t;
+    if (isImg && /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(t))
+      return t;
+    return '';
+  }
+
+  // Parsed with DOMParser rather than assigned to an element, which matters: a
+  // document made this way is INERT - its scripts do not run, its images are not
+  // fetched, and none of its handlers are wired - so the dangerous string is
+  // never live in this page even for the instant it takes to read it.
+  function postClean(html) {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    const out = document.createElement('div');
+    postWalk(doc.body, out, 0);
+    postTidy(out);
+    return out.innerHTML;
+  }
+
+  function postWalk(from, to, depth) {
+    const kids = Array.prototype.slice.call(from.childNodes);
+    for (let i = 0; i < kids.length; i++) {
+      const ch = kids[i];
+      // Text and nothing else. Comments and processing instructions are dropped
+      // rather than copied: they carry no words a listener reads, and a comment
+      // is a place to hide things in.
+      if (ch.nodeType === 3) { to.appendChild(document.createTextNode(ch.nodeValue)); continue; }
+      if (ch.nodeType !== 1) continue;
+      // UPPERCASED, because tagName is not uppercase for everything. HTML
+      // elements report it uppercase and foreign ones - SVG, MathML - keep
+      // their own case and report lowercase. Without this the drop list misses
+      // an entire namespace: <svg> fell through to the unwrap branch and the
+      // text of the <script> inside it came out as words.
+      const raw = String(ch.tagName || '').toUpperCase();
+      if (POST_DROP.has(raw)) continue;
+      const tag = Object.prototype.hasOwnProperty.call(POST_AS, raw) ? POST_AS[raw] : raw;
+      if (!tag || !POST_KEEP.has(tag) || depth > POST_DEEP) {
+        postWalk(ch, to, depth + 1);          // unwrapped: the words, not the box
+        continue;
+      }
+      const el = document.createElement(tag);
+      const allow = POST_ATTR[tag] || [];
+      for (let j = 0; j < allow.length; j++) {
+        const a = allow[j], v = ch.getAttribute(a);
+        if (v == null) continue;
+        if (a === 'href' || a === 'src') {
+          const u = postUrl(v, tag === 'IMG');
+          if (u) el.setAttribute(a, u);
+        } else {
+          el.setAttribute(a, String(v).slice(0, 300));
+        }
+      }
+      // A link that leaves this page leaves it properly: a new tab, and no
+      // handle back to the opener. rel is set here rather than trusted from the
+      // paste, because the paste is the thing being distrusted.
+      if (tag === 'A') {
+        if (!el.getAttribute('href')) { postWalk(ch, to, depth + 1); continue; }
+        el.setAttribute('rel', 'noopener noreferrer nofollow ugc');
+        el.setAttribute('target', '_blank');
+      }
+      // An image whose source did not survive is not an empty image, it is
+      // nothing at all.
+      if (tag === 'IMG' && !el.getAttribute('src')) continue;
+      postWalk(ch, el, depth + 1);
+      to.appendChild(el);
+    }
+  }
+
+  // What the walk cannot see, because it is about the whole and not any node:
+  // empty boxes left behind when their only content was dropped, and runs of
+  // nothing at the ends.
+  function postTidy(root) {
+    const empties = root.querySelectorAll('p, li, h1, h2, h3, blockquote, u, em, strong');
+    for (let i = empties.length - 1; i >= 0; i--) {
+      const e = empties[i];
+      if (!e.querySelector('img') && !e.textContent.replace(/\s|\u00a0/g, '')) e.remove();
+    }
+    while (root.firstChild && root.firstChild.nodeName === 'BR') root.firstChild.remove();
+    while (root.lastChild && root.lastChild.nodeName === 'BR') root.lastChild.remove();
+  }
+
+  // --- the folder, and what is in it --------------------------------------
+  // Both come from the station and neither is chosen here. show.id is the
+  // broadcast's folder, minted when a source connected; show.posts is what has
+  // been written into it, as n:rev pairs. A console that invented either would
+  // disagree with a second console, and with itself after a reload.
+  let postShow = '', postHas = [], postEditing = 0, postBusy = false;
+  const postBox = $('postbox');
+
+  function postParse(str) {
+    return String(str || '').split(',').filter(Boolean).map(function (t) {
+      const b = t.split(':');
+      return { n: parseInt(b[0], 10) || 0, rev: parseInt(b[1], 10) || 1 };
+    }).filter(function (x) { return x.n > 0; });
+  }
+  const postJoin = (list) => list.map(x => x.n + ':' + x.rev).join(',');
+
+  async function postSync() {
+    try {
+      const res = await fetch('/control/show',
+        { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) return;
+      const d = await res.json();
+      postShow = (d && d.id) || '';
+      postHas = postParse(d && d.posts);
+      postDraw();
+    } catch {}
+  }
+
+  // Sent with the show, because the station takes the whole show in one call -
+  // so the list travels the same way the name does and there is one endpoint
+  // that can be caught disagreeing with itself rather than two.
+  async function postPushList() {
+    const q = 'name='    + encodeURIComponent($('showname').value.trim()) +
+              '&title='  + encodeURIComponent($('showtitle').value.trim()) +
+              '&artist=' + encodeURIComponent($('showartist').value.trim()) +
+              '&note='   + encodeURIComponent($('shownote').value.trim()) +
+              '&posts='  + encodeURIComponent(postJoin(postHas));
+    const res = await fetch('/control/show?' + q,
+      { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+    if (!res.ok) throw new Error('the station would not take the list: HTTP ' + res.status);
+    const d = await res.json();
+    postHas = postParse(d && d.posts);
+  }
+
+  function postDraw() {
+    const live = !!postShow;
+    $('postbtn').disabled = !live || postBusy;
+    $('postbtn').textContent = postEditing ? 'Repost #' + postEditing : 'Post';
+    $('postcancel').hidden = !postEditing;
+    $('poststat').textContent = live
+      ? (postHas.length ? postHas.length + ' on the radio now, in ' + postShow
+                        : 'Nothing posted yet. This show is ' + postShow + '.')
+      : 'Go on air first - a post belongs to a broadcast, and the folder it is written into is the broadcast.';
+    const ol = $('postlist');
+    ol.textContent = '';
+    const seen = postHas.slice().reverse();     // newest first, as the radio shows them
+    for (const it of seen) {
+      const li = ol.appendChild(document.createElement('li'));
+      const n = li.appendChild(document.createElement('span'));
+      n.className = 'pn'; n.textContent = '#' + it.n;
+      const t = li.appendChild(document.createElement('span'));
+      t.className = 'pt'; t.textContent = 'loading…';
+      postPreview(it, t);
+      const ed = li.appendChild(document.createElement('button'));
+      ed.className = 'tbtn'; ed.textContent = 'Edit';
+      ed.addEventListener('click', () => postLoad(it));
+      const rm = li.appendChild(document.createElement('button'));
+      rm.className = 'tbtn'; rm.textContent = 'Take down';
+      rm.addEventListener('click', () => postDrop(it));
+    }
+  }
+
+  // The preview is TEXT, taken with textContent off a sanitised parse. Even here,
+  // in a list on the host's own console, the markup never becomes live markup.
+  async function postPreview(it, into) {
+    try {
+      const raw = await postFetch(it);
+      const d = new DOMParser().parseFromString(postClean(raw), 'text/html');
+      const txt = d.body.textContent.replace(/\s+/g, ' ').trim();
+      into.textContent = txt || '(a picture)';
+    } catch { into.textContent = '(could not be read back)'; }
+  }
+
+  async function postFetch(it) {
+    const res = await fetch('/posts/' + encodeURIComponent(postShow) + '/' + it.n +
+                            '.md?r=' + it.rev, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.text();
+  }
+
+  async function postLoad(it) {
+    try {
+      postBox.innerHTML = postClean(await postFetch(it));
+      postEditing = it.n;
+      postDraw();
+      postBox.focus();
+      say('postmsg', 'Editing #' + it.n + '. Repost to replace it on the radio.');
+    } catch (e) { $('posterr').textContent = 'Could not open #' + it.n + ': ' + e.message; }
+  }
+
+  // Off the LIST and not off the disk. The file stays exactly where it is - that
+  // is what makes the archive possible - and the station simply stops mentioning
+  // it, which is the same mechanism that takes every post down when a show ends.
+  async function postDrop(it) {
+    if (postBusy) return;
+    postBusy = true; postDraw();
+    try {
+      postHas = postHas.filter(x => x.n !== it.n);
+      await postPushList();
+      if (postEditing === it.n) { postEditing = 0; postBox.textContent = ''; }
+      say('postmsg', '#' + it.n + ' is off the radio. The file is still on Dolly.');
+      $('posterr').textContent = '';
+    } catch (e) {
+      $('posterr').textContent = 'Could not take it down: ' + e.message;
+      await postSync();
+    } finally { postBusy = false; postDraw(); }
+  }
+
+  async function postSend() {
+    if (postBusy || !postShow) return;
+    const html = postClean(postBox.innerHTML);
+    if (!html.replace(/<[^>]*>|\s|&nbsp;/g, '')  && html.indexOf('<img') < 0)
+      return void ($('posterr').textContent = 'There is nothing in it to post.');
+    if (html.length > POST_MAX)
+      return void ($('posterr').textContent =
+        'That is ' + html.length + ' characters of markup, and the ceiling is ' +
+        POST_MAX + '. Split it into two posts.');
+    postBusy = true; postDraw();
+    $('posterr').textContent = '';
+    try {
+      const now = new Date().toISOString();
+      const isEdit = !!postEditing;
+      const n = isEdit ? postEditing
+                       : (postHas.reduce((m, x) => Math.max(m, x.n), 0) + 1);
+      const rev = isEdit ? ((postHas.find(x => x.n === n) || { rev: 1 }).rev + 1) : 1;
+      // An HTML comment, which markdown carries through untouched and every
+      // reader of this file skips. It is the only place the time of a post is
+      // written down: the station's list has no room for it and the archive will
+      // want it long after the station has forgotten the show.
+      const body = '<!-- posted ' + now + ' rev ' + rev + ' -->\n' + html + '\n';
+      const put = await fetch('/host/post/' + encodeURIComponent(postShow) + '/' + n + '.md',
+        { method: 'PUT', credentials: 'same-origin',
+          headers: { 'Content-Type': 'text/markdown; charset=utf-8' }, body });
+      if (!put.ok) throw new Error('the file would not save: HTTP ' + put.status);
+      // The list AFTER the file, always. A number the station is telling
+      // listeners about, whose file is not there yet, is a card that fetches a
+      // 404 on every radio in the room.
+      postHas = postHas.filter(x => x.n !== n).concat([{ n: n, rev: rev }])
+                       .sort((a, b) => a.n - b.n);
+      await postPushList();
+      postEditing = 0;
+      postBox.textContent = '';
+      say('postmsg', (isEdit ? 'Reposted #' : 'Posted #') + n + '.');
+    } catch (e) {
+      $('posterr').textContent = String(e && e.message || e);
+      await postSync();
+    } finally { postBusy = false; postDraw(); }
+  }
+
+  // --- the editor ----------------------------------------------------------
+  // PASTE IS THE WHOLE POINT, so it is intercepted rather than left to the
+  // browser. What the browser would insert is the source markup with its styles,
+  // its classes, its trackers and whatever else came with it; what goes in is
+  // what survives the walk.
+  postBox.addEventListener('paste', (e) => {
+    const dt = e.clipboardData;
+    if (!dt) return;
+    e.preventDefault();
+    const html = dt.getData('text/html');
+    if (html) {
+      document.execCommand('insertHTML', false, postClean(html));
+      return;
+    }
+    // Plain text arrives as text and stays text. insertText rather than building
+    // paragraphs from it: a host who pasted a URL meant a URL, not a link, and
+    // the Link button is right there.
+    document.execCommand('insertText', false, dt.getData('text/plain') || '');
+  });
+
+  // A drop is a paste that arrived by another road, and it carries the same
+  // markup with the same problems.
+  postBox.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    e.preventDefault();
+    const html = dt.getData('text/html');
+    document.execCommand(html ? 'insertHTML' : 'insertText', false,
+                         html ? postClean(html) : (dt.getData('text/plain') || ''));
+  });
+
+  // mousedown and not click, so the button never takes the selection away from
+  // the box it is about to format.
+  for (const b of $('posttools').querySelectorAll('button[data-cmd]')) {
+    b.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      postBox.focus();
+      document.execCommand(b.dataset.cmd, false, b.dataset.arg || null);
+    });
+  }
+  $('postlink').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    postBox.focus();
+    const sel = String(document.getSelection());
+    if (!sel) return void say('postmsg', 'Select the words first, then press Link.');
+    const u = window.prompt('Link ' + JSON.stringify(sel) + ' to which address?', 'https://');
+    if (!u) return;
+    const safe = postUrl(u, false);
+    if (!safe) return void ($('posterr').textContent =
+      'Only http and https addresses can go in a post.');
+    document.execCommand('createLink', false, safe);
+  });
+  $('postbtn').addEventListener('click', postSend);
+  $('postclear').addEventListener('click', () => {
+    postBox.textContent = ''; postEditing = 0; $('posterr').textContent = ''; postDraw();
+  });
+  $('postcancel').addEventListener('click', () => {
+    postBox.textContent = ''; postEditing = 0; postDraw();
+    say('postmsg', 'Left as it was.');
+  });
+
+  // Only while there is a show to post into, and only while the panel is open.
+  // The same rule the listener page keeps: nothing polls a station that has
+  // nothing to say to it.
+  setInterval(() => {
+    if ($('postwrap').open || postShow) postSync();
+  }, 5000);
+  postSync();
+
   // Moving the dip while talking should be audible now, not at the next press.
   $('airduck').addEventListener('change', () => {
     if (!airTabGain || !airAC) return;
