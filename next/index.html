@@ -54,12 +54,18 @@
        the size a control is, on a small pressing or a large one, so both hold the
        exact measurements they were cut to at eighty-four - 20.41px of symbol and
        4.61px of hole - and the red grows around them instead of with them. The
-       clearances round that hole are the reason both numbers are frozen, and they
-       are now 2.35px of white inside the triangle and 2.45px of red between the
-       hole and each pause bar, measured off the rendered button and not derived.
-       The white moves with where the button lands on the page and the red does
-       not, which is a fact about the raster rather than about the drawing; the
-       symbol explains it.
+       hole is the reason both numbers are frozen, and what it now leaves is not
+       the same on both symbols: 2.35px of white inside the triangle, and on the
+       pause NO red at all, because the pin is punched through the bars rather
+       than fitted between them. The symbol's own paragraph has that argument.
+
+       --ctl is no longer a font size either, for the reason --cue stopped being
+       one four paragraphs down: the symbols on the paper are drawn now, not
+       typed. So it is the thing it was always a proxy for - the HEIGHT of the ink
+       on the label - and both symbols ink exactly it. That closes something this
+       file wrote down as open: two glyphs at two font sizes rounded their line
+       boxes to different pixels, and at three layout phases in seventeen the ink
+       jumped a whole pixel vertically as the state flipped. One box cannot.
        Scale them with the disc and the bars grow by a third too, and the
        label ends up exactly as full as it started, which is what was asked to
        change.
@@ -91,7 +97,7 @@
        width, or the record is already on the spindle before it is lowered and
        there is nothing for the lowering to show. */
     --lp: 112px;
-    --ctl: 20.41px;
+    --ctl: 26.20px;
     --hole: 4.61px;
     --cue: 45px;
     --seat: 9.22px;
@@ -1214,14 +1220,10 @@
      untouched by this round. What still binds is the hole, which has not moved and
      is not allowed to.
 
-     It takes two font sizes to get one symbol size: U+25B6 inks 0.783 of its em
-     and the pair of U+275A bars inks 0.700 of theirs, so set at a single size the
-     bars come out a pixel and a half shorter than the triangle and the pause reads
-     as the smaller of the two controls. Set at these two, the ink of both measures
-     sixteen pixels tall to the eighth of a pixel the raster can resolve, which is
-     the thing being compared. They stay fractions of --lp rather than becoming
-     fixed pixels so that the symbol still travels if the record is ever resized,
-     even though here it was the symbol that decided the record's size.
+     It used to take two font sizes to get one symbol size, because U+25B6 inks
+     0.783 of its em and the pair of U+275A bars inks 0.700 of theirs, so a single
+     size left the bars a pixel and a half shorter than the triangle. Both symbols
+     are drawn now and the height is simply --ctl, which is what --ctl means.
 
      The height is the axis the two symbols share, and it is now the only axis
      either of them is set on. A round of this file stretched the triangle
@@ -1323,36 +1325,77 @@
      The best any value can do for the worst case is 2.09px, so .0087em is within a
      thirtieth of a pixel of the best there is and stays.
 
-     Two things follow that should not be quietly forgotten. The first is that
-     2.39px of white was never rendered by anything; it was derived from an ideal
-     triangle's inradius rather than measured, which is the one thing every other
-     number in this file is not, and the button was drawing between 1.90 and 2.33px.
-     The second is that the two symbols snap independently - they are set at
-     different sizes, so their line boxes round to different pixels - and at three
-     phases in seventeen the ink JUMPS a whole pixel vertically as the state flips.
-     That is not caused by anything here and is not fixed by anything here; it was
-     already happening, it costs nothing measurable in clearance, and closing it
-     would mean giving both symbols one font size and equalising their ink height
-     some other way. Written down because it is invisible until it is looked for.
+     One thing follows that should not be quietly forgotten: 2.39px of white was
+     never rendered by anything. It was derived from an ideal triangle's inradius
+     rather than measured, which is the one thing every other number in this file
+     is not, and the button was drawing between 1.90 and 2.33px.
 
-     The red between the hole and the bars has none of this trouble. It comes from
-     letter-spacing, which is horizontal, and horizontal glyph placement is not
-     snapped: 2.445px at every one of the seventeen phases, to the thousandth. */
-  .lp-sym { grid-area: 1 / 1; font-size: var(--ctl);
-            transform: translate(.1211em, .0087em); }
-  /* Keyed off the glyph rather than off the button, and the copies are what
-     forced it. A record travelling onto the deck carries the pause bars
-     whatever the button is doing while it travels, and while it travels the
-     button is `loading` and not `spinning` - so a selector that asked the
-     BUTTON which symbol was printed would set a pair of bars at the triangle's
-     size with none of the letter-spacing that opens the gap the spindle hole
-     sits in, and the hole would rest on both bars at once. That is the fault
-     the 9.50px gap forty lines up was measured to avoid. Whoever writes the
-     glyph writes this class with it, which is the only arrangement in which the
-     metrics cannot disagree with the ink they were measured for. */
-  .lp-sym.bars { font-size: calc(var(--ctl) * 1.1152);
-                 letter-spacing: .2348em;
-                 transform: translate(.1174em, 0); }
+     The other thing that followed has been fixed rather than written down. The
+     two symbols used to snap independently - two font sizes, two line boxes,
+     rounding to different pixels - and at three phases in seventeen the ink
+     JUMPED a whole pixel vertically as the state flipped. The note here said
+     closing it would mean giving both symbols one font size and equalising their
+     ink height some other way. It meant giving them one BOX: they are two paths
+     in one svg now, of one height, and there is nothing left to snap apart. */
+  /* THE SYMBOL ON THE PAPER, DRAWN. Two paths in one box, in the deck cue's own
+     coordinate system - 1000 by 838, with the triangle the cue's own path - so
+     "the same symbol as the play triangle" is not a claim about two fonts that
+     happen to agree, it is the same seven numbers scaled down onto the label.
+     The box is --ctl tall and 1000/838 of that wide, which puts the triangle's
+     ink at 14.714 x 16.440 and the bars' at exactly the same, because the bars
+     are drawn to the 750 units of width the triangle inks. The two states now
+     have ONE footprint, where the font gave them 14.25 x 15.94 and 21.38 x 15.94
+     and a paragraph explaining why that was tolerable.
+
+     No transform. The two translate()s that were here corrected for a glyph's
+     ink not being centred in its em, and a path is centred where it is drawn.
+
+     THE BARS ARE 238 UNITS WIDE WITH 274 BETWEEN THEM, which is 7.44px and
+     8.57px at this height, leaving 1.98px of red each side of a 4.61px spindle.
+     Bars and gap are within a sixth of each other, which is what a pause button
+     is everywhere: two marks of about the width of the space between them.
+
+     THE SYMBOL GREW TO GET THERE, and the growth is the whole answer rather than
+     an incidental cost of it. The complaint was that the pause was too wide, and
+     it was: 21.75px across at 16.44px tall, a pair a third wider than it was
+     tall, which no pause button anywhere is. But the width was not free to come
+     down. A standard pause puts about a third of itself in the gap, and the gap
+     has to clear the spindle, so at 16.44px tall a 1:1:1 pause has a 4.90px gap
+     round a 4.61px hole - 0.15px of red, which is the tangent that was ruled
+     out. Slimming the bars to buy gap reaches 0.74px and then the bars are
+     slivers. THERE IS NO STANDARD PAUSE AT THAT HEIGHT. Nine were drawn on this
+     label and looked at before that was believed.
+
+     So the proportion was fixed by making it taller rather than narrower, and
+     what was actually wrong was never the outer width - it was the bars being
+     far apart in a short symbol. 1.98px of red also clears the 1.51px this file
+     has on record as the width at which red between a dark hole and a white bar
+     stops reading as red and starts reading as one accidental stripe across the
+     middle of the label, which is the owner of this page's own verdict on it.
+
+     THE BITE WAS TRIED FIRST, at 309 units with 132 between them - a 2.59px gap
+     round a 4.61px hole, so the spindle overhung each bar by 1.01px and was
+     punched through the pair rather than fitted between them. On paper it was
+     the operator's own suggestion carried out to the sixth of a bar. Drawn, it
+     is not a pause: 6.06px bars with 2.59px between them fuse into one
+     letterform and the label reads as a capital H with a dot in the middle. The
+     arithmetic could not have said so and the raster said so immediately. Kept
+     here because the next person to have that idea should get the answer in one
+     paragraph instead of one round. */
+  .lp-sym { grid-area: 1 / 1; display: block;
+            height: var(--ctl); width: calc(var(--ctl) * 1000 / 838); }
+  /* Which of the two is printed. Keyed off the SYMBOL and not off the button,
+     and the copies are what forced it: a record travelling onto the deck carries
+     the bars whatever the button is doing while it travels, and while it travels
+     the button is `loading` and not `spinning`. Whoever chooses the shape writes
+     this class with it.
+
+     `off` is the connecting state, which shows neither. It is last because it
+     has to beat the rule above it and they are the same specificity. */
+  .lp-sym .sy-bars { display: none; }
+  .lp-sym.bars .sy-tri { display: none; }
+  .lp-sym.bars .sy-bars { display: inline; }
+  .lp-sym.off .sy-tri, .lp-sym.off .sy-bars { display: none; }
   /* The record is the whole face of the button turning with a symbol printed on
      it, which is a great deal of motion, so under reduced-motion it stops
      outright. It is named here rather than being left to
@@ -1495,9 +1538,14 @@
   .recent h3 { font-size: .66rem; letter-spacing: .16em; color: var(--dim);
                font-weight: 500; margin: 0 0 7px; }
   .recent ol { list-style: none; margin: 0; padding: 0; }
+  /* No `gap`. The marks now sit in front of the name rather than at the far
+     end of the row, and a single gap between every pair of children cannot
+     hold them tight to it: what is wanted is two marks close to each other and
+     close to the name, not three evenly spaced things. So the spacing is on the
+     marks themselves and a row with no marks has none of it. */
   .recent li { font-size: .82rem; color: var(--dim); padding: 4px 0;
                border-bottom: 1px solid var(--line);
-               display: flex; gap: 10px; align-items: baseline; }
+               display: flex; align-items: baseline; }
   .recent li:last-child { border-bottom: 0; }
   .recent li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   /* What a song was liked to, in the mark you press to like one. The heart is
@@ -1507,23 +1555,34 @@
      it would be the only coloured thing in a column of grey. The number rides
      beside it with no word of any language between them, which is the standing
      rule for every control and reading on this page.
-     Tabular figures because the counts are in a column and a 1 that is narrower
-     than a 7 makes a ragged edge out of a straight one. Never wrapped and never
-     shrunk: the title gives way, because a title that loses its last word is
-     still readable and a count that loses a digit is a different number. */
+     Tabular figures, though the column they were straightening has gone: the
+     marks are in front of the name now, so what a narrow 1 moves is where the
+     TITLE starts, and titles that start at different places down a list read as
+     a ragged left edge. Same reason, other side of the number.
+
+     The names do still start at different places, because a row carrying a
+     heart and a count is wider than a row carrying a count alone and most rows
+     carry neither. That is accepted rather than fixed. Fixing it means a mark
+     column of a fixed width, which indents every title in the list by a column
+     that is empty four rows in five - paying in every row for the alignment of
+     the few, when the request was for the marks to sit TIGHT to the name.
+
+     Never wrapped and never shrunk: the title gives way, because a title that
+     loses its last word is still readable and a count that loses a digit is a
+     different number. */
   /* The vote-off mark, at the likes' weight rather than louder. It is a fact
      about how a song ended, not a verdict on it, and a row of them shouting
      would make Earlier read as a list of failures. */
-  .recent li .k { flex: none; color: var(--dim); font-size: .82em; margin-left: 6px; }
+  .recent li .k { flex: none; color: var(--dim); font-size: .82em; margin-right: 6px; }
   .recent li .l { flex: none; font-variant-numeric: tabular-nums;
-                  letter-spacing: .04em; white-space: nowrap; }
+                  letter-spacing: .04em; white-space: nowrap; margin-right: 6px; }
   /* A host was on the microphone. The same dot, in the same red, that the panel
      and the header already use for that fact, so it needs no word and no
      translation - a listener has seen this mark mean exactly this. It does NOT
      pulse: the pulse says something is happening now, and everything in this
      list is over. Centred rather than on the baseline, because the row is
      baseline-aligned for text and a 7px circle has no baseline to sit on. */
-  .recent li .dot { background: var(--air); align-self: center; }
+  .recent li .dot { background: var(--air); align-self: center; margin-right: 8px; }
   .empty { font-size: .84rem; color: var(--dim); padding: 12px 0; }
   .privacy { font-size: .7rem; color: var(--dim); margin-top: 9px; line-height: 1.45; }
   .replying { font-size: .78rem; color: var(--dim); margin-bottom: 9px;
@@ -1615,7 +1674,7 @@
       </div>
       <div class="controls">
         <div class="deck">
-          <button class="play empty" id="btn" disabled aria-label="Play or pause"><span class="lp-well" aria-hidden="true"><svg class="lp-cue" viewBox="0 0 1000 838"><path fill="currentColor" d="M250 0 1000 419 250 838Z"/></svg><span class="lp-pin"></span></span><span class="lp-disc" aria-hidden="true"><span class="lp-label"><span class="lp-sym" id="btnsym">▶</span><span class="lp-hole"></span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
+          <button class="play empty" id="btn" disabled aria-label="Play or pause"><span class="lp-well" aria-hidden="true"><svg class="lp-cue" viewBox="0 0 1000 838"><path fill="currentColor" d="M250 0 1000 419 250 838Z"/></svg><span class="lp-pin"></span></span><span class="lp-disc" aria-hidden="true"><span class="lp-label"><svg class="lp-sym" id="btnsym" viewBox="0 0 1000 838"><path class="sy-tri" fill="currentColor" d="M250 0 1000 419 250 838Z"/><path class="sy-bars" fill="currentColor" d="M125 0h238v838H125zM637 0h238v838H637z"/></svg><span class="lp-hole"></span></span></span><span class="lp-glint" aria-hidden="true"></span></button>
           <div class="clocks" id="intotrack">--:-- / --:--</div>
         </div>
         <div class="vol">
@@ -1906,16 +1965,21 @@
   // anywhere, because the word that used to sit above the symbol has gone; the
   // disc is hidden from assistive technology precisely so that the name never
   // becomes a decoration that happens to be upside down half the time.
-  const GLYPH_PLAY = '▶', GLYPH_PAUSE = '❚❚';
+  // The glyphs are gone. U+25B6 and a pair of U+275A drew both symbols until the
+  // pause had to be a standard one, and a font could not give a standard one: the
+  // pair inks a third wider than it is tall and the only lever on the gap was
+  // letter-spacing, which moves the bars apart without making either narrower.
   function setBtn(state) {
     btn.classList.toggle('loading', state === 'loading');
     btn.classList.toggle('spinning', state === 'pause');   // the record turns only while sound is coming out
-    sym.textContent = state === 'loading' ? '' :
-                      state === 'pause'   ? GLYPH_PAUSE : GLYPH_PLAY;
-    // The bars are set at their own size with their own gap - see .lp-sym.bars
-    // - and the class is written here with the glyph rather than being derived
-    // from the state, because the copies the carriage is built from carry the
-    // bars while the button says `loading`.
+    // Classes, not textContent. The symbol is two paths in one svg now, and
+    // writing text into it would empty the drawing - which is the one way this
+    // could fail silently, since an empty svg is a blank label and not an error.
+    //
+    // The class is written here with the shape rather than being derived from
+    // the state, because the copies the carriage is built from carry the bars
+    // while the button says `loading`.
+    sym.classList.toggle('off', state === 'loading');
     sym.classList.toggle('bars', state === 'pause');
     btn.setAttribute('aria-label', state === 'loading' ? 'Connecting to the stream' :
                                    state === 'pause'   ? 'Pause' : 'Play');
@@ -2533,7 +2597,11 @@
       // read - and a host who typed nothing is the dot alone, which is the
       // honest reading of somebody who went on and said nothing about it.
       if (e.k === 'live') li.appendChild(document.createElement('span')).className = 'dot';
-      const t = li.appendChild(document.createElement('span'));
+      // The name is built first and INSERTED last, because what it reads like -
+      // whether there is a heart to put in front of it, and whether the room took
+      // the song off - is worked out below from the name itself. Building it in
+      // place and moving it afterwards would be the same thing done twice.
+      const t = document.createElement('span');
       t.className = 't';
       // textContent, not innerHTML. On a live row this is a show name one
       // person typed and everybody else is being shown.
@@ -2569,6 +2637,11 @@
         k.textContent = '\u23ED\uFE0E';
         k.title = 'voted off';
       }
+      // Last, so everything that is a MARK about this row is in front of it. The
+      // dot is the exception and is already there: it is drawn before the name
+      // because it says what KIND of row this is rather than what happened to it,
+      // and a live row has to be recognisable before it is read.
+      li.appendChild(t);
       ol.appendChild(li);
     });
     wrap.hidden = past.length === 0;
@@ -3337,8 +3410,13 @@
     // blank and had a symbol appear on it after it landed.
     const d = car.appendChild(document.createElement('span')); d.className = 'lp-disc';
     const lab = d.appendChild(document.createElement('span')); lab.className = 'lp-label';
-    const sy = lab.appendChild(document.createElement('span')); sy.className = 'lp-sym bars';
-    sy.textContent = GLYPH_PAUSE;
+    // Cloned from the real symbol rather than built beside it, so a copy cannot
+    // be drawn from a second description of the same shape. setAttribute and not
+    // className: on an svg element className is an SVGAnimatedString and assigning
+    // to it does nothing at all - silently, which is how it would have shipped.
+    const sy = lab.appendChild(sym.cloneNode(true));
+    sy.removeAttribute('id');
+    sy.setAttribute('class', 'lp-sym bars');
     lab.appendChild(document.createElement('span')).className = 'lp-hole';
     btn.insertBefore(car, btn.querySelector('.lp-glint'));
     btn.classList.add('shoving');
