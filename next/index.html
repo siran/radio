@@ -556,8 +556,10 @@
 
      The floor is therefore TRAVEL + SEAT = 660ms, the same for a change as for
      an arrival, where a change used to need SEAT + TRAVEL + TRAVEL + SEAT.
-     Under it there is nothing to see, and the station has a floor of its own -
-     record_min, on the desk - which sits above it and is what actually binds.
+     Under it there is nothing to see. The station has a floor of its own -
+     record_min, on the desk - and it is set to nought, because this one already
+     does the job that one was added for: nothing here can complete in a blink,
+     so there is nothing left for a second floor to stop.
 
      The copy is offset with `left` rather than a transform, and that is not a
      preference: it carries spin, spin drives transform, and one property cannot
@@ -2848,9 +2850,12 @@
   // reason, which is what 2400 became the moment the middle came out.
   //
   // record_min is still a floor under it and is read from the station, so a
-  // desk that wants a longer minimum gets one - and at the 1.2s this station
-  // sets it is what actually binds, stretching the travel and leaving the seat
-  // alone. Nothing here is a ceiling: a change that is covering a wait - the
+  // desk that wants a longer minimum gets one - but this station sets it to
+  // nought, so 660 is what binds and the record crosses at the speed it is
+  // carried at. It sat at 1.2s, and what that bought was every natural change
+  // stretched 540ms past the length of the move - 147px/s instead of 267 - for
+  // no reason anybody chose. Nothing here is a ceiling: a change that is
+  // covering a wait - the
   // tug, or a page that found out late - is timed by that wait and not by this.
   const CHANGE_NATURAL = 660;
   // How near two boundaries have to be before they are taken for one, which is
@@ -2998,11 +3003,15 @@
   // what the page has been told but is not showing yet.
   let changeUntil = 0, changeCar = null, changeAnim = null, changeTimer = 0;
   let changeArriving = false;
-  // Where in a booked arrival the last carry-and-seat begins, so the `playing`
-  // event can jump to it. Worked out where the arrival is booked rather than in
-  // the handler, because a record returning from the park has PARK per cent of
-  // a window to cross and one arriving from off the window has a whole one.
-  let arriveSeat = 0;
+  // What the arrival in progress was BOOKED for: the length it is being drawn
+  // over, and how much of a window its record has to cross. Kept because the
+  // booking is a guess at how long this browser will take to make a sound, and
+  // when the sound comes the `playing` handler has to work out what is left of
+  // a journey that was laid out for a different length. Remembered here rather
+  // than recomputed there, because a record returning from the park has PARK
+  // per cent of a window to cross and one arriving from off the window has a
+  // whole one, and the handler cannot tell which it is looking at.
+  let arriveTotal = 0, arriveCarry = 0;
   // A record lifted off the pin and standing beside the deck. Not the same fact
   // as an empty deck and not drawn like one: there IS a record, this session
   // put it there, and pressing play brings that one back rather than fetching a
@@ -3136,18 +3145,60 @@
       fillCold = false;
     }
     // A record arriving was booked against a guess at this moment, and this
-    // moment is the answer. Sound has started, so the arrival finishes now
-    // rather than at the length it was booked for. It is seeked to the START of
-    // the carry rather than to the end: a record that snaps into place has not
-    // been put there by anybody, and a travel and a seat is what it costs to be
-    // put there. What is thrown away is only the waiting - the stretch where the
-    // record sits off to the right with nothing happening - which is exactly the
-    // part that was a guess. If the booking was too short the record is already
-    // down and there is nothing to correct: a record on the platter waiting for
-    // sound is a state this button has always had and still draws.
+    // moment is the answer. Sound has started, so the rest of the journey is no
+    // longer covering a wait and is shortened to what it costs to make: the
+    // record finishes crossing at the speed a record is carried at, and seats.
+    //
+    // RE-TIMED AND NEVER SEEKED. This used to set currentTime forward, which was
+    // exactly right while an arrival held off-screen for all but the last 660ms:
+    // the seek landed on the frame the carry began and what it skipped was a
+    // stationary record. There is no hold any more - the travel is spread over
+    // the whole booking, which is what makes it the speed test the operator
+    // asked for - so the same seek now jumps the record most of the way across
+    // the window and then creeps the last tenth of it over 420ms. A jump and a
+    // crawl, where the point of the correction was to remove a wait.
+    //
+    // So the position is left alone and the CLOCK is rebuilt around it. Only the
+    // travel is rescaled; SEAT keeps its length, for the reason it always keeps
+    // its length - it is a physical event and not a wait.
+    //
+    // If the booking was too short the record is already down, or nearly, and
+    // there is nothing to correct: a record on the platter waiting for sound is
+    // a state this button has always had and still draws.
     if (!changeArriving) return;
-    if (!changeAnim) return endChange(true);
-    if (changeAnim.currentTime < arriveSeat) changeAnim.currentTime = arriveSeat;
+    if (!changeAnim || !changeCar) return endChange(true);
+    const cur = changeAnim.currentTime, travelMs = arriveTotal - SEAT;
+    if (!(travelMs > 0) || cur >= travelMs) return;   // already seating
+    const left = 1 - cur / travelMs;                  // of the crossing, still to make
+    const tail = left * arriveCarry + SEAT;
+    if (tail >= arriveTotal - cur) return;            // the booking was already the shorter
+    // WHERE THE RECORD IS, READ RATHER THAN WORKED OUT, and where it was already
+    // going, taken from the animation being replaced. Neither is computed here and
+    // that is the point: the three moves that end in a seat do not travel the same
+    // line - an arrival and a change cross from a window clear of the right edge,
+    // a return comes back from the park - so any line written down here would be
+    // right for some of them and wrong for the rest. The first version of this was
+    // written to the arrival's line and teleported a returning record 122px, which
+    // is the fault it exists to remove, reintroduced by assuming.
+    //
+    // The last two keyframes are the same two whatever the move: above the pin at
+    // the end of the crossing, and down on it. Only what precedes them differs,
+    // and what precedes them is now a matrix read off the element.
+    const kf = changeAnim.effect.getKeyframes();
+    if (kf.length < 2) return;
+    const here = getComputedStyle(changeCar).transform;
+    const overPin = kf[kf.length - 2].transform, down = kf[kf.length - 1].transform;
+    changeAnim.onfinish = null;
+    changeAnim.cancel();
+    changeAnim = changeCar.animate([
+      { transform: here, offset: 0 },
+      { transform: overPin, offset: 1 - SEAT / tail },
+      { transform: down, offset: 1 },
+    ], { duration: tail, easing: 'linear', fill: 'forwards' });
+    changeAnim.onfinish = () => endChange(true);
+    // The title and the clock land with the record, so the deadline they are
+    // held to moves with it.
+    changeUntil = Date.now() + tail;
   });
 
   // Everything the page was told while the record was being changed, put on
@@ -3469,12 +3520,12 @@
   //
   // Two floors under that, and they are floors of different kinds. TRAVEL + SEAT
   // is mechanical: it is what the drawing costs, and nothing can be drawn in
-  // less. record_min is the station's, set on the desk, and it is there because a
-  // fast connection produces a true measurement that is too SHORT to see - a
-  // record change that completes in two hundred milliseconds is a flicker rather
-  // than a record being changed. Neither is a target and neither can make a
-  // change shorter than the wait it is covering; they only stop a short wait
-  // being drawn as nothing at all.
+  // less - and it is also what stops a fast connection's true measurement being
+  // drawn as a flicker, since two hundred milliseconds of record change is not a
+  // record being changed. record_min is the station's, set on the desk, and it
+  // is at nought: the mechanical floor already covers the only case it was added
+  // for. Neither is a target and neither can make a change shorter than the wait
+  // it is covering; they only stop a short wait being drawn as nothing at all.
   //
   // The deck is lit here rather than in carry(), because carry() is the one part
   // of this that a listener may not get: reduced motion refuses the travel, and
@@ -3494,7 +3545,7 @@
                            Math.max(carryMs + SEAT, recordMinMs, fillMs || FILL_GUESS));
     changeUntil = Date.now() + total;
     changeArriving = true;
-    arriveSeat = total - carryMs - SEAT;
+    arriveTotal = total; arriveCarry = carryMs;
     btn.classList.add('arriving');
     if (stillness.matches || !carry(total, mode)) {
       changeTimer = setTimeout(() => endChange(true), total);

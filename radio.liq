@@ -179,12 +179,21 @@ glide      = interactive.float("glide",
 # floor and never a target: it cannot make a change SHORTER than the wait, only
 # stop a short wait looking like nothing happened.
 #
-# On the desk rather than in the page because it is a matter of taste about how
-# the station presents itself, it applies to every listener at once, and the
-# operator asked for it there.
+# It defaults to NOUGHT, and did not always. The page has a mechanical floor of
+# its own - 660ms, one travel across the window plus the drop onto the pin, and
+# nothing can be drawn in less than what drawing it costs - so the flicker this
+# was added to prevent is already impossible. At the 1.2s it sat at, all it did
+# was stretch every natural change 540ms past the length of the move: the same
+# record carried at 147px/s instead of the 267 the page has on record as the
+# speed a record is carried at. A slower move for no reason anybody chose.
+#
+# It stays on the desk, at nought, because it is still the right lever if the
+# station ever wants a longer minimum ON PURPOSE: it is a matter of taste about
+# how the station presents itself, it applies to every listener at once, and
+# the operator asked for it there.
 record_min = interactive.float("record_min",
   description = "Shortest a record change may take on the listener page. A floor under their own buffering time, so a fast connection still sees a record change rather than a flicker.",
-  unit = "s", min = 0.0, max = 6.0, step = 0.1, (dcfg.record_min ?? 1.2))
+  unit = "s", min = 0.0, max = 6.0, step = 0.1, (dcfg.record_min ?? 0.0))
 
 # --- talking in time with the music ----------------------------------------
 # How far the music is held back before it goes to air, so that a host talking

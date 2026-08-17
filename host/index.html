@@ -1756,7 +1756,7 @@
     // A floor under the listener page's change of record, never a target: the
     // page times that animation from its OWN buffering, and on a fast line
     // that number gets small enough that a record change reads as a flicker.
-    record_min: { unit: ' s',     min: 0,    max: 6,   step: 0.1,  val: 1.2  }
+    record_min: { unit: ' s',     min: 0,    max: 6,   step: 0.1,  val: 0.0  }
   };
   const showKnob = k => { $(k + 'val').textContent = $(k).value + KNOBS[k].unit; };
 
