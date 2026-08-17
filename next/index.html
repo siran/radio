@@ -1755,18 +1755,6 @@
   let stationName = '', stationDesc = '';
   let replyTo = null;   // filename of the message being replied to
 
-  // TWO OWNERS OF ONE FLAG, and the rule between them is not symmetrical: the
-  // tug may silence this element, and only the listener may give the sound
-  // back. Written the other way round, a track being voted off in the middle
-  // of somebody's deliberate silence would turn their radio back on.
-  //
-  // Kept as a variable rather than remembered across loads, which is what the
-  // volume beside it does too. A radio that opens silent is a radio that looks
-  // broken, and the argument that saved the switch - that the state is visible
-  // on screen - is weaker on a page somebody has just opened and is not yet
-  // looking at.
-  let userMuted = false;
-
   // --- the dash on the panel, and who owns taking it off -------------------
   // Two things put a dash where the track name goes - the tug silencing a song
   // it has voted off, and the station going unreachable - and until this
@@ -1811,31 +1799,73 @@
     if (blanked && lastTitle !== null && !waiting()) showTitle(lastTitle);
   }
 
-  // The glyph is the state. Zero on the slider draws the crossed speaker even
-  // with the switch up, because a slider at nothing IS silence and an icon
-  // that said otherwise would be lying about what you can hear.
+  // THE SPEAKER IS A MUTE IN THE SENSE EVERY OTHER PLAYER MEANS IT: it takes the
+  // level to nothing and gives it back, and the SLIDER goes with it.
+  //
+  // It used to mute the audio element instead, which silenced the radio and left
+  // the slider where it was - a control reading eighty-five per cent over
+  // silence, which is the one thing a volume control must never do. There is no
+  // state on this button now that the slider does not already show.
+  //
+  // It also cost something that is only visible once it is gone. The listener's
+  // silence and the TUG's silence were two owners of one property, and keeping
+  // them straight needed a rule written into unmute(): the tug may silence, only
+  // the listener may un-silence, or a track voted off in the middle of somebody's
+  // deliberate quiet would turn their radio back on. The listener owns the VOLUME
+  // now and the tug owns MUTED. Nothing is shared, so there is no rule to keep.
   const muteBtn = $('mute'), muteGlyph = $('muteg');
+  // Where the volume comes back to, taken from every reading above nought and not
+  // only from the switch. That is what lets a listener who dragged the slider to
+  // zero BY HAND get their level back from the speaker, which they could not do
+  // when the button kept a flag of its own: dragging to zero left the flag down
+  // and the button with nothing to restore, so the only way out of silence was to
+  // find the handle again. Not remembered across loads, which is what the volume
+  // beside it does too - a radio that opens silent is a radio that looks broken.
+  let volLast = Number(vol.value) || 85;
+
+  // The glyph is the level, and nothing else. Nought draws the crossed speaker
+  // however it got there, because a slider at nothing IS silence and an icon that
+  // said otherwise would be lying about what you can hear.
   function drawMute() {
     const v = Number(vol.value);
     muteGlyph.textContent =
-      (userMuted || v === 0) ? '\uD83D\uDD07'
-      : v < 34              ? '\uD83D\uDD08'
-      : v < 67              ? '\uD83D\uDD09'
-                            : '\uD83D\uDD0A';
-    muteBtn.setAttribute('aria-pressed', String(userMuted));
+      v === 0  ? '\uD83D\uDD07'
+      : v < 34 ? '\uD83D\uDD08'
+      : v < 67 ? '\uD83D\uDD09'
+               : '\uD83D\uDD0A';
+    // Both, because the two say different things. `pressed` is the state and the
+    // label is what the press would DO, and a button announced as "Mute" while it
+    // is the way out of silence is worse than one with no label at all.
+    muteBtn.setAttribute('aria-pressed', String(v === 0));
+    muteBtn.setAttribute('aria-label', v === 0 ? 'Unmute' : 'Mute');
   }
 
-  vol.addEventListener('input', () => { audio.volume = vol.value / 100; drawMute(); });
+  function setVol(v) {
+    vol.value = v;
+    audio.volume = v / 100;
+    drawMute();
+  }
+
+  vol.addEventListener('input', () => {
+    const v = Number(vol.value);
+    if (v > 0) volLast = v;
+    audio.volume = v / 100;
+    drawMute();
+  });
   audio.volume = vol.value / 100;
 
-  // mutedAt is declared much further down and is in its temporal dead zone
-  // until then, so this reads it only from the click - which cannot happen
-  // before the page has finished running. At startup neither owner wants
-  // silence and the element is simply left alone.
+  // The press always does the opposite of what is coming out, which is why it
+  // reads the slider rather than a flag: there is then no state to get out of
+  // step with the control, and no way to press it twice and still hear nothing.
+  //
+  // The `|| 85` is for a page whose slider was dragged to zero before it was ever
+  // anywhere else. volLast starts at the slider's own value so that cannot
+  // normally happen, and a control that answers a press with silence would be the
+  // fault this whole line exists to remove.
   muteBtn.addEventListener('click', () => {
-    userMuted = !userMuted;
-    audio.muted = userMuted || mutedAt > 0;
-    drawMute();
+    const v = Number(vol.value);
+    if (v > 0) { volLast = v; setVol(0); }
+    else setVol(volLast || 85);
   });
   drawMute();
 
@@ -3207,13 +3237,12 @@
   // thing this mechanism could leave behind - so every path that could reach
   // that state calls this and none of them has to be sure it was needed.
   //
-  // It gives the sound back to `userMuted` and not to false, which is the one
-  // asymmetry in this: the tug silences and the listener un-silences. A radio
-  // that came back on by itself because a track was voted off would be the
-  // same fault as the one above wearing the opposite sign, and this time there
-  // WOULD be something on screen saying why - the switch, still down, being
-  // contradicted by the sound.
-  function unmute() { mutedAt = 0; audio.muted = userMuted; }
+  // Straight to false, and it is allowed to be. This used to restore a flag the
+  // listener owned instead, because the two silences shared this property and a
+  // track being voted off must not turn somebody's deliberate quiet back on. The
+  // listener's silence is the VOLUME now. Nothing here can reach it, so there is
+  // no asymmetry left to observe and nothing to get wrong.
+  function unmute() { mutedAt = 0; audio.muted = false; }
   // What an arrival is booked for before this connection has ever been measured.
   // Only the first press of a cold page uses it, and only until the playing
   // event says how wrong it was. 4400 is the median of five cold starts against
