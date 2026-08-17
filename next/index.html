@@ -1937,7 +1937,14 @@
     // that replaces the song is down; if the station never produces that record,
     // the sound has to come back on its own rather than wait for a change that
     // is not coming. Once a change HAS begun its own deadline above owns this.
-    if (mutedAt && !changeUntil && Date.now() - mutedAt > MUTE_MAX) unmute();
+    // unmuteTimer as well as changeUntil, and for the same reason: both mean the
+    // mute has an owner. changeUntil covers the change; unmuteTimer covers the
+    // gap between a landing that came early on purpose and the boundary it came
+    // early for. Without it a normal skip trips this - the mute has been standing
+    // for the whole ear lag by the time the record is down, which is longer than
+    // MUTE_MAX - and the sound comes back with the record after all.
+    if (mutedAt && !changeUntil && !unmuteTimer &&
+        Date.now() - mutedAt > MUTE_MAX) unmute();
     // /likes/now answers with elapsed and duration off the frame being played.
     // Carried forward between polls by the wall clock so the seconds move every
     // second rather than in jumps every five.
@@ -2931,6 +2938,49 @@
   // covering a wait - the
   // tug, or a page that found out late - is timed by that wait and not by this.
   const CHANGE_NATURAL = 660;
+  // HOW LONG THE RECORD IS DOWN BEFORE THE FIRST SOUND, and the whole of it is
+  // taken out of the drawing rather than added to the audio. Nothing on this page
+  // delays a note; the record finishes its journey sooner, inside a wait the
+  // listener was having anyway.
+  //
+  // Without it the two land together, which is not what putting a record on looks
+  // like - a record is pressed onto a spindle and THEN it plays - and worse, the
+  // together is only the average. An arrival is booked against the last fill this
+  // browser measured and paid at whatever this one costs, so the error goes both
+  // ways and half the time the sound arrives first: the effect before its cause,
+  // which is what was reported.
+  //
+  // 400ms, and it was 300 for one round, which is the round that measured what
+  // the number actually has to beat. Three presses on the machine that serves the
+  // stream, which is the fastest a listener can possibly be:
+  //
+  //   cold press   booked 4100   record down 4134.8   sound 4711.3   record first
+  //   return       booked 4409   record down 4451.9   sound 4383.5   SOUND FIRST
+  //   return       booked 4082   record down 4121.2   sound 4453.3   record first
+  //
+  // The middle one inverted, and it is not noise. THE FIRST FILL A PAGE MEASURES
+  // IS ABOUT 330MS SLOWER THAN THE ONES AFTER IT - it is taken while the page is
+  // still loading - and that inflated reading is the only sample the second press
+  // has to book against. Warm against warm the spread is 70ms; cold against warm
+  // it is 330, and 300 sat underneath that by thirty.
+  //
+  // No cleverer estimator fixes it, and that is worth saying rather than trying:
+  // a minimum, a median or a decay all need a second reading, and on the second
+  // press the contaminated one is the only reading there is. The margin has to
+  // cover it or nothing does.
+  //
+  // What it costs is the other side of the same coin. A press whose fill comes in
+  // fast leaves the record down and silent for the difference - 576ms on the cold
+  // press above - and that is the ceiling this number is really set against
+  // rather than any perceptual threshold: past about half a second a record on a
+  // pin with no sound stops reading as a record about to play and starts reading
+  // as one that has not started.
+  //
+  // A floor still sits under everything: TRAVEL + SEAT is what the drawing costs
+  // and no lead can buy time that is not there. A connection faster than 660ms
+  // simply gets the shortest move this button can draw and hears the music when
+  // it arrives - there is nothing to take the lead out of.
+  const SEAT_LEAD = 400;
   // How near two boundaries have to be before they are taken for one, which is
   // what stops a prediction and the truth behind it from being acted out twice.
   // It was written as twice the length a change is drawn for, and that was a
@@ -3048,7 +3098,13 @@
   // round trip and this never fires; six seconds is past any answer this station
   // gives and is the point at which silence has stopped being the mechanism
   // working and started being the mechanism stuck. Once a change HAS begun the
-  // change's own deadline takes over and this stops applying.
+  // change's own deadline takes over and this stops applying - and so does the
+  // debt a tug's landing owes the sound, which is a second owner of the same
+  // mute and outlives changeUntil by SEAT_LEAD. Both are named where this is
+  // tested. Neither was there when the ten below was chosen, and the one that
+  // was added later cost a round: on a normal skip the mute has been standing
+  // for the whole ear lag by the time the record lands, which is past ten
+  // seconds, so the insurance fired into the gap and paid the debt early.
   //
   // TEN SECONDS, AND IT WAS SIX. What this has to outlast is not a change - a
   // change owns the mute the moment it is booked - it is the gap between the
@@ -3075,6 +3131,9 @@
   // The change in progress: when the new record lands, what is drawing it, and
   // what the page has been told but is not showing yet.
   let changeUntil = 0, changeCar = null, changeAnim = null, changeTimer = 0;
+  // When the sound is allowed back, for a landing that is deliberately ahead of
+  // it. Zero means "with the record", which is every move but the tug's.
+  let unmuteAt = 0, unmuteTimer = 0;
   let changeArriving = false;
   // WHICH OF THE FOUR MOVES is on the button: 'change', 'arrive', 'park' or
   // 'return', and empty when nothing is moving. Two decisions turn on it and
@@ -3330,6 +3389,9 @@
     if (landed && aimAt) servedAim = aimAt;
     aimAt = 0; aimTold = false;
     if (changeTimer) { clearTimeout(changeTimer); changeTimer = 0; }
+    // Before anything below can set another one, and whether or not this change
+    // landed: a debt the previous move owed the sound dies with that move.
+    if (unmuteTimer) { clearTimeout(unmuteTimer); unmuteTimer = 0; }
     if (changeAnim) { changeAnim.onfinish = null; changeAnim.cancel(); changeAnim = null; }
     if (changeCar) { changeCar.remove(); changeCar = null; }
     // Including the park. Everything this function takes off the button is a
@@ -3361,7 +3423,18 @@
       const sp = btn.querySelector('.lp-disc').getAnimations()[0];
       if (sp) sp.currentTime = 0;
     }
-    if (landed) unmute();
+    // The sound, now or in a moment. `owed` is only ever set by the tug, and only
+    // ever to SEAT_LEAD or thereabouts, so the wait is under half a second and
+    // the insurance that watches mutedAt has ten times that before it fires.
+    //
+    // A change that did NOT land still clears the debt, because the boundary it
+    // was owed against belongs to a move that has been replaced.
+    const owed = unmuteAt - Date.now();
+    unmuteAt = 0;
+    if (landed) {
+      if (owed > 0) unmuteTimer = setTimeout(() => { unmuteTimer = 0; unmute(); }, owed);
+      else unmute();
+    }
     settle();
   }
 
@@ -3598,9 +3671,14 @@
     // page that found out late - a poll that did not answer, a tab that was
     // throttled - and stretching the change to cover what is left of the wait
     // is exactly what this mechanism used to do for every change.
-    if (end - now <= total) beginChange(end - now, end);
+    // The seat completes at `land` and not at `end`: the record is pressed down,
+    // and then the boundary arrives at this ear. `end` is still what is booked
+    // and served, because it is the BOUNDARY - one fact about the station - and
+    // `land` is only where this page chooses to put a drawing relative to it.
+    const land = end - SEAT_LEAD;
+    if (land - now <= total) beginChange(land - now, end);
     else aimTimer = setTimeout(() => { aimTimer = 0; beginChange(total, end); },
-                               end - total - now);
+                               land - total - now);
   }
 
   // The boundary as the DURATION sees it, off the reading that has just come
@@ -3653,8 +3731,12 @@
   function beginArrival(mode) {
     endChange(false);
     const carryMs = mode === 'return' ? TRAVEL * PARK / 100 : TRAVEL;
+    // Less SEAT_LEAD, so the record is on the pin before the browser has a sound
+    // to make. The fill is what this listener is WAITING, not what they are owed:
+    // finishing a little inside it spends less of their wait, never more.
     const total = Math.min(CHANGE_MAX,
-                           Math.max(carryMs + SEAT, recordMinMs, fillMs || FILL_GUESS));
+                           Math.max(carryMs + SEAT, recordMinMs,
+                                    (fillMs || FILL_GUESS) - SEAT_LEAD));
     changeUntil = Date.now() + total;
     changeArriving = true;
     arriveTotal = total; arriveCarry = carryMs;
@@ -3732,7 +3814,19 @@
     // way - something is being put on, and it is taking this long. Nothing is
     // aimed and nothing waits; see the paragraph over aimChange for why every
     // other change now does both.
-    if (mutedAt) beginChange(end - Date.now(), 0);
+    // The tug lands early like everything else, and unlike everything else its
+    // sound does NOT come back with the record. The silence here is a mute this
+    // page put on, and what is under the mute for the last stretch is the tail of
+    // the song the room has just taken off - so unmuting with the landing would
+    // give three hundred milliseconds of the very track being skipped. The record
+    // goes down at the landing; the sound comes back at the boundary.
+    // unmuteAt is set AFTER beginChange and not before, because beginChange opens
+    // by ending the move already on the button and ending a move clears the debt
+    // it owed. Written the other way round this sets the deadline and then wipes
+    // it one line later, which is not visible in the code and is perfectly visible
+    // in a trace: the record went down and the sound came back on the same
+    // millisecond, which is the behaviour this was meant to replace.
+    if (mutedAt) { beginChange(end - Date.now() - SEAT_LEAD, 0); unmuteAt = end; }
     else aimChange(end, true);
   }
 
