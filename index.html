@@ -2904,7 +2904,17 @@
   function showShow(sh) {
     const on = !!(sh && sh.live);
     $('showname').textContent  = on ? (sh.name  || '') : '';
-    $('showtitle').textContent = on ? (sh.title || '') : '';
+    // Joined the way the station joins its own, artist first. icecast hands over
+    // "Artist - Title" and this panel has shown that all along, so a live show
+    // written the other way round would be the one name on the page that reads
+    // backwards. Joining is also the only direction that is safe: a title may
+    // contain " - " of its own, which is why nothing here ever splits one.
+    //
+    // filter, so a show with an artist and no title is the artist alone and a
+    // station too old to send one is just the title - no stray separator either
+    // way, and no empty half of a name.
+    $('showtitle').textContent =
+      on ? [sh.artist, sh.title].filter(Boolean).join(' - ') : '';
     $('shownote').textContent  = on ? (sh.note  || '') : '';
     $('showtitle').hidden = !$('showtitle').textContent;
     $('shownote').hidden  = !$('shownote').textContent;

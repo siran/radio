@@ -283,7 +283,10 @@
              placeholder="what to call this broadcast">
       <label for="showtitle">What is going out</label>
       <input id="showtitle" maxlength="120" autocomplete="off"
-             placeholder="title / artist &mdash; nobody but you can see inside a shared tab">
+             placeholder="the title &mdash; nobody but you can see inside a shared tab">
+      <label for="showartist">Who it is by</label>
+      <input id="showartist" maxlength="120" autocomplete="off"
+             placeholder="the artist, if it has one">
       <label for="shownote">Anything else</label>
       <textarea id="shownote" maxlength="240" rows="2"
                 placeholder="a line for whoever is listening"></textarea>
@@ -2675,9 +2678,10 @@
       // station would save an empty show every time a preset was made between
       // broadcasts, which is when anybody would make one.
       show: {
-        name:  $('showname').value,
-        title: $('showtitle').value,
-        note:  $('shownote').value
+        name:   $('showname').value,
+        title:  $('showtitle').value,
+        artist: $('showartist').value,
+        note:   $('shownote').value
       },
       // How a broadcast is set up, as opposed to how it sounds. Saved
       // because a recurring show is the same answer to these three every
@@ -2785,9 +2789,13 @@
     // simply sit there readable by anyone who asked.
     const sh = (p.show && typeof p.show === 'object') ? p.show : null;
     if (sh) {
-      if (typeof sh.name  === 'string') $('showname').value  = sh.name.slice(0, 60);
-      if (typeof sh.title === 'string') $('showtitle').value = sh.title.slice(0, 120);
-      if (typeof sh.note  === 'string') $('shownote').value  = sh.note.slice(0, 240);
+      if (typeof sh.name   === 'string') $('showname').value   = sh.name.slice(0, 60);
+      if (typeof sh.title  === 'string') $('showtitle').value  = sh.title.slice(0, 120);
+      // Guarded like the rest, and it earns the guard here rather than merely
+      // matching them: a preset saved before this field existed has no artist in
+      // it, and an unguarded read would put the word undefined on the air.
+      if (typeof sh.artist === 'string') $('showartist').value = sh.artist.slice(0, 120);
+      if (typeof sh.note   === 'string') $('shownote').value   = sh.note.slice(0, 240);
       if (airOn) showPush();
     }
 
@@ -4309,14 +4317,19 @@
   // the maxlength attributes are set to the same numbers instead, which
   // makes the cut impossible from here rather than tidied up afterwards.
   // The one read is at load, below, where nothing is being typed yet.
-  const SHOW_FIELDS = ['showname', 'showtitle', 'shownote'];
+  // The artist joined these and the count in the paragraph above is why the
+  // comment there says three and this says four: the station caps every one of
+  // them and the maxlengths here are set to the same numbers, so the cut is
+  // impossible from this side rather than tidied up afterwards.
+  const SHOW_FIELDS = ['showname', 'showtitle', 'showartist', 'shownote'];
   let showTimer = 0, showSending = false, showAgain = false;
 
   function showFill(d) {
     if (!d) return;
-    $('showname').value  = d.name  || '';
-    $('showtitle').value = d.title || '';
-    $('shownote').value  = d.note  || '';
+    $('showname').value   = d.name   || '';
+    $('showtitle').value  = d.title  || '';
+    $('showartist').value = d.artist || '';
+    $('shownote').value   = d.note   || '';
   }
 
   // All three every time: the station takes the whole show in one call, where
@@ -4329,9 +4342,10 @@
     showTimer = 0;
     if (showSending) { showAgain = true; return; }
     showSending = true;
-    const q = 'name='   + encodeURIComponent($('showname').value.trim()) +
-              '&title=' + encodeURIComponent($('showtitle').value.trim()) +
-              '&note='  + encodeURIComponent($('shownote').value.trim());
+    const q = 'name='    + encodeURIComponent($('showname').value.trim()) +
+              '&title='  + encodeURIComponent($('showtitle').value.trim()) +
+              '&artist=' + encodeURIComponent($('showartist').value.trim()) +
+              '&note='   + encodeURIComponent($('shownote').value.trim());
     try {
       const res = await fetch('/control/show?' + q,
         { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
@@ -4341,7 +4355,7 @@
       // the same one it ducks the music off - so this line says whether what
       // was just saved is being shown to anybody yet.
       $('showstat').textContent =
-        (d.name || d.title || d.note)
+        (d.name || d.title || d.artist || d.note)
           ? (d.live ? 'saved, and on the listener page now'
                     : 'saved - it reaches the listener page when you go on air')
           : 'nothing set';

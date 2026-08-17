@@ -1538,6 +1538,15 @@ connected = ref(false)
 
 show_name  = ref("")
 show_title = ref("")
+# Held apart from the title rather than typed into it. One box said
+# "title / artist" and the slash was doing a schema's work: two facts in one
+# string, with nothing downstream able to say which half was which. A page
+# can join them and cannot split them - a title may contain " - " of its own,
+# which is the same reason the earlier log joins rather than splits.
+#
+# The same 120 as the title because it is the same kind of thing and a second
+# number would be a second thing to keep in step with a maxlength.
+show_artist = ref("")
 show_note  = ref("")
 
 # Characters, not bytes, and which of the two has to be said out loud because
@@ -1568,10 +1577,11 @@ end
 # textContent, which is what makes it safe for a listener to be shown words
 # somebody else wrote.
 def show_state() =
-  { live  = connected(),
-    name  = show_name(),
-    title = show_title(),
-    note  = show_note() }
+  { live   = connected(),
+    name   = show_name(),
+    title  = show_title(),
+    artist = show_artist(),
+    note   = show_note() }
 end
 
 # One call carries the whole show, and a parameter left out means an empty
@@ -1587,9 +1597,10 @@ end
 show_logged = ref("")
 
 def show_set(req) =
-  show_name  := show_clip(60,  req.query["name"])
-  show_title := show_clip(120, req.query["title"])
-  show_note  := show_clip(240, req.query["note"])
+  show_name   := show_clip(60,  req.query["name"])
+  show_title  := show_clip(120, req.query["title"])
+  show_artist := show_clip(120, req.query["artist"])
+  show_note   := show_clip(240, req.query["note"])
   # Into the log the first time a live show is given a name. Not on every
   # keystroke - the console saves as you type - and not when nobody is live,
   # which is a host filling the boxes in before they go on.
@@ -1597,13 +1608,15 @@ def show_set(req) =
     show_logged := show_name()
     earlier_add(earlier_blank().{
       kind = "show", at = earlier_now(),
-      name = show_name(), title = show_title() })
+      name = show_name(), title = show_title(),
+      artist = show_artist() })
   end
   log.important(label = "show",
-    if show_name() == "" and show_title() == "" and show_note() == "" then
+    if show_name() == "" and show_title() == "" and show_artist() == ""
+       and show_note() == "" then
       "cleared"
     else
-      "#{show_name()} | #{show_title()} | #{show_note()}"
+      "#{show_name()} | #{show_artist()} - #{show_title()} | #{show_note()}"
     end)
 end
 
@@ -1911,9 +1924,10 @@ live = input.harbor(
     # unable to duck the music.
     live_open  := true
     show_logged := ""
-    show_name  := ""
-    show_title := ""
-    show_note  := ""
+    show_name   := ""
+    show_title  := ""
+    show_artist := ""
+    show_note   := ""
   end
 )
 
