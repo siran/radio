@@ -3106,7 +3106,12 @@
   // reason the show block gives: a poll of its own would disagree with this one
   // for as long as a poll takes, at the one moment that matters.
   function showPosts(sh) {
-    const on = !!(sh && sh.live && sh.id);
+    // A FOLDER IS ENOUGH; being live is not required. The station gives one
+    // whether or not anybody is broadcasting - a show's while a show is on, and
+    // the playing song's between them - so a host can say something about a
+    // record without opening a microphone to do it. What makes those go is not
+    // this test but the station emptying its list when the record changes.
+    const on = !!(sh && sh.id);
     const id = on ? String(sh.id) : '';
     const list = on ? String(sh.posts || '') : '';
     // A new broadcast is a new folder, and nothing read from the last one
@@ -3134,7 +3139,12 @@
       const want = list.split(',').filter(Boolean).map(t => {
         const b = t.split(':');
         return { n: parseInt(b[0], 10), rev: parseInt(b[1], 10) || 1 };
-      }).filter(x => x.n > 0 && x.n < 100000 && x.rev > 0 && x.rev < 100000);
+      // Widened to hold a stamp, because a post written off the air is named for
+      // the second it was written rather than counted - twelve digits, where a
+      // show's posts are 1, 2, 3. Still bounded, and still integers, because
+      // both halves end up in a URL this page goes and asks for.
+      }).filter(x => Number.isSafeInteger(x.n) && Number.isSafeInteger(x.rev) &&
+                     x.n > 0 && x.n < 1e13 && x.rev > 0 && x.rev < 100000);
       for (const it of want) {
         if (cardHave.has(cardKey(it.n, it.rev))) continue;
         try {

@@ -1601,6 +1601,15 @@ def show_slug(offer, name) =
   end
 end
 
+# Shows and songs are both folders directly under posts/, so one name has to be
+# kept apart: a show actually called "songs" would put broadcast folders inside
+# the folder song notes live in. Cheap insurance against something that will
+# probably never happen and would be baffling if it did.
+def show_folder(offer, name) =
+  t = show_slug(offer, name)
+  if t == "songs" then "songs-show" else t end
+end
+
 # A directory and then its parent, each only if it is EMPTY, and that check is
 # not tidiness - file.rmdir removes a directory AND ITS CONTENT, so emptiness
 # is the entire safety of calling it. Nothing that holds anything is removed,
@@ -1619,6 +1628,48 @@ def show_sweep(dir) =
     end
   catch _ do
     ()
+  end
+end
+
+# OFF THE AIR, THE FOLDER IS THE SONG. A host should not have to open a
+# microphone to say something, and between shows what they say is about whatever
+# is playing - so a post is filed under the track it was written under, and it
+# leaves the page when that track does.
+#
+# The list is emptied, not the folder. posts/songs/<track>/ keeps every note
+# ever written about that track, which is an archive worth having and costs
+# nothing; what the page shows is only ever the notes for the song in the room
+# right now, because show_posts is what the page reads and this clears it.
+#
+# Called from forward_meta, which hangs off the DELAYED source - so the folder
+# turns over when a listener hears the change rather than when the library
+# handed the file across, and a note written in the last second of a track
+# belongs to the track the writer was hearing.
+def song_settle() =
+  if not connected() then
+    n = now_playing()
+    was = show_id()
+    # Named locals rather than one expression: interpolation does not nest, and
+    # a #{} inside a string inside a #{} makes the parser report an unterminated
+    # string on line 1 of the file.
+    label = "#{n.artist} #{n.title}"
+    show_id := "songs/" ^ show_slug("", label)
+    show_posts := ""
+    dir = "#{radio_home}/posts/#{show_id()}"
+    try
+      file.mkdir(parents = true, dir)
+    catch _ do
+      ()
+    end
+    if not file.exists(dir) then
+      log.important(label = "posts", "CANNOT MAKE #{dir}")
+    end
+    # The folder of the song just gone, if nobody wrote anything in it. Same
+    # sweep the shows use and the same reason: an archive somebody browses
+    # should not be mostly empty folders for tracks nobody had a thought about.
+    if was != "" and was != show_id() then
+      show_sweep("#{radio_home}/posts/#{was}")
+    end
   end
 end
 
@@ -1641,7 +1692,7 @@ def show_settle(offer) =
     # first folder has to go or every broadcast leaves an empty "untitled"
     # behind it in an archive somebody is going to browse.
     was = show_id()
-    show_id := "#{show_slug(offer, show_name())}/#{show_began()}"
+    show_id := "#{show_folder(offer, show_name())}/#{show_began()}"
     dir = "#{radio_home}/posts/#{show_id()}"
     try
       file.mkdir(parents = true, dir)
@@ -2817,6 +2868,10 @@ def forward_meta(m) =
   # library handed it over, and those are air_delay apart.
   earlier_add(earlier_blank().{
     kind = "track", at = earlier_now(), title = n.title, artist = n.artist })
+  # And the folder a post would go into turns over with it. Does nothing while
+  # somebody is live: a show owns its own folder for the whole broadcast, however
+  # many records go past underneath it.
+  song_settle()
   # The new title reaches the stream first; the announcement is about
   # the one before it and can wait the millisecond a file write takes.
   announce(m)

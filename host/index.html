@@ -4457,6 +4457,32 @@
   let postShow = '', postHas = [], postEditing = 0, postBusy = false;
   const postBox = $('postbox');
 
+  // WHETHER THIS IS A SHOW OR A SONG, which is the only thing the console has
+  // to know about the difference. The station chooses the folder; a folder under
+  // songs/ is a post written between shows, filed under whatever is playing.
+  const postSongy = () => postShow.indexOf('songs/') === 0;
+
+  // A STAMP AND NOT A NUMBER for those, and the reason is that the list which
+  // makes numbering work is emptied every time the record changes. Off the air
+  // the next post would always be 1.md, so the next thought anybody had about
+  // that track would overwrite the last one - and the folder is per-song and
+  // keeps everything ever written there, which is the whole point of it.
+  //
+  // UTC, like every other stamp this station writes, and digits only so the
+  // station's own check on the list - digits, colons and commas - still passes.
+  function postStamp() {
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    return Number(String(d.getUTCFullYear()).slice(2) + p(d.getUTCMonth() + 1) +
+                  p(d.getUTCDate()) + p(d.getUTCHours()) + p(d.getUTCMinutes()) +
+                  p(d.getUTCSeconds()));
+  }
+  // A stamp read back as the time it was written. #260817215301 is a filename,
+  // not something to show a person.
+  const postWhen = (v) => {
+    const t = String(v);
+    return t.length === 12 ? t.slice(6, 8) + ':' + t.slice(8, 10) + ' UTC' : '#' + t;
+  };
+
   function postParse(str) {
     return String(str || '').split(',').filter(Boolean).map(function (t) {
       const b = t.split(':');
@@ -4497,19 +4523,23 @@
   function postDraw() {
     const live = !!postShow;
     $('postbtn').disabled = !live || postBusy;
-    $('postbtn').textContent = postEditing ? 'Repost #' + postEditing : 'Post';
+    $('postbtn').textContent = postEditing ? 'Repost ' + postWhen(postEditing) : 'Post';
     $('postcancel').hidden = !postEditing;
-    $('poststat').textContent = live
-      ? (postHas.length ? postHas.length + ' on the radio now, in ' + postShow
-                        : 'Nothing posted yet. This show is ' + postShow + '.')
-      : 'Go on air first - a post belongs to a broadcast, and the folder it is written into is the broadcast.';
+    $('poststat').textContent =
+      !live ? 'Waiting for the station to say what is playing.'
+      : postSongy()
+        ? (postHas.length
+            ? postHas.length + ' on the radio, under this song - they go when it does, and the files stay.'
+            : 'Not on air, so this goes under the song that is playing and leaves with it. The file stays in ' + postShow + '.')
+        : (postHas.length ? postHas.length + ' on the radio now, in ' + postShow
+                          : 'Nothing posted yet. This show is ' + postShow + '.');
     const ol = $('postlist');
     ol.textContent = '';
     const seen = postHas.slice().reverse();     // newest first, as the radio shows them
     for (const it of seen) {
       const li = ol.appendChild(document.createElement('li'));
       const n = li.appendChild(document.createElement('span'));
-      n.className = 'pn'; n.textContent = '#' + it.n;
+      n.className = 'pn'; n.textContent = postWhen(it.n);
       const t = li.appendChild(document.createElement('span'));
       t.className = 'pt'; t.textContent = 'loading…';
       postPreview(it, t);
@@ -4583,7 +4613,8 @@
       const now = new Date().toISOString();
       const isEdit = !!postEditing;
       const n = isEdit ? postEditing
-                       : (postHas.reduce((m, x) => Math.max(m, x.n), 0) + 1);
+               : postSongy() ? postStamp()
+               : (postHas.reduce((m, x) => Math.max(m, x.n), 0) + 1);
       const rev = isEdit ? ((postHas.find(x => x.n === n) || { rev: 1 }).rev + 1) : 1;
       // An HTML comment, which markdown carries through untouched and every
       // reader of this file skips. It is the only place the time of a post is
