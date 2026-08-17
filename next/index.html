@@ -1471,6 +1471,13 @@
   .recent li .k { flex: none; color: var(--dim); font-size: .82em; margin-left: 6px; }
   .recent li .l { flex: none; font-variant-numeric: tabular-nums;
                   letter-spacing: .04em; white-space: nowrap; }
+  /* A host was on the microphone. The same dot, in the same red, that the panel
+     and the header already use for that fact, so it needs no word and no
+     translation - a listener has seen this mark mean exactly this. It does NOT
+     pulse: the pulse says something is happening now, and everything in this
+     list is over. Centred rather than on the baseline, because the row is
+     baseline-aligned for text and a 7px circle has no baseline to sit on. */
+  .recent li .dot { background: var(--air); align-self: center; }
   .empty { font-size: .84rem; color: var(--dim); padding: 12px 0; }
   .privacy { font-size: .7rem; color: var(--dim); margin-top: 9px; line-height: 1.45; }
   .replying { font-size: .78rem; color: var(--dim); margin-bottom: 9px;
@@ -2327,14 +2334,26 @@
 
 
   // --- recently played -------------------------------------------------
-  // Kept in localStorage so it survives a refresh, which the previous
-  // version did not.
+  // The list is the STATION's, fetched from /earlier. It used to be this
+  // browser's, kept in localStorage, and that is the fault being fixed: a list
+  // a browser remembers begins empty for everybody who arrives, so a listener
+  // tuning in now was told the station had played nothing - the opposite of
+  // what "earlier" means. The station has kept the real record all along.
   //
-  // An entry used to be the title and is now the title and what the song was
-  // liked to. Anything already in a listener's browser is a list of strings, so
-  // it is read as one and carried forward with no count rather than thrown away:
-  // a song that played before this shipped genuinely has no reading, and zero
-  // would be a claim about it.
+  // What this page still keeps is the one thing the station cannot: the like
+  // readings. /earlier carries no counts and cannot cheaply, because the count
+  // for a track goes on moving after the event is written. So the station says
+  // WHAT was on and this page decorates only the entries it personally watched
+  // go by. A listener who has just opened the page sees history with no
+  // figures; one who has been here sees figures on the songs they heard. No
+  // count is invented for an entry there is no reading for.
+  //
+  // localStorage keeps the key `radio.recent` and keeps the entry shape it
+  // already holds in every listener's browser - { t, l, u } - because that
+  // shape IS a list of like readings; only its job changed. Nothing about the
+  // ORDER of the evening is cached any more: a local copy that disagrees with
+  // the station is worse than no copy, and if /earlier will not answer the
+  // panel keeps the last list it was given rather than inventing one.
   //
   // The count is stamped on the entry as the song rolls OFF, which is the only
   // moment it can be. /likes/now describes what is playing and nothing else, and
@@ -2357,37 +2376,127 @@
   // can hold, it is true of the person reading it, and it must not be repeated
   // anywhere as a claim about the broadcast.
   const RECENT_KEY = 'radio.recent';
-  let recent = [];
+  // Readings only. An entry with no count is dropped on the way in: it used to
+  // be how the list remembered a song it had no figure for, and the station
+  // supplies the song now, so all it would be is a title taking up room.
+  let heard = [];
   try {
-    recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')
-               .map(e => typeof e === 'string' ? { t: e } : e)
-               .filter(e => e && typeof e.t === 'string');
-  } catch { recent = []; }
+    heard = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')
+              .filter(e => e && typeof e.t === 'string' && e.l > 0);
+  } catch { heard = []; }
+  // The station's list exactly as served, newest LAST.
+  let earlier = [];
+  // The title this page last saw on the panel, so the reading caught while it
+  // was playing can be filed under it when it is replaced. It used to be read
+  // back off the head of the list; the head of the list is the station's now.
+  let prevTitle = '';
   // What the song that has just been replaced stood at, and whether it moved
   // while this page was watching. null rather than zero when there is nothing to
   // stamp: the first title of a session is not a track change, and stamping a
   // zero on it would erase a real count left in localStorage by the session
   // before.
   let rollLikes = null, rollUp = false;
-  // Whether the song that is ending is ending because the room took it off.
-  // Caught at the top-out, spent by noteTrack several seconds later with the
-  // title it belongs to - the same reason the two like readings are caught
-  // early and spent late, and for the same gap.
-  let rollSkipped = false;
+
+  // The station's four kinds, folded into rows. Two of them are not rows:
+  //
+  //   track  a row. The title.
+  //   voted  NOT a row of its own. A vote-off is how a track ENDED, not a
+  //          separate thing that happened, and a line saying a song was taken
+  //          off with no song beside it says nothing. It lands on the track row
+  //          it names, as the skip glyph off the tug - which is what this page
+  //          already did for the vote-offs it saw itself. The station writes it
+  //          between that track and its replacement, so the nearest PRECEDING
+  //          track of the same title is the one it belongs to.
+  //   live   a row. A host on the microphone is emphatically something that was
+  //          on, and leaving it out would make Earlier a list of the music only.
+  //          It reads as a different sort of event because it carries the on-air
+  //          dot instead of a figure, and no word of ours is spent on it.
+  //   show   NOT a row of its own. A host presses Go on air first and names the
+  //          show afterwards - the station says so where it writes the two - so
+  //          the name belongs to the live row above rather than being a second
+  //          appearance. A host who renames mid-show ends up with the name they
+  //          settled on, which is the one they meant.
+  function foldEarlier(ev) {
+    const rows = [];
+    const lastRow = p => {
+      for (let i = rows.length - 1; i >= 0; i--) if (p(rows[i])) return rows[i];
+      return null;
+    };
+    for (const e of ev) {
+      // The artist is carried for one reason and it is not display: it is half
+      // of the key this page's own like readings are filed under. See renderRecent.
+      if (e.kind === 'track') rows.push({ k: 'track', t: e.title || '', a: e.artist || '' });
+      else if (e.kind === 'live') rows.push({ k: 'live', t: e.name || '' });
+      else if (e.kind === 'voted') {
+        const r = lastRow(x => x.k === 'track' && x.t === e.title);
+        // A vote-off whose track has already fallen off the front of the
+        // station's sixty is dropped rather than drawn on its own.
+        if (r) r.s = true;
+      } else if (e.kind === 'show') {
+        const r = lastRow(x => x.k === 'live');
+        // A show whose `live` has fallen off the front is still something that
+        // was on, so here the name becomes the row.
+        if (r) r.t = e.name || ''; else rows.push({ k: 'live', t: e.name || '' });
+      }
+    }
+    // The last track row is what is on air NOW - the station writes it off the
+    // delayed source, at the instant a listener hears it begin - and the panel
+    // above this list already names it. Dropped only while it is still last:
+    // once a host has gone live after it, that track really did finish and it
+    // belongs here. Read off the list rather than compared with the panel's
+    // title, which comes from icecast and can lag it.
+    if (rows.length && rows[rows.length - 1].k === 'track') rows.pop();
+    return rows;
+  }
 
   function renderRecent() {
     const ol = document.getElementById('recent');
     const wrap = document.getElementById('recentWrap');
     if (!ol || !wrap) return;
     ol.textContent = '';
-    const past = recent.slice(1, 6);          // skip the one currently playing
+    const past = foldEarlier(earlier).slice(-5).reverse();   // newest first
+    // MATCHING. The station deliberately publishes no file path, so the name is
+    // the only key /earlier and this page's own readings share - and the two do
+    // NOT hold the same string. /earlier carries title and artist apart;
+    // /status-json.xsl, which is where a reading is filed from, carries what
+    // icecast made of them, and icecast joins an artist to a title with " - ".
+    // Measured against the live station over three consecutive tracks, and it
+    // held on all three: earlier said title "Subtle Energy", artist "Rik
+    // Wright's Fundamental Forces", and the panel at that instant read "Rik
+    // Wright's Fundamental Forces - Subtle Energy". Joining here
+    // rather than splitting there, because a title may contain " - " of its own
+    // - "Remembering John Lee Hooker - Red House" is in the library - and
+    // splitting would cut that one in the wrong place.
+    //
+    // Where the two do not agree the row simply carries no figure, which is the
+    // right way for this to fail: a missing count says only that this listener
+    // was not here for that song, and a count landed on the wrong song would be
+    // a claim about the broadcast that is not true.
+    //
+    // Keys already given a figure on this pass. A song played twice in the hour
+    // is two rows this page cannot tell apart - it has one reading, from the
+    // play it watched end - so the reading goes on the NEWEST of them and on no
+    // other. The lifetime total would be near enough right on both, but the
+    // arrow beside it would not: "it gained hearts while I was here" is a claim
+    // about one play, and printing it against an earlier one is not this page's
+    // to make.
+    const done = [];
     past.forEach(e => {
       const li = document.createElement('li');
-      li.appendChild(document.createElement('span')).className = 't';
-      li.firstChild.textContent = e.t;
+      // The dot before the name, so a live row is recognisable before it is
+      // read - and a host who typed nothing is the dot alone, which is the
+      // honest reading of somebody who went on and said nothing about it.
+      if (e.k === 'live') li.appendChild(document.createElement('span')).className = 'dot';
+      const t = li.appendChild(document.createElement('span'));
+      t.className = 't';
+      // textContent, not innerHTML. On a live row this is a show name one
+      // person typed and everybody else is being shown.
+      t.textContent = e.t;
       // Nothing at all at nought, rather than a nought. A song nobody has ever
       // liked has nothing to report, and a column of zeroes is a column of noise
-      // that says the same thing an absence says in less room.
+      // that says the same thing an absence says in less room. Upheld where the
+      // reading is FILED rather than tested again here, so there is one rule
+      // about noughts and not two that can drift apart.
       //
       // Two readings, one line. The number is always the lifetime total. The
       // arrow and the heart in front of it say the number MOVED while this
@@ -2396,10 +2505,14 @@
       // number stands alone: the column is one column, and a row that is a bare
       // figure among rows that carry a heart is read as the same figure without
       // the heart's news, which is exactly what it is.
-      if (e.l > 0) {
+      const key = e.a ? e.a + ' - ' + e.t : e.t;
+      const h = e.k === 'track' && done.indexOf(key) < 0 &&
+                heard.find(r => r.t === key);
+      if (h) {
+        done.push(key);
         const l = li.appendChild(document.createElement('span'));
         l.className = 'l';
-        l.textContent = (e.u ? '↑♥ ' : '') + e.l;
+        l.textContent = (h.u ? '↑♥ ' : '') + h.l;
       }
       // The skip glyph the tug row itself is drawn with, so a song the room
       // took off is marked with the button that took it off. A word would
@@ -2415,24 +2528,57 @@
     wrap.hidden = past.length === 0;
   }
 
-  function noteTrack(t) {
-    if (!t || (recent[0] && recent[0].t === t)) return;
-    if (rollLikes !== null && recent[0]) {
-      recent[0].l = rollLikes; recent[0].u = rollUp;
-      rollLikes = null; rollUp = false;
-    }
-    // Cleared whether or not there was an entry to mark, so a vote-off cannot
-    // be held over and land on the wrong song later.
-    if (rollSkipped) {
-      if (recent[0]) recent[0].s = true;
-      rollSkipped = false;
-    }
-    recent.unshift({ t: t });
-    recent = recent.slice(0, 8);
-    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch {}
-    renderRecent();
+  // No poller of its own, which is the same rule the skip counter is under and
+  // for the same measured reason: one open tab made 691 requests in ten minutes
+  // before PULSE at the foot of this file existed. /earlier changes when a track
+  // changes and when a host goes live, and this page already learns about the
+  // first from poll(), so it is asked on waking and on each change of title -
+  // never on a clock.
+  //
+  // The guard is not politeness. Waking and a change of title land together at
+  // load, and this is the one fetch both would fire.
+  let earlierBusy = false;
+  async function pollEarlier() {
+    if (earlierBusy) return;
+    earlierBusy = true;
+    try {
+      const j = await (await fetch('/earlier', { cache: 'no-store' })).json();
+      if (Array.isArray(j)) { earlier = j; renderRecent(); }
+    } catch {
+      // The last list the station gave stays up. There is nothing truer to put
+      // in its place and no word of ours may go there.
+    } finally { earlierBusy = false; }
   }
-  renderRecent();
+
+  // Two jobs, in this order. File what the song that has just ended was liked
+  // to, under its own title, because in a moment /likes/now will be describing
+  // its replacement and this reading will be gone. Then ask the station what it
+  // has: the event for the new track is written off the delayed source at the
+  // instant its title reaches the stream, so by the time this runs it is there.
+  function noteTrack(t) {
+    if (!t || t === prevTitle) return;
+    // A nought is not a reading. A song nobody has ever liked has nothing to
+    // report, the row is drawn bare either way, and filing it would put an
+    // entry in every listener's browser that can only ever render as nothing.
+    // This is also what lets the drawing below trust that a reading it finds
+    // has a figure in it - measured the other way round first: "Subtle Energy"
+    // came off the air at nought and the list printed "Subtle Energy 0".
+    if (rollLikes > 0 && prevTitle) {
+      // Filed under the name the PANEL was showing, which is icecast's, and
+      // read back under the same name rebuilt from /earlier's two fields. See
+      // the matching note in renderRecent. One reading per name, the newest
+      // kept. Sixty of them, the same depth the station serves: a reading for a
+      // name that has fallen out of /earlier can never be drawn against
+      // anything.
+      heard = heard.filter(r => r.t !== prevTitle);
+      heard.unshift({ t: prevTitle, l: rollLikes, u: rollUp });
+      heard = heard.slice(0, 60);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(heard)); } catch {}
+    }
+    rollLikes = null; rollUp = false;
+    prevTitle = t;
+    pollEarlier();
+  }
 
 
   // --- share the current song --------------------------------------------
@@ -3577,9 +3723,6 @@
     mutedAt = Date.now();
     mutedId = likeId;
     audio.muted = true;
-    // The song on the air now is the one being taken off, and by the time it
-    // is written into Earlier the endpoint is describing its replacement.
-    rollSkipped = true;
     blank();
     setTimeout(pollLikes, 300);
     setTimeout(pollLikes, 1000);
@@ -3711,6 +3854,9 @@
     if (timers.length) return;
     quiet = false;
     for (const [fn] of PULSE) fn();   // catch up now, do not wait out a cycle
+    // Not in PULSE, deliberately: Earlier is fetched on the events that change
+    // it, not on a clock. See pollEarlier.
+    pollEarlier();
     timers = PULSE.map(([fn, ms]) => setInterval(fn, ms));
   }
 
@@ -3771,7 +3917,12 @@
   // the page would open blank - no track, no guestbook, no chat - and asking a
   // visitor to press play to find out what is playing is the wrong way round.
   // One round is not traffic; sixty-nine a minute was.
-  poll(); loadMessages(); pollChat(); pollNarrator(); pollLikes();
+  //
+  // Earlier is in this round for the reason the whole change exists: somebody
+  // who has just arrived and not yet pressed anything should be able to see the
+  // hour they missed. It is also the only path that fills the list when the
+  // station is playing nothing at all, since the other one hangs off a title.
+  poll(); loadMessages(); pollChat(); pollNarrator(); pollLikes(); pollEarlier();
   quiet = true;
   tick();
 })();
