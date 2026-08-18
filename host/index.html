@@ -4379,13 +4379,17 @@
   // document made this way is INERT - its scripts do not run, its images are not
   // fetched, and none of its handlers are wired - so the dangerous string is
   // never live in this page even for the instant it takes to read it.
-  function postClean(html) {
+  // The TREE, because Post has to reach into it and turn every pasted picture
+  // into a file before the markup is written down. Everywhere else wants the
+  // string, and the string is just a view of this.
+  function postCleanEl(html) {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
     const out = document.createElement('div');
     postWalk(doc.body, out, 0);
     postTidy(out);
-    return out.innerHTML;
+    return out;
   }
+  const postClean = (html) => postCleanEl(html).innerHTML;
 
   function postWalk(from, to, depth) {
     const kids = Array.prototype.slice.call(from.childNodes);
@@ -4490,6 +4494,60 @@
     }).filter(function (x) { return x.n > 0; });
   }
   const postJoin = (list) => list.map(x => x.n + ':' + x.rev).join(',');
+  // SEGMENT BY SEGMENT, because the folder has a slash in it - a show is
+  // <slug>/<when> and a song note is songs/<track>. encodeURIComponent over the
+  // whole thing turns that slash into %2F, which happened to work because caddy
+  // decodes it back into a path separator, and is a thing to have relied on
+  // rather than meant. The listener page already did it this way.
+  const postPath = () => postShow.split('/').map(encodeURIComponent).join('/');
+
+  // What a picture may be and how big. The route accepts four raster types and
+  // caps a body at 4MB - and its own comment records that the cap TRUNCATES
+  // rather than refuses, so a picture over it would be written cut short with
+  // nothing said. This stops below that and explains, which is what that comment
+  // asks every writer of this console to do.
+  const POST_IMG_MAX = 3 * 1024 * 1024;
+  const POST_IMG_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg',
+                         'image/gif': 'gif', 'image/webp': 'webp' };
+
+  // Every pasted picture becomes a file beside the post that holds it, and the
+  // src is rewritten to point at it. Done on the TREE before the markup is
+  // serialised, so what gets written down already refers to files that exist.
+  //
+  // It worked without this, after a fashion: a data: URI survives the walk and
+  // renders, which is how a picture went out before any of this was built. What
+  // it did not do is scale - base64 is a third bigger than the bytes it carries,
+  // a screenshot is a megabyte, and the markup ceiling is sixty thousand
+  // characters. Small pictures worked and real ones failed, which is the worst
+  // shape a feature can have.
+  async function postUpload(root, id) {
+    const imgs = Array.prototype.slice.call(root.querySelectorAll('img[src^="data:"]'));
+    for (let k = 0; k < imgs.length; k++) {
+      const m = /^data:([a-z0-9/+.-]+);base64,([A-Za-z0-9+/=]+)$/i
+                  .exec(imgs[k].getAttribute('src') || '');
+      const ext = m ? POST_IMG_EXT[m[1].toLowerCase()] : null;
+      // A picture this cannot file is dropped rather than left as a data: URI.
+      // Left in, it would be the one thing in the post that is not a file, and
+      // the size it costs is exactly the size that made it unfileable.
+      if (!ext) { imgs[k].remove(); continue; }
+      const bin = atob(m[2]);
+      if (bin.length > POST_IMG_MAX)
+        throw new Error('that picture is ' + Math.round(bin.length / 1024) +
+          'kB and the ceiling is ' + Math.round(POST_IMG_MAX / 1024) +
+          'kB - shrink it, or link to it instead of pasting it.');
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      // Named for the post it belongs to, so a folder full of them is readable
+      // and taking a post down tells you which pictures went with it.
+      const name = id + '-' + (k + 1) + '.' + ext;
+      const put = await fetch('/host/post/' + postPath() + '/' + name,
+        { method: 'PUT', credentials: 'same-origin',
+          headers: { 'Content-Type': m[1] }, body: bytes });
+      if (!put.ok) throw new Error('a picture would not save: HTTP ' + put.status);
+      imgs[k].setAttribute('src', '/posts/' + postPath() + '/' + name);
+    }
+    return imgs.length;
+  }
 
   async function postSync() {
     try {
@@ -4564,7 +4622,7 @@
   }
 
   async function postFetch(it) {
-    const res = await fetch('/posts/' + encodeURIComponent(postShow) + '/' + it.n +
+    const res = await fetch('/posts/' + postPath() + '/' + it.n +
                             '.md?r=' + it.rev, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return await res.text();
@@ -4600,13 +4658,9 @@
 
   async function postSend() {
     if (postBusy || !postShow) return;
-    const html = postClean(postBox.innerHTML);
-    if (!html.replace(/<[^>]*>|\s|&nbsp;/g, '')  && html.indexOf('<img') < 0)
+    const tree = postCleanEl(postBox.innerHTML);
+    if (!tree.textContent.replace(/\s|\u00a0/g, '') && !tree.querySelector('img'))
       return void ($('posterr').textContent = 'There is nothing in it to post.');
-    if (html.length > POST_MAX)
-      return void ($('posterr').textContent =
-        'That is ' + html.length + ' characters of markup, and the ceiling is ' +
-        POST_MAX + '. Split it into two posts.');
     postBusy = true; postDraw();
     $('posterr').textContent = '';
     try {
@@ -4627,9 +4681,20 @@
       // header into the document as text. An allow-list of characters costs a line.
       const who = ($('whoami').textContent || '').trim()
                     .replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 40);
+      // THE PICTURES FIRST, and the markup that names them afterwards. A .md the
+      // station is telling listeners about, whose picture is not on disk yet, is a
+      // broken image on every radio in the room - the same order the list already
+      // follows behind the file, for the same reason.
+      const pics = await postUpload(tree, n);
+      const html = tree.innerHTML;
+      // Measured after the upload, because the upload is what makes it small: a
+      // picture that was a megabyte of base64 is a path now.
+      if (html.length > POST_MAX)
+        throw new Error('that is ' + html.length + ' characters of markup and the ' +
+          'ceiling is ' + POST_MAX + ' - split it into two posts.');
       const body = '<!-- posted ' + now + ' rev ' + rev +
                    (who ? ' by ' + who : '') + ' -->\n' + html + '\n';
-      const put = await fetch('/host/post/' + encodeURIComponent(postShow) + '/' + n + '.md',
+      const put = await fetch('/host/post/' + postPath() + '/' + n + '.md',
         { method: 'PUT', credentials: 'same-origin',
           headers: { 'Content-Type': 'text/markdown; charset=utf-8' }, body });
       if (!put.ok) throw new Error('the file would not save: HTTP ' + put.status);
@@ -4641,7 +4706,9 @@
       await postPushList();
       postEditing = 0;
       postBox.textContent = '';
-      say('postmsg', (isEdit ? 'Reposted #' : 'Posted #') + n + '.');
+      say('postmsg', (isEdit ? 'Reposted ' : 'Posted ') + postWhen(n) +
+        (pics ? ', with ' + pics + (pics === 1 ? ' picture' : ' pictures') +
+                ' saved beside it.' : '.'));
     } catch (e) {
       $('posterr').textContent = String(e && e.message || e);
       await postSync();
