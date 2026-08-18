@@ -4370,6 +4370,14 @@
   function postUrl(u, isImg) {
     const t = String(u == null ? '' : u).replace(/[\u0000-\u0020]/g, '');
     if (/^https?:\/\/[^\s]+$/i.test(t)) return t;
+    // A PATH ON THIS STATION, which is what an uploaded picture is: the console
+    // files a pasted image beside the post and rewrites its src to /posts/...
+    // Without this the walk refused the very thing the upload had just written,
+    // and the picture lived in the .md and appeared nowhere.
+    //
+    // Anchored so that // is NOT it. A protocol-relative URL is another origin
+    // wearing a path's clothes, and it is exactly what this list exists to refuse.
+    if (/^\/(?!\/)[^\s]*$/.test(t)) return t;
     if (isImg && /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(t))
       return t;
     return '';

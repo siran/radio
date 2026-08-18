@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Wild n Loyal Radio - the shows</title>
+<style>
+  /* The radio's own palette, copied rather than shared, because this page is
+     served from a different folder and the station has no build step to put a
+     stylesheet in two places. Kept short on purpose: an archive is a list. */
+  :root {
+    --bg: #0b0b0e; --panel: #131318; --line: #24242c;
+    --fg: #ecebe8; --dim: #8b8b96; --accent: #4ade80; --air: #ef4444;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a;
+            --dim:#6b6b73; --accent:#16a34a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); line-height: 1.55;
+         font: 15px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 60px; }
+  header { text-align: center; margin-bottom: 26px; }
+  h1 { font-size: 1.4rem; font-weight: 650; margin: 0 0 4px; }
+  .desc { color: var(--dim); font-size: .88rem; }
+  .desc a { color: var(--accent); }
+  h2 { font-size: .68rem; letter-spacing: .16em; color: var(--dim);
+       font-weight: 600; margin: 28px 0 10px; }
+  .box { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+         margin-bottom: 10px; overflow: hidden; }
+  summary { cursor: pointer; padding: 12px 15px; list-style: none;
+            display: flex; gap: 10px; align-items: baseline; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '\25B8'; color: var(--dim); font-size: .8em;
+                    transition: transform 140ms ease; flex: none; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  .nm { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+  .ct { flex: none; color: var(--dim); font-size: .78rem; }
+  .inner { padding: 0 15px 12px; }
+  .sub { border-top: 1px solid var(--line); }
+  .sub summary { padding: 10px 15px 10px 28px; }
+  .sub .nm { font-weight: 500; }
+  .note { color: var(--dim); font-size: .84rem; padding: 4px 0 10px; }
+  /* THE SAME WALK AS THE OTHER TWO PAGES. There are three copies of it now -
+     here, the listener page and the host console - because this station has no
+     build step and every page it serves is one file. That is a real hazard and
+     is named rather than hidden: a fix to one of them has to travel to the
+     other two, and one already has - tagName is uppercase for HTML elements and
+     lowercase for foreign ones, so <svg> escaped a drop list that spelled it
+     SVG, and the text of the script inside it came out as words. */
+  .card { font-size: .9rem; overflow-wrap: anywhere; }
+  .card > :first-child { margin-top: 0; }
+  .card > :last-child { margin-bottom: 0; }
+  .card h1, .card h2, .card h3 { line-height: 1.25; margin: .7em 0 .35em;
+                                 letter-spacing: normal; color: var(--fg);
+                                 font-weight: 650; }
+  .card h1 { font-size: 1.2em; } .card h2 { font-size: 1.1em; } .card h3 { font-size: 1em; }
+  .card p { margin: .5em 0; }
+  .card a { color: var(--accent); }
+  .card img { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: .6em 0; }
+  .card ul, .card ol { margin: .5em 0; padding-left: 1.3em; }
+  .card blockquote { margin: .5em 0; padding-left: 10px; border-left: 2px solid var(--line);
+                     color: var(--dim); }
+  .card pre { overflow-x: auto; }
+  .card code, .card pre { font-family: ui-monospace, Consolas, monospace; font-size: .92em; }
+  .post { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+          margin-bottom: 10px; }
+  .post:last-child { margin-bottom: 0; }
+  .by { margin-top: 9px; font-size: .74rem; color: var(--dim); }
+  .by::before { content: '\2014\00a0'; }
+  .empty { color: var(--dim); font-size: .86rem; padding: 10px 0; }
+  footer { text-align: center; margin-top: 34px; color: var(--dim); font-size: .78rem; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>The shows</h1>
+    <div class="desc">Everything that has been posted, kept after the show it was
+      posted in went off the air. <a href="/">back to the radio</a></div>
+  </header>
+
+  <h2>BROADCASTS</h2>
+  <div id="shows"><div class="empty">reading&hellip;</div></div>
+
+  <h2>NOTES, BY SONG</h2>
+  <div id="songs"><div class="empty">reading&hellip;</div></div>
+
+  <footer><a href="/">wild n loyal radio</a></footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+
+  // Caddy's own directory listing, asked for as JSON rather than scraped out of
+  // the HTML it serves by default. That is the whole discovery mechanism: this
+  // station has no application server and no index file to fall out of step
+  // with what is actually on disk, so the disk is asked directly.
+  async function ls(path) {
+    const r = await fetch(path, { headers: { Accept: 'application/json' },
+                                  cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    return Array.isArray(j) ? j : [];
+  }
+  const dirs = (l) => l.filter(e => e.is_dir).map(e => e.name.replace(/\/$/, ''));
+  const mds  = (l) => l.filter(e => !e.is_dir && /\.md$/i.test(e.name))
+                       .map(e => e.name);
+
+  // ---- the same allow-list walk the radio and the console use ---------------
+  // Three copies, and the duplication is named where the sheet above names it.
+  // A file under /posts/ is only as trustworthy as whatever last held a speaker
+  // credential, so it is walked here exactly as it is walked there.
+  const KEEP = new Set(['P','BR','H1','H2','H3','STRONG','EM','U','A','UL','OL',
+                        'LI','IMG','BLOCKQUOTE','CODE','PRE','HR']);
+  const AS   = { B:'STRONG', I:'EM', H4:'H3', H5:'H3', H6:'H3', DIV:null, SPAN:null };
+  const DROP = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','SVG','MATH','FORM',
+                        'INPUT','BUTTON','SELECT','TEXTAREA','LINK','META','BASE',
+                        'NOSCRIPT','TEMPLATE','CANVAS','AUDIO','VIDEO','SOURCE','TRACK',
+                        'FRAME','FRAMESET','APPLET']);
+  const ATTR = { A: ['href','title'], IMG: ['src','alt','title'] };
+
+  function safeUrl(u, isImg) {
+    const t = String(u == null ? '' : u).replace(/[\u0000-\u0020]/g, '');
+    if (/^https?:\/\/[^\s]+$/i.test(t)) return t;
+    // Same-origin paths as well as absolute URLs, because a post written by the
+    // console points at /posts/... for every picture it uploaded. Anchored, so
+    // //host - which is a different origin wearing a path's clothes - is not it.
+    if (/^\/(?!\/)[^\s]*$/.test(t)) return t;
+    if (isImg && /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(t))
+      return t;
+    return '';
+  }
+
+  function walk(from, to, depth) {
+    const kids = Array.prototype.slice.call(from.childNodes);
+    for (let i = 0; i < kids.length; i++) {
+      const ch = kids[i];
+      if (ch.nodeType === 3) { to.appendChild(document.createTextNode(ch.nodeValue)); continue; }
+      if (ch.nodeType !== 1) continue;
+      // Uppercased: HTML elements report tagName uppercase and foreign ones -
+      // svg, math - report their own case. Without this the drop list misses a
+      // whole namespace.
+      const raw = String(ch.tagName || '').toUpperCase();
+      if (DROP.has(raw)) continue;
+      const tag = Object.prototype.hasOwnProperty.call(AS, raw) ? AS[raw] : raw;
+      if (!tag || !KEEP.has(tag) || depth > 24) { walk(ch, to, depth + 1); continue; }
+      const el = document.createElement(tag);
+      for (const a of (ATTR[tag] || [])) {
+        const v = ch.getAttribute(a);
+        if (v == null) continue;
+        if (a === 'href' || a === 'src') {
+          const u = safeUrl(v, tag === 'IMG');
+          if (u) el.setAttribute(a, u);
+        } else el.setAttribute(a, String(v).slice(0, 300));
+      }
+      if (tag === 'A') {
+        if (!el.getAttribute('href')) { walk(ch, to, depth + 1); continue; }
+        el.setAttribute('rel', 'noopener noreferrer nofollow ugc');
+        el.setAttribute('target', '_blank');
+      }
+      if (tag === 'IMG') {
+        if (!el.getAttribute('src')) continue;
+        el.setAttribute('referrerpolicy', 'no-referrer');
+        el.setAttribute('loading', 'lazy');
+      }
+      walk(ch, el, depth + 1);
+      to.appendChild(el);
+    }
+  }
+
+  function build(text) {
+    const raw = String(text || '');
+    const head = raw.match(/^\s*<!--\s*posted\s+(\S+)\s+rev\s+(\d+)(?:\s+by\s+([^>]*?))?\s*-->/);
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    const el = document.createElement('div');
+    el.className = 'card';
+    walk(doc.body, el, 0);
+    return { el, at: head && head[1], by: head && head[3] && head[3].trim().slice(0, 40) };
+  }
+
+  // ---- reading the names on disk back into something a person reads ---------
+  const pretty = (slug) => String(slug).replace(/-/g, ' ');
+  const MONTH = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // 20260817-215301 -> 17 Aug 2026, 21:53 UTC. Anything that is not that shape
+  // is shown as it is: a folder nobody recognises is still a folder, and a
+  // wrong date would be worse than none.
+  function whenDir(name) {
+    const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/.exec(name);
+    if (!m) return name;
+    return Number(m[3]) + ' ' + (MONTH[Number(m[2]) - 1] || m[2]) + ' ' + m[1] +
+           ', ' + m[4] + ':' + m[5] + ' UTC';
+  }
+  // 260818004901 -> 18 Aug 2026, 00:49 UTC, off a filename rather than a folder.
+  function whenFile(name) {
+    const m = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.md$/i.exec(name);
+    if (!m) return name.replace(/\.md$/i, '');
+    return Number(m[3]) + ' ' + (MONTH[Number(m[2]) - 1] || m[2]) + ' 20' + m[1] +
+           ', ' + m[4] + ':' + m[5] + ' UTC';
+  }
+  const count = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+
+  // ---- drawing -------------------------------------------------------------
+  // Loaded when a thing is opened and never before. An archive of a hundred
+  // broadcasts should cost one request to look at, not a hundred.
+  function lazy(det, fill) {
+    let done = false;
+    det.addEventListener('toggle', async () => {
+      if (!det.open || done) return;
+      done = true;
+      const inner = det.querySelector('.inner');
+      try { await fill(inner); }
+      catch (e) {
+        inner.textContent = '';
+        const p = inner.appendChild(document.createElement('div'));
+        p.className = 'empty';
+        p.textContent = 'could not be read: ' + e.message;
+      }
+    });
+  }
+
+  function box(parent, name, meta, cls) {
+    const d = parent.appendChild(document.createElement('details'));
+    d.className = 'box' + (cls ? ' ' + cls : '');
+    const s = d.appendChild(document.createElement('summary'));
+    const nm = s.appendChild(document.createElement('span'));
+    nm.className = 'nm'; nm.textContent = name;
+    // ALWAYS made, even when there is nothing to put in it yet. It was made only
+    // when a count was known, and the count is not known until the folder is
+    // opened and read - so the fill wrote to a null and threw into its own catch,
+    // and a show that opened to nothing looked like a show with nothing in it.
+    const ct = s.appendChild(document.createElement('span'));
+    ct.className = 'ct'; ct.textContent = meta || '';
+    const inner = d.appendChild(document.createElement('div'));
+    inner.className = 'inner';
+    inner.innerHTML = '';
+    const load = inner.appendChild(document.createElement('div'));
+    load.className = 'empty'; load.textContent = 'reading…';
+    return d;
+  }
+
+  // Every .md in one folder, drawn in the order it was written.
+  async function fillPosts(inner, path) {
+    const files = mds(await ls(path)).sort();
+    inner.textContent = '';
+    if (!files.length) {
+      const e = inner.appendChild(document.createElement('div'));
+      e.className = 'empty'; e.textContent = 'nothing was posted in this one';
+      return;
+    }
+    for (const f of files) {
+      const r = await fetch(path + encodeURIComponent(f), { cache: 'no-store' });
+      if (!r.ok) continue;
+      const { el, by } = build(await r.text());
+      const wrap = inner.appendChild(document.createElement('div'));
+      wrap.className = 'post';
+      const when = whenFile(f);
+      if (when !== f.replace(/\.md$/i, '')) {
+        const t = wrap.appendChild(document.createElement('div'));
+        t.className = 'note'; t.textContent = when;
+      }
+      wrap.appendChild(el);
+      if (by) {
+        const b = wrap.appendChild(document.createElement('div'));
+        b.className = 'by'; b.textContent = by;
+      }
+    }
+  }
+
+  async function main() {
+    let top;
+    try { top = dirs(await ls('/posts/')); }
+    catch (e) {
+      $('shows').textContent = '';
+      $('songs').textContent = '';
+      const m = document.createElement('div');
+      m.className = 'empty';
+      m.textContent = 'Nothing has been posted yet.';
+      $('shows').appendChild(m);
+      return;
+    }
+    const shows = top.filter(d => d !== 'songs').sort();
+    const hasSongs = top.indexOf('songs') >= 0;
+
+    $('shows').textContent = '';
+    if (!shows.length) {
+      const e = $('shows').appendChild(document.createElement('div'));
+      e.className = 'empty'; e.textContent = 'No broadcast has posted anything yet.';
+    }
+    for (const show of shows) {
+      const d = box($('shows'), pretty(show), '');
+      lazy(d, async (inner) => {
+        const nights = dirs(await ls('/posts/' + encodeURIComponent(show) + '/')).sort().reverse();
+        inner.textContent = '';
+        d.querySelector('.ct').textContent = count(nights.length, 'broadcast', 'broadcasts');
+        for (const night of nights) {
+          const n = box(inner, whenDir(night), '', 'sub');
+          lazy(n, (into) =>
+            fillPosts(into, '/posts/' + encodeURIComponent(show) + '/' +
+                            encodeURIComponent(night) + '/'));
+        }
+      });
+    }
+
+    $('songs').textContent = '';
+    if (!hasSongs) {
+      const e = $('songs').appendChild(document.createElement('div'));
+      e.className = 'empty'; e.textContent = 'No notes have been left on a song yet.';
+      return;
+    }
+    let tracks = [];
+    try { tracks = dirs(await ls('/posts/songs/')).sort(); } catch (e) {}
+    if (!tracks.length) {
+      const e = $('songs').appendChild(document.createElement('div'));
+      e.className = 'empty'; e.textContent = 'No notes have been left on a song yet.';
+      return;
+    }
+    for (const t of tracks) {
+      const d = box($('songs'), pretty(t), '');
+      lazy(d, (inner) => fillPosts(inner, '/posts/songs/' + encodeURIComponent(t) + '/'));
+    }
+  }
+
+  main();
+})();
+</script>
+</body>
+</html>

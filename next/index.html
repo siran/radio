@@ -1853,6 +1853,8 @@
     <span class="sep">·</span>
     <button class="flink" id="share">copy link</button>
     <span class="sep">·</span>
+    <a href="/shows/" title="every broadcast and every note that has been posted">the shows</a>
+    <span class="sep">&middot;</span>
     <a href="/host/">i'm a radio host</a>
     <span class="sep">·</span>
     <a href="/next/">try the newest version &rarr;</a>
@@ -3034,6 +3036,14 @@
   function cardUrl(u, isImg) {
     const t = String(u == null ? '' : u).replace(/[\u0000-\u0020]/g, '');
     if (/^https?:\/\/[^\s]+$/i.test(t)) return t;
+    // A PATH ON THIS STATION, which is what an uploaded picture is: the console
+    // files a pasted image beside the post and rewrites its src to /posts/...
+    // Without this the walk refused the very thing the upload had just written,
+    // and the picture lived in the .md and appeared nowhere.
+    //
+    // Anchored so that // is NOT it. A protocol-relative URL is another origin
+    // wearing a path's clothes, and it is exactly what this list exists to refuse.
+    if (/^\/(?!\/)[^\s]*$/.test(t)) return t;
     if (isImg && /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(t))
       return t;
     return '';

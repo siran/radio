@@ -1577,6 +1577,91 @@ def show_stamp() =
   "#{t.year}#{pad2(t.month)}#{pad2(t.day)}-#{pad2(t.hour)}#{pad2(t.min)}#{pad2(t.sec)}"
 end
 
+# What a slug does with a letter that is not in a-z, and the answer used to be
+# "a hyphen" - so an accented letter became a GAP rather than the letter it is.
+# On a station whose library is half in Spanish that is not an edge case:
+# "Óscar D'León - Lloraras" came out "oscar-d-le-n-lloraras", and that string
+# is a folder name on disk which outlives the mistake that made it.
+#
+# A table, because this language has no unicode normalisation and a browser
+# does - which is exactly why a SHOW's slug is offered by the console. A song
+# has no console in the loop at all: its folder turns over on a track change
+# whether or not anybody is watching, so the station has to manage alone.
+#
+# Incomplete on purpose. What it covers is the Latin-1 letters this library
+# actually holds; anything it misses is no worse off than it was before.
+accent_map = [
+    ("á", "a"),
+    ("à", "a"),
+    ("ä", "a"),
+    ("â", "a"),
+    ("ã", "a"),
+    ("å", "a"),
+    ("Á", "a"),
+    ("À", "a"),
+    ("Ä", "a"),
+    ("Â", "a"),
+    ("Ã", "a"),
+    ("Å", "a"),
+    ("é", "e"),
+    ("è", "e"),
+    ("ë", "e"),
+    ("ê", "e"),
+    ("É", "e"),
+    ("È", "e"),
+    ("Ë", "e"),
+    ("Ê", "e"),
+    ("í", "i"),
+    ("ì", "i"),
+    ("ï", "i"),
+    ("î", "i"),
+    ("Í", "i"),
+    ("Ì", "i"),
+    ("Ï", "i"),
+    ("Î", "i"),
+    ("ó", "o"),
+    ("ò", "o"),
+    ("ö", "o"),
+    ("ô", "o"),
+    ("õ", "o"),
+    ("ø", "o"),
+    ("Ó", "o"),
+    ("Ò", "o"),
+    ("Ö", "o"),
+    ("Ô", "o"),
+    ("Õ", "o"),
+    ("Ø", "o"),
+    ("ú", "u"),
+    ("ù", "u"),
+    ("ü", "u"),
+    ("û", "u"),
+    ("Ú", "u"),
+    ("Ù", "u"),
+    ("Ü", "u"),
+    ("Û", "u"),
+    ("ñ", "n"),
+    ("Ñ", "n"),
+    ("ç", "c"),
+    ("Ç", "c"),
+    ("ý", "y"),
+    ("ÿ", "y"),
+    ("Ý", "y"),
+    ("æ", "ae"),
+    ("Æ", "ae"),
+    ("œ", "oe"),
+    ("Œ", "oe"),
+    ("ß", "ss")
+  ]
+
+def unaccent(s) =
+  list.fold(
+    fun (acc, pair) -> begin
+      let (from, into) = pair
+      string.replace(pattern = from, fun (_) -> into, acc)
+    end,
+    s, accent_map)
+end
+
 # The console offers a slug and this decides whether to take it. It is offered
 # rather than computed here because a browser folds accents in one line and
 # this language does not: "oir esto" out of "oír esto" is worth having, and a
@@ -1591,7 +1676,7 @@ def show_slug(offer, name) =
   if string.match(pattern = "^[a-z0-9][a-z0-9-]{0,47}$", offer) then
     offer
   else
-    t = string.case(lower = true, name)
+    t = string.case(lower = true, unaccent(name))
     t = string.replace(pattern = "[^a-z0-9]+", fun (_) -> "-", t)
     t = string.replace(pattern = "^-+", fun (_) -> "", t)
     t = string.replace(pattern = "-+$", fun (_) -> "", t)
@@ -1624,6 +1709,39 @@ def show_sweep(dir) =
       parent = path.dirname(dir)
       if file.exists(parent) and list.length(file.ls(parent)) == 0 then
         file.rmdir(parent)
+      end
+    end
+  catch _ do
+    ()
+  end
+end
+
+# Every song folder nobody ever wrote in, from every run before this one.
+#
+# The sweep that keeps these down happens when one folder replaces another,
+# and at startup there is nothing to replace - so each restart left behind the
+# folder of whatever happened to be playing when the last process stopped, for
+# ever, in an archive somebody is going to browse.
+#
+# Only empty ones, and file.ls is what says so. Nothing that holds a note is
+# touched, which is the same rule show_sweep keeps and for the same reason:
+# file.rmdir takes a directory AND its content.
+def songs_tidy() =
+  root = "#{radio_home}/posts/songs"
+  try
+    if file.exists(root) then
+      n = list.fold(
+        fun (acc, d) -> begin
+          full = "#{root}/#{d}"
+          if file.is_directory(full) and list.length(file.ls(full)) == 0 then
+            file.rmdir(full)
+            acc + 1
+          else
+            acc
+          end
+        end, 0, file.ls(root))
+      if n > 0 then
+        log.important(label = "posts", "swept #{n} empty song folders from earlier runs")
       end
     end
   catch _ do
@@ -2124,6 +2242,11 @@ live = input.harbor(
     show_id     := ""
     show_began  := ""
     show_posts  := ""
+    # And straight back to the song folder, rather than to nothing. Without
+    # this a host who came off the air could not post again until the record
+    # changed, which is up to ten minutes of a console saying it is waiting for
+    # the station to say what is playing.
+    song_settle()
     show_name   := ""
     show_title  := ""
     show_artist := ""
@@ -2877,6 +3000,14 @@ def forward_meta(m) =
   announce(m)
 end
 music.on_metadata(synchronous = false, forward_meta)
+
+# Once, at startup, and in this order. The tidy clears the empty folders every
+# earlier run left behind - the sweep only fires when one folder replaces
+# another, and at startup there is nothing to replace. The settle then gives
+# THIS run a folder immediately, so a host does not have to wait for a record to
+# end before the console will let them post.
+songs_tidy()
+song_settle()
 
 output.icecast(
   %ffmpeg(format = "mp3", %audio(codec = "libmp3lame", b = "128k", ar = 44100, ac = 2)),
