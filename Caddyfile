@@ -689,6 +689,37 @@ import relays.caddy
 		}
 	}
 
+	# What the host wants the AI to be, and whether it may post without being
+	# asked. One file the console writes and the AI reads - the AI holds a
+	# speaker credential already, because it needs one to post at all, so this
+	# sits behind the same door as everything else it touches.
+	#
+	# 8KB where desk.json has 1KB, and the difference is prose. Same measured
+	# trap, and it is why the number is generous rather than tight: max_size
+	# TRUNCATES and webdav writes the truncated bytes, so a prompt over the cap
+	# would be saved cut in half with nothing said - and a model handed
+	# instructions that stop mid sentence does something confidently wrong.
+	handle /host/ai/* {
+		import speakers
+		@ai {
+			method GET PUT
+			path /host/ai/ai.json
+		}
+		handle @ai {
+			request_body {
+				max_size 8KB
+			}
+			webdav {
+				root {env.RADIO_HOME}/config
+				prefix /host/ai
+			}
+		}
+		# one file, one shape, nothing else reachable under this path
+		handle {
+			respond 404
+		}
+	}
+
 	handle /host/desk/* {
 		import speakers
 		@desk {

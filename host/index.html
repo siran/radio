@@ -217,6 +217,22 @@
      behaves like a page, because that is what is going into it: headings and
      paragraphs and pictures rather than a line of text. Tall enough to hold a
      paste without scrolling on the first one, and it grows. */
+  /* The picture the watcher is holding out. Above the composer because that is
+     where it goes if it is taken, and absent until there is one - an empty
+     frame every time a host opens the panel would be a feature advertising
+     itself. */
+  #shotwrap { display:flex; gap:12px; align-items:flex-start; padding:11px 12px;
+              margin:10px 0; background:#101013; border:1px solid #26262e;
+              border-radius:8px; }
+  #shotimg { flex:none; width:132px; height:auto; border-radius:6px; display:block;
+             background:#0a0a0c; }
+  #shotside { flex:1; min-width:0; font-size:12.5px; color:#9a9aa4; }
+  #shotside .btns { margin-top:8px; }
+  #aiprompt { width:100%; min-height:104px; padding:11px 12px; margin:8px 0;
+              background:#101013; border:1px solid #26262e; border-radius:8px;
+              color:#e8e8ea; font:13.5px/1.5 ui-monospace,Consolas,monospace;
+              resize:vertical; }
+  #aiprompt:focus { outline:none; border-color:#4a4a55; }
   #postbox { min-height:120px; max-height:420px; overflow:auto; padding:11px 12px;
              margin:10px 0; background:#101013; border:1px solid #26262e;
              border-radius:8px; color:#e8e8ea; font-size:14px; line-height:1.5; }
@@ -337,6 +353,14 @@
     <label class="chk" id="airduckwrap" hidden>
       <input type="checkbox" id="airduck" checked> Dip the shared tab under my mic
     </label>
+    <!-- OFF by default. The host is already sharing this tab on purpose, but
+         reading its PICTURE is a different act from broadcasting its sound, and
+         a thing that takes photographs should be asked for rather than assumed. -->
+    <label class="chk" id="airwatchwrap" hidden>
+      <input type="checkbox" id="airwatch"> Watch the still parts of the tab and
+      offer me a picture when they change
+    </label>
+    <div class="status" id="airwatchnote" hidden></div>
     <label class="chk">
       <input type="checkbox" id="airmute"> Pause the station&rsquo;s autoDJ while I am on air
     </label>
@@ -405,6 +429,16 @@
       <button class="tbtn" id="postlink" title="turn the selected words into a link">Link</button>
       <button class="tbtn" data-cmd="removeFormat" title="strip the formatting from the selection">Plain</button>
     </div>
+    <div id="shotwrap" hidden>
+      <img id="shotimg" alt="what the shared tab settled on">
+      <div id="shotside">
+        <div id="shotwhen"></div>
+        <div class="btns">
+          <button class="tbtn" id="shotuse">Put it in the post</button>
+          <button class="tbtn" id="shotdrop">No</button>
+        </div>
+      </div>
+    </div>
     <div id="postbox" contenteditable="true" role="textbox" aria-multiline="true"
          aria-label="What to post" data-empty="Paste or write what the room should see"></div>
     <div class="btns">
@@ -416,6 +450,34 @@
     <div class="status" id="postmsg"></div>
     <div class="err" id="posterr"></div>
     <ol class="postlist" id="postlist"></ol>
+  </details>
+
+  <!-- The AI is not something this console calls. It is a speaker that calls
+       the station: it holds a credential, it posts through the same route a
+       host does, and its cards are signed with its own name because the
+       signature comes from who wrote the file rather than from what the
+       prompt asked it to claim.
+
+       So this panel is a NOTICEBOARD and not an integration. Nothing here
+       reaches an AI; it writes one file that an AI reads. -->
+  <details class="panel" id="aiwrap">
+    <summary>The AI <span class="when">&mdash; what to tell it, and whether it may post
+      without asking you first. It reads this; nothing here talks to it.</span></summary>
+    <label class="chk">
+      <input type="checkbox" id="aiauto"> Let it post on its own
+    </label>
+    <!-- OFF by default, and it is the one default in this console that is about
+         somebody else's judgement rather than the host's own convenience. A
+         thing that writes on a public radio under its own name should be let
+         out deliberately, once, by the person whose station it is. -->
+    <div class="status" id="aiautonote">Off: it can prepare a post and leave it for
+      you in the composer, and you decide. On: it posts, and the card is signed with
+      its name rather than yours.</div>
+    <label for="aiprompt">What to tell the model</label>
+    <textarea id="aiprompt" maxlength="6000" spellcheck="false"
+      placeholder="Who it is, what the show is, what it should notice, how long to be, what never to say."></textarea>
+    <div class="status" id="aistat"></div>
+    <div class="err" id="aierr"></div>
   </details>
 
   <details class="panel" id="musicpanel" open>
@@ -3959,11 +4021,18 @@
     // displaySurface, and the video one always does.
     const vid = st.getVideoTracks()[0];
     const surface = (vid && vid.getSettings) ? (vid.getSettings().displaySurface || '') : '';
-    // The video track is stopped immediately. It is asked for because the API
-    // demands it, it is never read, and leaving it running would keep the
-    // browser announcing that this page is watching a tab when it is only
-    // listening to one.
-    st.getVideoTracks().forEach(t => t.stop());
+    // THE VIDEO TRACK IS KEPT NOW, where it used to be stopped on the next line.
+    // It is still not read by default - the switch in the panel is off until a
+    // host asks - but a stopped track cannot be picked up again later, and asking
+    // somebody to re-share their tab in order to turn a switch on is not a thing
+    // to build.
+    //
+    // What stopping it used to buy was the browser not announcing that this page
+    // is watching a tab when it is only listening to one. That was worth having
+    // and is no longer true either way: the sharing bar is on screen for the
+    // whole broadcast because the AUDIO is being captured, which is exactly what
+    // the operator's own screenshot of that dialog shows.
+    airTabVideo = st.getVideoTracks()[0] || null;
     // AND ANYTHING THAT IS NOT A TAB IS REFUSED HERE, because the dialog cannot
     // be trusted to have removed it. monitorTypeSurfaces did its job - Entire
     // Screen is gone - but systemAudio is not honoured on every pane: Brave's
@@ -4231,6 +4300,7 @@
     $('airmicmon').disabled = !airOn || !airMicMon;
     $('airswap').hidden = !tab;
     $('airswap').disabled = !tab || airSwapping;
+    shotLook();
     if (!airOn) return;
     // The mic tap is tapped AFTER the gate that opens on Talk over it, on purpose:
     // what a host hears through it is what the room hears. The cost is that it is
@@ -4303,6 +4373,12 @@
       airSrcStreams.push(next);
       airTabStream = next;
       if (airTabEnded) next.getAudioTracks()[0].addEventListener('ended', airTabEnded);
+      // A new tab brings its own picture, and the watcher is holding a track that
+      // belongs to a share which has just been stopped. Restarted rather than
+      // repointed, because everything it has learned was about the old tab.
+      shotStop();
+      airTabVideo = next.getVideoTracks()[0] || null;
+      shotLook();
       // The new tab answers the suppression question for itself, and a host who
       // switches from a tab the browser silenced to one it will not has to be
       // told - the headphone switch means something different on each.
@@ -4322,6 +4398,308 @@
     }
   }
   $('airswap').addEventListener('click', airSwapTab);
+
+  // ===== the noticeboard the AI reads =====================================
+  //
+  // Written here, read there, and nothing in between. This console does not
+  // know whether anything is listening - which is the point: an AI that holds a
+  // speaker credential can read this file and post through the same route a
+  // host does, and the day there is no AI this is a text box nobody collects.
+  //
+  // Saved as it is typed, debounced, because a prompt is written slowly and a
+  // host who closes the tab mid-sentence should not lose it. One write in
+  // flight with the last one queued behind, exactly as the show fields do -
+  // two PUTs racing would settle in whatever order the network chose and the
+  // loser would be the newer text.
+  const AI_URL = '/host/ai/ai.json';
+  let aiTimer = 0, aiSending = false, aiAgain = false;
+
+  async function aiLoad() {
+    try {
+      const r = await fetch(AI_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) return;                       // no file yet is not an error
+      const d = await r.json();
+      if (d && typeof d.auto === 'boolean') $('aiauto').checked = d.auto;
+      if (d && typeof d.prompt === 'string') $('aiprompt').value = d.prompt.slice(0, 6000);
+      aiSay(d);
+    } catch {}
+  }
+
+  function aiSay(d) {
+    $('aistat').textContent = !d ? ''
+      : 'Saved' + (d.at ? ' ' + new Date(d.at).toLocaleTimeString() : '') +
+        ($('aiauto').checked ? '. It may post on its own.'
+                             : '. It will leave posts for you rather than send them.');
+  }
+
+  async function aiPush() {
+    aiTimer = 0;
+    if (aiSending) { aiAgain = true; return; }
+    aiSending = true;
+    const body = {
+      auto: $('aiauto').checked,
+      prompt: $('aiprompt').value.slice(0, 6000),
+      at: new Date().toISOString(),
+      // Who last touched it, so a station with several speakers can tell whose
+      // instructions the AI is following. Not a credential and not used as one.
+      by: ($('whoami').textContent || '').trim()
+    };
+    try {
+      const r = await fetch(AI_URL, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body, null, 1) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      $('aierr').textContent = '';
+      aiSay(body);
+    } catch (e) {
+      $('aierr').textContent = 'Could not save that: ' + e.message;
+    } finally {
+      aiSending = false;
+      if (aiAgain) { aiAgain = false; aiPush(); }
+    }
+  }
+
+  const aiSoon = () => { clearTimeout(aiTimer); aiTimer = setTimeout(aiPush, 700); };
+  $('aiprompt').addEventListener('input', aiSoon);
+  // The switch saves at once. It is one bit and somebody just decided it.
+  $('aiauto').addEventListener('change', aiPush);
+  aiLoad();
+
+  // ===== watching the still parts of the tab ===============================
+  //
+  // "TELL ME WHEN THE PICTURE CHANGES" IS USELESS HERE. A playing video changes
+  // every frame, so a difference threshold fires for ever and says nothing. The
+  // first design answered that with a heuristic - a change followed by stillness,
+  // since video never stills and a page does - and the operator had the better
+  // idea before it was built: the moving part of a tab is a REGION. It can be
+  // found, and it can be ignored.
+  //
+  // So the frame is a grid and every cell carries a running measure of how
+  // restless it is. A video pane saturates that within seconds; a track title,
+  // the chrome, a sidebar, the labels sit near zero. Watching only the quiet
+  // cells makes a track name changing an event and a whole film playing under it
+  // nothing at all.
+  //
+  // Measured before any of it was built: a captured surface does NOT taint a
+  // canvas, so the pixels can be read at all; a grab at this size costs about
+  // 4ms; and two grabs of an unchanged tab differ by exactly 0.00, so 'nothing
+  // moved' is a real zero and not a small number.
+  const SHOT_EVERY = 1200;    // ms between looks. A page change is not urgent.
+  const SHOT_W = 256, SHOT_H = 144;
+  const SHOT_COLS = 16, SHOT_ROWS = 9;          // 144 cells of 16 by 16
+  const SHOT_CELLS = SHOT_COLS * SHOT_ROWS;
+  const SHOT_CW = SHOT_W / SHOT_COLS, SHOT_CH = SHOT_H / SHOT_ROWS;
+  // How fast a cell's restlessness follows what it just did, and the ceiling any
+  // single look may contribute. THE CLAMP IS NOT DECORATION: without it the very
+  // event being detected would spike its own cells' restlessness and exclude the
+  // labels that reported it, so the second track change in a row would be
+  // invisible. Clamped, a busy cell still saturates near the clamp and a cell
+  // that moved once barely stirs.
+  const SHOT_ALPHA = 0.12, SHOT_CLAMP = 6;
+  const SHOT_BUSY = 3;        // restlessness above which a cell is 'the video'
+  const SHOT_CELLMOVE = 8;    // change within ONE cell that counts as that cell moving
+  const SHOT_HITS = 2;        // moved cells that make an event, before identification
+  const SHOT_KNOWN = 2;       // times a cell must have moved to be an identifier
+  const SHOT_WARM = 8;        // looks before any of this is trusted
+  const SHOT_COOL = 20000;    // ms before another picture may be offered
+  const SHOT_WIDE = 960;      // px across for the picture actually kept
+  const SHOT_FLOOR = 0.15;    // fraction of cells still enough to be worth watching
+
+  let airTabVideo = null, shotVid = null, shotTimer = 0, shotCanvas = null,
+      shotLast = null, shotBusy = null, shotHits = null, shotSeen = 0,
+      shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
+
+  function shotSmall() {
+    if (!shotCanvas) {
+      shotCanvas = document.createElement('canvas');
+      shotCanvas.width = SHOT_W; shotCanvas.height = SHOT_H;
+    }
+    const cx = shotCanvas.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(shotVid, 0, 0, SHOT_W, SHOT_H);
+    return cx.getImageData(0, 0, SHOT_W, SHOT_H).data;
+  }
+
+  // The red channel and every other pixel. This is a movement detector, not a
+  // comparison: it has to be cheap enough to run beside an encoder, and a region
+  // that changed changed by more than one channel of every fourth pixel.
+  function shotCell(a, b, cx, cy) {
+    let sum = 0, n = 0;
+    const x0 = cx * SHOT_CW, y0 = cy * SHOT_CH;
+    for (let y = y0; y < y0 + SHOT_CH; y += 2) {
+      for (let x = x0; x < x0 + SHOT_CW; x += 2) {
+        const p = (y * SHOT_W + x) * 4;
+        sum += Math.abs(a[p] - b[p]); n++;
+      }
+    }
+    return n ? sum / n : 0;
+  }
+
+  function shotTick() {
+    if (!shotVid || shotVid.readyState < 2) return;
+    let now;
+    try { now = shotSmall(); } catch { return; }
+    if (!shotLast) {
+      shotLast = now;
+      shotBusy = new Float32Array(SHOT_CELLS);
+      shotHits = new Uint16Array(SHOT_CELLS);
+      return;
+    }
+    shotSeen++;
+
+    // THREE KINDS OF CELL, and only one of them is worth reading.
+    //
+    //   RESTLESS - a video pane. Saturates its restlessness within seconds and
+    //              is excluded for as long as it stays that way.
+    //   DEAD     - chrome, a logo, a background. Never changes, so it can never
+    //              tell anybody anything.
+    //   SLOW     - a track title, a counter, a now-playing line. Changes rarely,
+    //              and THAT IS THE IDENTIFICATION. It is the whole signal.
+    //
+    // Which is why this counts CELLS THAT MOVED rather than averaging change
+    // across the quiet ones. A title lights up three or four cells out of a
+    // hundred: averaged over the hundred it is a rounding error, and the
+    // threshold that caught it would also catch the mouse moving.
+    let watched = 0, hits = 0, known = 0, whole = 0;
+    const cellHit = new Uint8Array(SHOT_CELLS);
+    for (let cy = 0; cy < SHOT_ROWS; cy++) {
+      for (let cx = 0; cx < SHOT_COLS; cx++) {
+        const i = cy * SHOT_COLS + cx;
+        const d = shotCell(now, shotLast, cx, cy);
+        whole += d;
+        if (shotHits[i] >= SHOT_KNOWN) known++;
+        if (shotBusy[i] < SHOT_BUSY) {
+          watched++;
+          if (d > SHOT_CELLMOVE) { cellHit[i] = 1; hits++; }
+        }
+        shotBusy[i] = shotBusy[i] * (1 - SHOT_ALPHA) +
+                      Math.min(d, SHOT_CLAMP) * SHOT_ALPHA;
+      }
+    }
+    shotLast = now;
+    whole /= SHOT_CELLS;
+
+    // Once some cells have moved more than once while otherwise being quiet,
+    // they ARE the identification - the place this particular tab writes what it
+    // is playing - and everything else can be ignored. Before that is known, any
+    // quiet cell will do, and two of them have to agree.
+    const identified = known > 0;
+    let want = 0;
+    if (identified) {
+      for (let i = 0; i < SHOT_CELLS; i++)
+        if (cellHit[i] && shotHits[i] >= 1) want++;
+    } else {
+      want = hits;
+    }
+
+    // A tab that is ALL video leaves nothing still to watch, and a detector with
+    // no quiet cells would simply never fire. It falls back to the whole frame
+    // and waits for it to settle, which is worse and is better than nothing.
+    const enough = watched >= SHOT_CELLS * SHOT_FLOOR;
+    const moved = enough ? want >= (identified ? 1 : SHOT_HITS)
+                         : whole > SHOT_CELLMOVE / 2;
+
+    // Learned from every look, including the ones before this is trusted, so a
+    // tab is already understood by the time it is being watched for real.
+    if (enough) for (let i = 0; i < SHOT_CELLS; i++) if (cellHit[i]) shotHits[i]++;
+    shotSay(watched, known, enough);
+    if (shotSeen < SHOT_WARM) return;
+
+    if (moved) { shotMoving = true; shotQuiet = 0; return; }
+    if (!shotMoving) return;
+    // One quiet look after the movement, so the picture is not taken in the
+    // middle of a page fading in.
+    if (++shotQuiet < 1) return;
+    shotMoving = false; shotQuiet = 0;
+    if (Date.now() - shotAt < SHOT_COOL) return;
+    shotOffer();
+  }
+
+  // What it is doing, in the panel, because a detector nobody can see the working
+  // of is a detector nobody can tell is broken.
+  function shotSay(watched, known, enough) {
+    $('airwatchnote').hidden = false;
+    $('airwatchnote').textContent =
+      shotSeen < SHOT_WARM
+        ? 'Learning which parts of this tab move…'
+        : !enough
+          ? 'Almost all of this tab is moving, so it is watching the whole frame ' +
+            'and waiting for it to settle instead.'
+          : known
+            ? 'Watching ' + known + ' area' + (known === 1 ? '' : 's') +
+              ' where this tab says what it is playing, out of ' + watched + ' still enough to read.'
+            : 'Watching ' + watched + ' still areas; nothing has changed twice yet, ' +
+              'so it does not know which of them names the track.';
+  }
+
+  // JPEG rather than PNG, and not for looks: a screenshot as PNG is most of a
+  // megabyte, the post route truncates over 4MB and this console refuses over 3.
+  // A page of text at .82 is a fraction of that and reads perfectly.
+  function shotOffer() {
+    const w = shotVid.videoWidth, h = shotVid.videoHeight;
+    if (!w || !h) return;
+    const c = document.createElement('canvas');
+    c.width = Math.min(SHOT_WIDE, w);
+    c.height = Math.round(c.width * h / w);
+    c.getContext('2d').drawImage(shotVid, 0, 0, c.width, c.height);
+    try { shotData = c.toDataURL('image/jpeg', 0.82); } catch { return; }
+    shotAt = Date.now();
+    $('shotimg').src = shotData;
+    $('shotwhen').textContent = 'The still parts of the tab changed at ' +
+      new Date().toLocaleTimeString() + '.';
+    $('shotwrap').hidden = false;
+    // The one thing here allowed to open something by itself: a picture offered
+    // inside a shut panel is a picture nobody was offered.
+    $('postwrap').open = true;
+  }
+
+  function shotStart() {
+    if (shotTimer || !airTabVideo) return;
+    shotVid = document.createElement('video');
+    shotVid.muted = true;
+    shotVid.playsInline = true;
+    try { shotVid.srcObject = new MediaStream([airTabVideo]); } catch { return; }
+    shotVid.play().catch(() => {});
+    shotLast = null; shotBusy = null; shotHits = null; shotSeen = 0;
+    shotMoving = false; shotQuiet = 0;
+    shotTimer = setInterval(shotTick, SHOT_EVERY);
+  }
+
+  function shotStop() {
+    if (shotTimer) { clearInterval(shotTimer); shotTimer = 0; }
+    if (shotVid) { try { shotVid.pause(); } catch {} shotVid.srcObject = null; shotVid = null; }
+    shotLast = null; shotBusy = null; shotHits = null; shotCanvas = null; shotSeen = 0;
+    shotMoving = false; shotQuiet = 0;
+    $('airwatchnote').hidden = true;
+  }
+
+  function shotLook() {
+    const can = airOn && !!airTabVideo;
+    $('airwatchwrap').hidden = !can;
+    if (can && $('airwatch').checked) shotStart(); else shotStop();
+  }
+  $('airwatch').addEventListener('change', shotLook);
+
+  // Into the composer as a data: image, which is exactly what a clipboard paste
+  // already gives - so Post uploads it and rewrites it to a file with no new
+  // storage code at all behind this button.
+  $('shotuse').addEventListener('click', () => {
+    if (!shotData) return;
+    postBox.focus();
+    const sel = document.getSelection();
+    if (!sel.rangeCount || !postBox.contains(sel.anchorNode)) {
+      const r = document.createRange();
+      r.selectNodeContents(postBox); r.collapse(false);
+      sel.removeAllRanges(); sel.addRange(r);
+    }
+    document.execCommand('insertHTML', false,
+      postClean('<img src="' + shotData + '" alt="from the tab">'));
+    $('shotwrap').hidden = true;
+    shotData = '';
+  });
+  $('shotdrop').addEventListener('click', () => {
+    $('shotwrap').hidden = true; shotData = '';
+  });
 
   // ===== posts: what the room reads while a show is on =====================
   //
@@ -4812,6 +5190,10 @@
     airTab = null;
     airTabGain = null; airMicGain = null; airTalking = false;
     airTabSrc = null; airTabStream = null; airTabEnded = null; airSwapping = false;
+    shotStop();
+    airTabVideo = null;
+    $('shotwrap').hidden = true;
+    shotData = '';
     // Off the live list, or a slider moved later would ramp a filter belonging
     // to a context that has been closed.
     eqChains = eqChains.filter(c => c !== airEq);
