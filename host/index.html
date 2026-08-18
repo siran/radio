@@ -5444,6 +5444,29 @@
   // One in flight at a time, with the last one queued behind it. Two POSTs
   // racing would settle in whatever order the network chose, and the loser
   // would be the newer text.
+  // A BOUNDARY IN THE RECORDING, and nothing more than that. The webcast
+  // protocol has a metadata frame, the bridge has always accepted one and
+  // deliberately not forwarded it - the station takes its titles from the file
+  // it is playing - and it now writes it beside the audio it is keeping. So
+  // what this sends is not an attempt to set the station's metadata. It is the
+  // host saying 'a new thing starts here', which is the only party that knows.
+  //
+  // Only when it actually changed, and only while there is a socket: a mark per
+  // keystroke would be a mark file longer than the recording.
+  let airMarked = null;
+  function airMark() {
+    if (!airWS || airWS.readyState !== WebSocket.OPEN) return;
+    const artist = $('showartist').value.trim(), title = $('showtitle').value.trim();
+    const key = artist + '\u0000' + title;
+    if (key === airMarked) return;
+    airMarked = key;
+    if (!artist && !title) return;          // cleared is not a new track
+    try {
+      airWS.send(JSON.stringify({ type: 'metadata',
+        data: { artist, title, show: $('showname').value.trim() } }));
+    } catch {}
+  }
+
   async function showPush() {
     showTimer = 0;
     if (showSending) { showAgain = true; return; }
@@ -5465,6 +5488,7 @@
       // `live` is the station's own answer to whether a source is connected -
       // the same one it ducks the music off - so this line says whether what
       // was just saved is being shown to anybody yet.
+      airMark();
       $('showstat').textContent =
         (d.name || d.title || d.artist || d.note)
           ? (d.live ? 'saved, and on the listener page now'

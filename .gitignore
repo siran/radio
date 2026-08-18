@@ -61,3 +61,8 @@ live/
 
 # scratch, written to be read and thrown away
 disposable.md
+
+# Broadcast recordings and their tag marks. Tens of megabytes an hour, kept for
+# whatever transcribes or clips them later; RADIO_RECORD moves them off C: if
+# that drive gets tight again.
+recordings/

@@ -77,6 +77,11 @@ if (!HOME) { console.error('RADIO_HOME is not set'); process.exit(2); }
 // caddy is what asks who you are; a bridge on 0.0.0.0 would be an
 // unauthenticated microphone into the station.
 const PORT = Number(process.env.RADIO_BRIDGE_PORT || 8007);
+// Where broadcasts are kept. An environment variable rather than a constant
+// because this is the one thing here that grows without limit - an hour of a
+// show is tens of megabytes - and the machine this runs on has had C: at zero
+// twice. Moving it to another drive should not need an edit to this file.
+const RECORD = process.env.RADIO_RECORD || (HOME ? path.join(HOME, 'recordings') : '');
 const HOST = '127.0.0.1';
 
 const HARBOR_HOST = '127.0.0.1';
@@ -336,8 +341,13 @@ class Air {
         // radio.liq. The spec makes metadata frames optional, so a client that
         // sends them is not broken by being ignored - it just does not get
         // titles.
-        log('metadata from', this.who, '(accepted, not forwarded):',
+        // Not forwarded, and now not discarded either: it is written beside the
+        // recording as a boundary. The station still takes its own metadata from
+        // the file it is playing, which is what the paragraph above is about; a
+        // source saying what it is playing is a fact about the RECORDING.
+        log('metadata from', this.who, '(marked, not forwarded):',
             JSON.stringify(data).slice(0, 200));
+        this.recMark(data);
         return;
       default:
         return;
@@ -368,6 +378,9 @@ class Air {
     }
     this.bytes += chunk.length;
     this.harbor.write(chunk);
+    // After the station and never before it. The broadcast is the point; the
+    // recording is a copy of it, and a copy must not be in the way.
+    this.recWrite(chunk);
     // Loopback should never back up. If it does, the operator should hear
     // about it from the page rather than from the audio.
     if (this.harbor.writableLength > 1024 * 1024 && !this.warnedBackpressure) {
@@ -375,6 +388,68 @@ class Air {
       log('backpressure to the harbor:', this.harbor.writableLength, 'bytes queued');
       this.say('warn', { why: 'the station is not taking audio as fast as it arrives' });
     }
+  }
+
+  // --- keeping the broadcast ------------------------------------------------
+  // Opened on the first byte written rather than when the socket arrives, so a
+  // client that connects and says nothing leaves no file behind.
+  recOpen() {
+    if (this.rec || this.recFailed || !RECORD) return;
+    try { fs.mkdirSync(RECORD, { recursive: true }); } catch {}
+    const d = new Date(), z = (n) => String(n).padStart(2, '0');
+    const stamp = d.getUTCFullYear() + z(d.getUTCMonth() + 1) + z(d.getUTCDate()) +
+                  '-' + z(d.getUTCHours()) + z(d.getUTCMinutes()) + z(d.getUTCSeconds());
+    // A speaker name becomes part of a path here, so it is reduced to characters
+    // that cannot be anything else. It arrives from caddy's own auth and is not
+    // hostile; it is also not this file's job to be the only thing standing
+    // between a name and a filesystem.
+    const who = String(this.who || 'someone').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 40);
+    this.recBase = path.join(RECORD, stamp + '-' + who);
+    this.recAt = Date.now();
+    try {
+      this.rec = fs.createWriteStream(this.recBase + '.webm');
+      // A recording that fails must never take the broadcast with it. Every
+      // path here logs and gives up on the file; nothing throws back towards
+      // the audio.
+      this.rec.on('error', (e) => {
+        log('recording stopped for', this.who + ':', e.message);
+        this.rec = null; this.recFailed = true;
+      });
+      log('recording', this.who, 'to', this.recBase + '.webm');
+    } catch (e) {
+      log('cannot record', this.who + ':', e.message);
+      this.rec = null; this.recFailed = true;
+    }
+  }
+
+  recWrite(chunk) {
+    if (!this.rec) this.recOpen();
+    if (this.rec) { try { this.rec.write(chunk); } catch {} }
+  }
+
+  // A boundary, written beside the audio rather than into it. `at` is the
+  // offset from the first byte of the recording, which is what anything
+  // cutting this into tracks actually needs - a wall clock would have to be
+  // subtracted from another wall clock nobody wrote down.
+  recMark(data) {
+    if (!this.rec || !this.recBase) return;
+    let line;
+    try {
+      line = JSON.stringify(Object.assign(
+        { at: Date.now() - this.recAt, iso: new Date().toISOString() },
+        data || {})) + '\n';
+    } catch { return; }
+    fs.appendFile(this.recBase + '.jsonl', line, (e) => {
+      if (e) log('could not write a mark for', this.who + ':', e.message);
+    });
+  }
+
+  recClose() {
+    if (!this.rec) return;
+    const r = this.rec;
+    this.rec = null;
+    try { r.end(); } catch {}
+    log('recording closed:', this.recBase + '.webm');
   }
 
   // --- towards the harbor ---
@@ -446,7 +521,15 @@ class Air {
       // Everything held while the mount was being waited for, in order, header
       // first. A client that waited for `ready` has none of this.
       log('flushing', this.prerollBytes, 'bytes held while waiting for the mount');
-      for (const c of this.preroll) { this.bytes += c.length; sock.write(c); }
+      // Recorded from HERE, not from the first live chunk. This is the audio
+      // held while the mount was being granted, and it is where the webm header
+      // is - a recording that started after it would be a file no decoder opens,
+      // which is the same fault the comment above is being careful about.
+      for (const c of this.preroll) {
+        this.bytes += c.length;
+        sock.write(c);
+        this.recWrite(c);
+      }
     }
     this.preroll = []; this.prerollBytes = 0;
     log('on air:', this.who, this.mime + ',', 'after', this.attempt, 'attempt(s),',
@@ -501,6 +584,7 @@ class Air {
     if (this.live) log('off air:', this.who + ',', secs.toFixed(1) + 's,', this.bytes, 'bytes,', why);
     else if (!quiet) log('closed before going on air:', this.who + ',', why);
     this.live = false;
+    this.recClose();
     if (this.harbor) {
       // end(), not destroy(). Measured: the harbor releases the mount five
       // seconds after the last BYTE either way - a half-close and a reset are
