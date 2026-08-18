@@ -4496,19 +4496,21 @@
   // labels that reported it, so the second track change in a row would be
   // invisible. Clamped, a busy cell still saturates near the clamp and a cell
   // that moved once barely stirs.
-  const SHOT_ALPHA = 0.12, SHOT_CLAMP = 6;
-  const SHOT_BUSY = 3;        // restlessness above which a cell is 'the video'
-  const SHOT_CELLMOVE = 8;    // change within ONE cell that counts as that cell moving
-  const SHOT_HITS = 2;        // moved cells that make an event, before identification
-  const SHOT_KNOWN = 2;       // times a cell must have moved to be an identifier
-  const SHOT_WARM = 8;        // looks before any of this is trusted
+  const SHOT_ALPHA = 0.12;    // how fast a cell's baseline follows what it does
+  const SHOT_DENOM = 1.5;     // floor under the baseline, so a dead cell's noise
+                              // cannot divide its way into a huge ratio
+  const SHOT_RATIO = 3.5;     // times its own usual change that makes a cell fire
+  const SHOT_CELLMOVE = 6;    // and an absolute floor, so 0.1 -> 0.5 is not an event
+  const SHOT_HITS = 2;        // cells that must fire together, before identification
+  const SHOT_KNOWN = 2;       // times a cell must have fired to be an identifier
+  const SHOT_RUN = 3;         // consecutive fires that mean a new level, not an event
+  const SHOT_WARM = 8;        // looks spent learning before any of this is trusted
   const SHOT_COOL = 20000;    // ms before another picture may be offered
   const SHOT_WIDE = 960;      // px across for the picture actually kept
-  const SHOT_FLOOR = 0.15;    // fraction of cells still enough to be worth watching
 
   let airTabVideo = null, shotVid = null, shotTimer = 0, shotCanvas = null,
-      shotLast = null, shotBusy = null, shotHits = null, shotSeen = 0,
-      shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
+      shotLast = null, shotBusy = null, shotHits = null, shotRun = null,
+      shotSeen = 0, shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
 
   function shotSmall() {
     if (!shotCanvas) {
@@ -4543,72 +4545,73 @@
       shotLast = now;
       shotBusy = new Float32Array(SHOT_CELLS);
       shotHits = new Uint16Array(SHOT_CELLS);
+      shotRun = new Uint8Array(SHOT_CELLS);
       return;
     }
     shotSeen++;
 
-    // THREE KINDS OF CELL, and only one of them is worth reading.
+    // EVERY CELL IS MEASURED AGAINST ITSELF, and that one rule replaced two
+    // classes. The first version found the restless cells and ignored them,
+    // which is wrong in the case the operator named: sometimes the labels do
+    // not change and the video does - a cut, a slide, a record whose only sign
+    // is its artwork. A busy region is not noise. It is a channel with a high
+    // noise floor, and what matters in it is a change much larger than usual.
     //
-    //   RESTLESS - a video pane. Saturates its restlessness within seconds and
-    //              is excluded for as long as it stays that way.
-    //   DEAD     - chrome, a logo, a background. Never changes, so it can never
-    //              tell anybody anything.
-    //   SLOW     - a track title, a counter, a now-playing line. Changes rarely,
-    //              and THAT IS THE IDENTIFICATION. It is the whole signal.
+    //   a still label whose text changes  baseline ~0   ratio enormous   fires
+    //   a video pane playing normally     baseline 25   ratio near 1     quiet
+    //   that same pane at a cut           baseline 25   ratio 3 or 4     FIRES
+    //   dead chrome, sensor noise         tiny change   absolute floor   quiet
     //
-    // Which is why this counts CELLS THAT MOVED rather than averaging change
-    // across the quiet ones. A title lights up three or four cells out of a
-    // hundred: averaged over the hundred it is a rounding error, and the
-    // threshold that caught it would also catch the mouse moving.
-    let watched = 0, hits = 0, known = 0, whole = 0;
+    // The absolute floor matters as much as the ratio: without it a cell that
+    // never moves would fire on a rounding difference, because anything divided
+    // by almost nothing is enormous.
+    let fired = 0, known = 0;
     const cellHit = new Uint8Array(SHOT_CELLS);
     for (let cy = 0; cy < SHOT_ROWS; cy++) {
       for (let cx = 0; cx < SHOT_COLS; cx++) {
         const i = cy * SHOT_COLS + cx;
         const d = shotCell(now, shotLast, cx, cy);
-        whole += d;
         if (shotHits[i] >= SHOT_KNOWN) known++;
-        if (shotBusy[i] < SHOT_BUSY) {
-          watched++;
-          if (d > SHOT_CELLMOVE) { cellHit[i] = 1; hits++; }
+        const hot = d > SHOT_CELLMOVE &&
+                    d / Math.max(shotBusy[i], SHOT_DENOM) > SHOT_RATIO;
+        if (hot) { cellHit[i] = 1; fired++; shotRun[i]++; } else { shotRun[i] = 0; }
+        // THE BASELINE IS NOT TAUGHT BY THE EVENTS IT IS MEANT TO CATCH. A cell
+        // that fired does not fold that reading in, or the first cut would raise
+        // its own floor and hide the second one.
+        //
+        // Unless it keeps firing. Three in a row is not three events, it is a
+        // region that has changed what it does - a video starting after a pause -
+        // and the baseline has to be allowed to follow that or the cell shouts
+        // for ever. During the warm-up everything is learned, because a baseline
+        // of zero makes every cell look like an event.
+        if (!hot || shotRun[i] >= SHOT_RUN || shotSeen <= SHOT_WARM) {
+          shotBusy[i] = shotBusy[i] * (1 - SHOT_ALPHA) + d * SHOT_ALPHA;
         }
-        shotBusy[i] = shotBusy[i] * (1 - SHOT_ALPHA) +
-                      Math.min(d, SHOT_CLAMP) * SHOT_ALPHA;
       }
     }
     shotLast = now;
-    whole /= SHOT_CELLS;
 
-    // Once some cells have moved more than once while otherwise being quiet,
-    // they ARE the identification - the place this particular tab writes what it
-    // is playing - and everything else can be ignored. Before that is known, any
-    // quiet cell will do, and two of them have to agree.
+    // Once some cells have fired more than once, they ARE the identification -
+    // the place this particular tab reports itself - and one of them is enough.
+    // Before that is known, two have to agree, so a cursor blinking somewhere is
+    // not a track change.
     const identified = known > 0;
     let want = 0;
     if (identified) {
-      for (let i = 0; i < SHOT_CELLS; i++)
-        if (cellHit[i] && shotHits[i] >= 1) want++;
+      for (let i = 0; i < SHOT_CELLS; i++) if (cellHit[i] && shotHits[i] >= 1) want++;
     } else {
-      want = hits;
+      want = fired;
     }
+    const moved = want >= (identified ? 1 : SHOT_HITS);
 
-    // A tab that is ALL video leaves nothing still to watch, and a detector with
-    // no quiet cells would simply never fire. It falls back to the whole frame
-    // and waits for it to settle, which is worse and is better than nothing.
-    const enough = watched >= SHOT_CELLS * SHOT_FLOOR;
-    const moved = enough ? want >= (identified ? 1 : SHOT_HITS)
-                         : whole > SHOT_CELLMOVE / 2;
-
-    // Learned from every look, including the ones before this is trusted, so a
-    // tab is already understood by the time it is being watched for real.
-    if (enough) for (let i = 0; i < SHOT_CELLS; i++) if (cellHit[i]) shotHits[i]++;
-    shotSay(watched, known, enough);
+    for (let i = 0; i < SHOT_CELLS; i++) if (cellHit[i]) shotHits[i]++;
+    shotSay(fired, known);
     if (shotSeen < SHOT_WARM) return;
 
     if (moved) { shotMoving = true; shotQuiet = 0; return; }
     if (!shotMoving) return;
-    // One quiet look after the movement, so the picture is not taken in the
-    // middle of a page fading in.
+    // One quiet look after it, so the picture is not taken in the middle of a
+    // page fading in or a cut being cross-faded.
     if (++shotQuiet < 1) return;
     shotMoving = false; shotQuiet = 0;
     if (Date.now() - shotAt < SHOT_COOL) return;
@@ -4617,19 +4620,16 @@
 
   // What it is doing, in the panel, because a detector nobody can see the working
   // of is a detector nobody can tell is broken.
-  function shotSay(watched, known, enough) {
+  function shotSay(fired, known) {
     $('airwatchnote').hidden = false;
     $('airwatchnote').textContent =
       shotSeen < SHOT_WARM
-        ? 'Learning which parts of this tab move…'
-        : !enough
-          ? 'Almost all of this tab is moving, so it is watching the whole frame ' +
-            'and waiting for it to settle instead.'
-          : known
-            ? 'Watching ' + known + ' area' + (known === 1 ? '' : 's') +
-              ' where this tab says what it is playing, out of ' + watched + ' still enough to read.'
-            : 'Watching ' + watched + ' still areas; nothing has changed twice yet, ' +
-              'so it does not know which of them names the track.';
+        ? 'Learning what this tab normally does\u2026'
+        : known
+          ? 'It knows ' + known + ' place' + (known === 1 ? '' : 's') +
+            ' on this tab that report a change, and is watching those.'
+          : 'Watching the whole tab, and comparing every part of it against its ' +
+            'own usual. Nothing has reported twice yet.';
   }
 
   // JPEG rather than PNG, and not for looks: a screenshot as PNG is most of a
@@ -4660,15 +4660,16 @@
     shotVid.playsInline = true;
     try { shotVid.srcObject = new MediaStream([airTabVideo]); } catch { return; }
     shotVid.play().catch(() => {});
-    shotLast = null; shotBusy = null; shotHits = null; shotSeen = 0;
-    shotMoving = false; shotQuiet = 0;
+    shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
+    shotSeen = 0; shotMoving = false; shotQuiet = 0;
     shotTimer = setInterval(shotTick, SHOT_EVERY);
   }
 
   function shotStop() {
     if (shotTimer) { clearInterval(shotTimer); shotTimer = 0; }
     if (shotVid) { try { shotVid.pause(); } catch {} shotVid.srcObject = null; shotVid = null; }
-    shotLast = null; shotBusy = null; shotHits = null; shotCanvas = null; shotSeen = 0;
+    shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
+    shotCanvas = null; shotSeen = 0;
     shotMoving = false; shotQuiet = 0;
     $('airwatchnote').hidden = true;
   }
