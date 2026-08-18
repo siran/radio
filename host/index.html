@@ -4620,7 +4620,15 @@
       // reader of this file skips. It is the only place the time of a post is
       // written down: the station's list has no room for it and the archive will
       // want it long after the station has forgotten the show.
-      const body = '<!-- posted ' + now + ' rev ' + rev + ' -->\n' + html + '\n';
+      // WHO, filtered rather than trusted. It comes from /whoami, which is Caddy
+      // answering with the credential it already used to pick this host's folders,
+      // so it is not hostile - but it is going into an HTML COMMENT, and a name
+      // containing --> would close that comment early and spill the rest of the
+      // header into the document as text. An allow-list of characters costs a line.
+      const who = ($('whoami').textContent || '').trim()
+                    .replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 40);
+      const body = '<!-- posted ' + now + ' rev ' + rev +
+                   (who ? ' by ' + who : '') + ' -->\n' + html + '\n';
       const put = await fetch('/host/post/' + encodeURIComponent(postShow) + '/' + n + '.md',
         { method: 'PUT', credentials: 'same-origin',
           headers: { 'Content-Type': 'text/markdown; charset=utf-8' }, body });

@@ -1596,6 +1596,13 @@
   .card code, .card pre { font-family: ui-monospace, Consolas, monospace; font-size: .92em; }
   /* Quiet until the card is touched, because it is a convenience and not part of
      what was written. Always present for a keyboard, which cannot hover. */
+  /* Who left it, and only on a song note. During a show the byline is already at
+     the top of the page in letters bigger than anything else on it; a note left
+     between shows has nothing saying whose thought it was. Quiet, and after the
+     words rather than before them - it is a signature, not a headline. */
+  .posts .by { margin-top: 10px; font-size: .74rem; color: var(--dim);
+               letter-spacing: .04em; }
+  .posts .by::before { content: '\2014\00a0'; }
   .posts .copy { position: absolute; top: 10px; right: 10px; background: none;
                  border: 1px solid var(--line); border-radius: 7px; color: var(--dim);
                  padding: 4px 8px; font-size: .7rem; cursor: pointer; opacity: 0;
@@ -3037,9 +3044,19 @@
   // takes to read it. Its images are not fetched and its handlers are not wired,
   // which is the difference between reading a thing and running it.
   function cardBuild(text) {
-    const doc = new DOMParser().parseFromString(String(text || ''), 'text/html');
+    const raw = String(text || '');
+    // The header the console writes, read BEFORE the markup is parsed, because
+    // the walk drops comments - and rightly, a comment is a place to hide things
+    // in. This is the one comment in the file that is not content but a fact
+    // about it, so it is taken off the front by name and never reaches the walk.
+    const head = raw.match(/^\s*<!--\s*posted\s+(\S+)\s+rev\s+(\d+)(?:\s+by\s+([^>]*?))?\s*-->/);
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
     const out = document.createElement('div');
     out.className = 'card';
+    // On the container as data, so it survives the cloneNode a redraw does and
+    // does not become part of what the copy button hands to a clipboard.
+    if (head && head[1]) out.dataset.at = head[1];
+    if (head && head[3]) out.dataset.by = head[3].trim().slice(0, 40);
     cardWalk(doc.body, out, 0);
     return out;
   }
@@ -3173,6 +3190,14 @@
       // cloneNode, because the same built tree is drawn again on every redraw
       // and a node can only be in one document position at a time.
       li.appendChild(built.cloneNode(true));
+      // Signed only on a song note. A show's posts are already attributed by the
+      // show block at the top of the page, and repeating the host's name on every
+      // card under it would be the page telling you something you can see.
+      if (built.dataset.by && cardShow.indexOf('songs/') === 0) {
+        const by = li.appendChild(document.createElement('div'));
+        by.className = 'by';
+        by.textContent = built.dataset.by;
+      }
       const b = li.appendChild(document.createElement('button'));
       b.type = 'button';
       b.className = 'copy';
