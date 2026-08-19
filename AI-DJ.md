@@ -1,150 +1,168 @@
-# Driving a show as the AI
+# Wild n Loyal Radio — driving a show as a program
 
-Everything an automated DJ needs already exists. Nothing in this document asks
-for a feature to be built; it is a description of doors that are already open.
+A self-contained reference. Assumes no prior knowledge of this station.
 
-The one idea underneath all of it: **the AI is a speaker that calls the station.**
-The station never calls out. There is no key here, no webhook, no integration —
-just a credential and the same endpoints a human host uses.
+**What it is.** An internet radio. A `liquidsoap` process holds everything that is
+*now* — what is playing, who is live, the show — and answers HTTP on a handful of
+endpoints. Files on disk hold everything that is *then*. A `caddy` in front does
+routing and credentials. There is no application server and no database.
 
-Marked throughout:
+**What you are.** A *speaker*: a named credential. Everything below is done with
+ordinary HTTP as that speaker. The station never calls you; you call it.
 
-- **(measured)** — verified on this machine, with the numbers in git history.
-- **(untested)** — believed, not proven. Treat as the first thing to check.
+**Base URL.** `https://radio.wildnloyal.org` (also plain `http://`). One host, all
+paths below.
+
+**Auth.** HTTP Basic, on every `/host/*` and `/control/*` path. `/likes/now`,
+`/control/now`, `/earlier`, `/posts/*`, `/stream` and `/shows/` are public.
+
+**Marking.** **(measured)** = verified on this machine. **(untested)** = believed,
+not proven — check it first.
 
 ---
 
-## 1. Get a credential
+## 1 · Getting a credential
+
+On the machine (`C:\Users\an\src\radio`):
 
 ```powershell
-cd C:\Users\an\src\radio
-.\mint-speaker.ps1 -Name ai
+.\mint-speaker.ps1 -Name ai                     # prints a password
+.\mint-speaker.ps1 -Name ai -Password "chosen"
+.\mint-speaker.ps1 -Name ai -Remove
 ```
 
-The name becomes the identity for everything that follows: the folder uploads
-land in, the `X-Host-User` the bridge sees, and **the name every post is signed
-with**. A card written by this credential says `— ai` on the radio, and no prompt
-can make it claim otherwise. That is deliberate: content comes from the prompt,
-attribution from who wrote the file.
-
-Use it as HTTP Basic auth on every `/host/*` and `/control/*` request below.
+The name is the identity everywhere: the folder uploads land in, and **the
+signature on every card posted with it**. A card written by `ai` displays `— ai`
+and no instruction can make it claim otherwise.
 
 ---
 
-## 2. Read the noticeboard before doing anything
+## 2 · Reading the station
 
-```
-GET https://radio.wildnloyal.org/host/ai/ai.json     (speaker auth)
-```
+All public, no auth.
 
+### `GET /likes/now`
 ```json
-{ "auto": false, "prompt": "…", "at": "2026-08-19T…", "by": "an" }
+{ "id": "3d47…", "likes": 0, "skips": 0, "total": 24, "pull": 0, "rope": 12,
+  "cool": 6.75, "elapsed": 380.1, "duration": 660.5, "paused": false,
+  "air_delay": 1.75, "record_min": 0.0,
+  "show": { "live": false, "name": "", "title": "", "artist": "", "note": "",
+            "id": "songs/kenny-dorham-my-ideal", "posts": "" } }
 ```
 
-- `prompt` — what the host wants this AI to be. Written in the console's **The
-  AI** panel.
-- `auto` — **whether it may post without a human.** `false` means prepare
-  something and leave it; `true` means post.
+- `id` — the current track. Changes on every track.
+- `elapsed` / `duration` — seconds, as the *station* sees them. A listener hears
+  roughly `air_delay + 4.1s burst + their own buffering` later.
+- `show.live` — is a source connected.
+- **`show.id` — the folder posts go into. Read it; never invent it.** The station
+  mints it: `<show-slug>/<yyyymmdd-hhmmss>` while somebody is live,
+  `songs/<artist-title>` between shows, changing with the record.
+- `show.posts` — what is currently on the radio: `"1:1,2:3"` = post 1 revision 1,
+  post 2 revision 3.
 
-`auto` is off by default and is the one setting in this station that is about
-somebody else's judgement. Honour it. If it is false and there is something worth
-saying, the correct behaviour is to hold it, not to post it quietly.
-
----
-
-## 3. Know what is on, without asking anyone
-
-All public, no credential:
-
-| | |
-|---|---|
-| `GET /likes/now` | the whole live state: track id, likes, skips, `paused`, `air_delay`, and the `show` record |
-| `GET /control/now` | what is playing, in more detail |
-| `GET /earlier` | what has played, what the room voted off, who went live |
-| `GET /stream` | the audio itself — listen to it like anyone else |
-
-`show` looks like:
-
+### `GET /control/now`
 ```json
-{ "live": false, "name": "", "title": "", "artist": "", "note": "",
-  "id": "songs/kenny-dorham-my-ideal", "posts": "" }
+{ "path": "D:\\Music\\…m4a", "title": "Definitive", "artist": "Company Flow",
+  "music": true, "paused": false, "repeat": false }
 ```
 
-**`show.id` is the folder posts go into, and it is not yours to choose.** The
-station mints it: `<show-slug>/<when>` while somebody is live, `songs/<track>`
-between shows. It changes when the record changes. Read it; never invent it.
+### `GET /earlier`
+Array of what has happened, newest last. Each entry has `kind` — `track`,
+`voted` (the room skipped it), `live`, `show` — plus `at`, `title`, `artist`,
+`name`.
+
+### `GET /stream`
+The audio, as MP3. Listen to it like any listener.
 
 ---
 
-## 4. DJ the library — available now, nothing to build
+## 3 · Programming the music
 
-Behind speaker auth, all on `https://radio.wildnloyal.org`:
+Speaker auth. This needs **no browser and no audio pipeline**. If the goal is an
+AI-programmed hour rather than broadcasting a web page, this section is the
+entire feature.
 
 ```
 GET  /control/search?q=miles
-POST /control/enqueue?id=<id>&now=true      # true = play it next
-GET  /control/queue
+```
+```json
+{ "query": "miles", "total": 30, "limit": 50,
+  "results": [ { "id": "683b8d…", "title": "Changes (Live At The Fillmore East)",
+                 "artist": "Buddy Miles", "match": "artist" } ] }
+```
+
+```
+POST /control/enqueue?id=<id>&now=true    # now=true plays it next
+GET  /control/queue                        → {"error":"","total":0,"queue":[]}
 POST /control/queue/add?id=<id>
 POST /control/queue/remove?id=<id>
 POST /control/queue/move?id=<id>&to=<n>
 POST /control/queue/clear
 POST /control/skip
 POST /control/previous
+POST /control/again
+POST /control/repeat?on=true|false
+POST /control/music?on=true|false
 POST /control/pause?on=true|false
 ```
 
-Search, build a set, run it. This needs no browser and no audio pipeline at all.
-**If the goal is an AI-programmed radio hour rather than a bucket set, stop here —
-step 4 is the whole feature.**
+`id` is the opaque id from `search`.
 
 ---
 
-## 5. Name the show
+## 4 · The show record
 
 ```
+GET  /control/show
 POST /control/show?name=…&title=…&artist=…&note=…&slug=…&posts=…
 ```
 
-One call carries the **whole** show; a parameter left out means an empty field,
-not an unchanged one. So read the current record first and send it back with your
-change in it.
+**One call carries the whole show.** A parameter left out means an empty field,
+not an unchanged one — so `GET` first and send everything back with your change
+in it. A `POST` with no parameters clears the show.
 
-- `name` — the show. `title` / `artist` — what is going out right now.
-  `note` — a subtitle line.
-- `slug` — an offer for the folder name, `^[a-z0-9][a-z0-9-]{0,47}$`. The station
-  validates it and falls back to its own if it does not fit. **Fold accents
-  before sending** — the station's fallback cannot, so `Óscar D'León` becomes
-  `oscar-d-le-n` if you leave it to do the work.
-- `posts` — the list of what is on the radio, `n:rev,n:rev`. Digits, colons and
-  commas only; anything else is refused **whole**.
+| field | |
+|---|---|
+| `name` | the show's name — the headline on the site |
+| `title` / `artist` | what is going out right now; the page shows `Artist - Title` |
+| `note` | a subtitle line under the name |
+| `slug` | an *offer* for the folder name, `^[a-z0-9][a-z0-9-]{0,47}$` |
+| `posts` | what is on the radio: `n:rev` pairs, comma separated |
 
-The folder can still move while it is empty, and is fixed the moment something is
-written into it.
+`slug` is validated and refused if it does not fit, falling back to the station's
+own. **Fold accents yourself** — the station's fallback turns `Óscar D'León` into
+`oscar-d-le-n`. The folder may still change while it is empty and is fixed the
+moment something is written into it.
+
+`posts` accepts digits, colons and commas only, and is refused **whole**
+otherwise — it becomes a URL in every listener's browser.
 
 ---
 
-## 6. Post a card
+## 5 · Posting a card
 
-Two writes and one announcement, **in this order, always**:
+A card is a fragment of HTML in a `.md` file. It appears on the radio while the
+show or the song lasts, and stays on disk for the archive at `/shows/`.
+
+### Order — always
 
 ```
-1.  PUT /host/post/<show.id>/<id>-1.png     each picture, if any
-2.  PUT /host/post/<show.id>/<id>.md        the markup that names them
-3.  POST /control/show?…&posts=<id>:1       tell the station it exists
+1.  PUT  /host/post/<show.id>/<id>-1.png     each picture, if any
+2.  PUT  /host/post/<show.id>/<id>.md        the markup naming them
+3.  POST /control/show?…&posts=<id>:1        announce it
 ```
 
-Reversed, listeners fetch a file that is not there yet — the station would be
-advertising a card whose picture 404s on every radio in the room.
+Reversed, the station advertises a card whose file 404s on every radio in the
+room. Encode each path segment separately — `show.id` contains a `/`.
 
-**Choosing `<id>`:**
+### Choosing `<id>`
 
-- during a show (`show.id` has no `songs/` prefix) — the next integer: 1, 2, 3.
-- off the air (`show.id` starts `songs/`) — a **12-digit UTC stamp**,
-  `yyMMddHHmmss`. It must be, because the list is emptied every time the record
-  changes, so `1.md` would overwrite the last thing anybody wrote about that
-  track.
+- **During a show** (`show.id` has no `songs/` prefix) — the next integer: `1`, `2`.
+- **Off the air** (`show.id` starts `songs/`) — a **12-digit UTC stamp**,
+  `yyMMddHHmmss`. It must be: the list is emptied on every track change, so `1.md`
+  would overwrite whatever was written about that track last time.
 
-**The file:**
+### The file
 
 ```html
 <!-- posted 2026-08-19T01:12:04.000Z rev 1 by ai -->
@@ -152,143 +170,187 @@ advertising a card whose picture 404s on every radio in the room.
 <img src="/posts/songs/foo/260819011204-1.png" alt="the sleeve">
 ```
 
-The header comment is read and consumed, never displayed. `rev` must increase
-when you replace a card, or nothing refetches it.
+The header comment is read and consumed, never shown. **`rev` must increase when
+you replace a card** or nothing refetches it.
 
-**What survives the reader's sanitiser** — everything else is dropped or
-unwrapped, on the page and in the archive:
+### What survives the reader
 
-- tags: `p br h1 h2 h3 strong em u a ul ol li img blockquote code pre hr`
-- attributes: `href` `title` on links; `src` `alt` `title` on images
-- URLs: `https?://…`, a same-origin path starting `/`, or `data:image/(png|jpeg|gif|webp);base64,…`
-- anything else — `style`, `class`, every `on*`, `script`, `iframe`, `svg` — is gone
+Every reader re-sanitises with an allow-list. Anything else is dropped, or
+unwrapped keeping its text.
 
-Write inside those bounds and what you post is what appears.
+- **tags** — `p br h1 h2 h3 strong em u a ul ol li img blockquote code pre hr`
+  (`b`→`strong`, `i`→`em`, `h4`–`h6`→`h3`)
+- **attributes** — `href`, `title` on links; `src`, `alt`, `title` on images
+- **URLs** — `https?://…`, a same-origin path starting `/` (not `//`), or
+  `data:image/(png|jpeg|gif|webp);base64,…`
+- **gone** — `style`, `class`, every `on*`, `script`, `iframe`, `svg`, `form`,
+  and comments
 
-**Extensions accepted:** `.md .png .jpg .jpeg .webp .gif` — nothing else, and a
-`.html` will be refused. **Size:** the route caps a body at 4MB and **truncates
-rather than refusing (measured)**, so stay under ~3MB per picture or you will
-write a file that is silently half an image.
+### Limits
 
-Taking a card down is a `posts` list without it. The file stays; that is the
-archive at `/shows/`.
+- **extensions** — `.md .png .jpg .jpeg .webp .gif` only; `.html` is refused
+- **size** — the route caps a body at 4MB and **truncates rather than refusing
+  (measured)**. Over the cap you write half a file and nothing tells you. Stay
+  under ~3MB.
+- rate — 60 writes/minute per host
+
+Removing a card is a `posts` list without it. The file stays.
 
 ---
 
-## 7. Go on air — the bucket set
+## 6 · Broadcasting a web page
 
-This is the only part that needs a browser.
+Only this section needs a browser. Skip it entirely for section 3.
 
-### 7.1 The flag that will cost you an evening
+### 6.1 The flag that costs an evening
 
 **`--mute-audio` silences tab capture (measured).**
 
 ```
-WITH --mute-audio     RMS 0.0000    the capture is SILENT
-WITHOUT it (control)  RMS 0.2485    the capture carries the tone
+WITH --mute-audio     RMS 0.0000    silent
+WITHOUT (control)     RMS 0.2485    carries the audio
 ```
 
-Launched with it, everything looks correct — the encoder runs, the mount is
-held, bytes flow — and there is nothing in them. No error anywhere.
+Everything else looks correct — encoder running, mount held, bytes flowing — and
+there is nothing in them, with no error anywhere.
 
-**So the DJ browser runs unmuted**, and stays quiet by asking for
-`suppressLocalAudioPlayback` instead, which was granted in the same measurement
-with the audio still arriving.
+Run the DJ browser **unmuted** and stay quiet with `suppressLocalAudioPlayback`
+instead: granted in the same measurement, with the audio still arriving. That
+covers the **shared tab only** — anything else playing in that browser reaches the
+machine's speakers, so put research in a second, muted instance.
 
-That only covers the **shared** tab. Anything else playing in that browser will
-come out of the machine's speakers, so research belongs in a second,
-`--mute-audio` instance.
-
-### 7.2 Launch
+### 6.2 Launch flags
 
 ```
---auto-accept-this-tab-capture         no picker for a self-capture
+--auto-accept-this-tab-capture
 --autoplay-policy=no-user-gesture-required
-                                       (and NOT --mute-audio)
+                                   ← and NOT --mute-audio
 ```
 
-### 7.3 Capture
+### 6.3 Capture
 
 ```js
-navigator.mediaDevices.getDisplayMedia({
+const st = await navigator.mediaDevices.getDisplayMedia({
   video: { displaySurface: 'browser' },
   audio: { echoCancellation: false, noiseSuppression: false,
            autoGainControl: false, suppressLocalAudioPlayback: true },
   preferCurrentTab: true,
-  systemAudio: 'exclude', monitorTypeSurfaces: 'exclude'
-})
+  systemAudio: 'exclude', monitorTypeSurfaces: 'exclude',
+  selfBrowserSurface: 'exclude', surfaceSwitching: 'include'
+});
+// Refuse anything that is not a tab: read it BEFORE stopping the video track.
+const surface = st.getVideoTracks()[0].getSettings().displaySurface;
+if (surface && surface !== 'browser') { /* stop everything; a window or screen
+   share carries only the system mix, which is the whole machine on the air */ }
 ```
 
-Then **refuse anything that is not a tab** — read `displaySurface` off the video
-track before stopping it. A window or screen share carries only the system mix,
-which is the whole machine on the air.
+`systemAudio: 'exclude'` is honoured for screens but **not for windows
+(measured)** — the refusal above is what actually closes that door.
 
-### 7.4 Speak webcast
+### 6.4 Encode and send
 
 ```
-wss://radio.wildnloyal.org/host/onair       (speaker auth, subprotocol: webcast)
+wss://radio.wildnloyal.org/host/onair      subprotocol: webcast, speaker auth
 ```
 
-Port 8007 is loopback and **authenticates nobody** — it must only ever be reached
-through that path.
+Port 8007 is loopback and **authenticates nobody** — reach it only through that
+path.
 
-1. First frame, text: `{"type":"hello","data":{"mime":"audio/webm","audio":{…}}}`
-   Credentials in it are ignored on purpose; Caddy has already decided who you are.
-2. Then binary blobs from `MediaRecorder`. **The first blob carries the whole webm
-   header and no other blob ever will** — never drop it, never start midway.
-3. Wait for `{"type":"ready"}`. Before that you may already send; audio is held
-   and flushed when the mount is granted.
+1. **First frame, text:**
+   `{"type":"hello","data":{"mime":"audio/webm","audio":{"channels":1,"samplerate":48000,"bitrate":96,"encoder":"opus"}}}`
+   Any credentials inside are ignored; the proxy already decided who you are.
+2. **Then binary blobs** from `MediaRecorder` (`audio/webm;codecs=opus`).
+   **The first blob carries the whole webm header and no later blob ever will** —
+   never drop it, never start midway.
+3. You may send before `{"type":"ready"}` arrives; audio is held and flushed when
+   the mount is granted.
 
-Only one source can hold `/live`. Another attempt gets a close with a reason.
+Replies are text: `waiting`, `ready`, `tally`, `warn`, `error`. Only one source
+can hold the mount; a second gets a close with the reason.
 
-### 7.5 Mark the tracks
+### 6.5 Marking tracks
 
-When what is going out changes, send:
+When what is going out changes:
 
 ```json
 {"type":"metadata","data":{"artist":"…","title":"…","show":"…"}}
 ```
 
-It is **not** forwarded to the station — the station takes titles from the file
-it plays. It is written beside the recording as a boundary. Send it only when it
-actually changed.
+Not forwarded to the station — the station takes titles from the file it plays.
+It is written beside the recording as a boundary. Send only on an actual change.
 
-**(untested)** Driving the *existing console page* instead of implementing the
-above would reuse its EQ, gains, talkover and marks. The blocker is the picker;
-`--auto-select-tab-capture-source-by-title` is the lever to try. Speaking webcast
-directly is the proven path — it is how the recording was tested.
+### 6.6 Leaving
+
+Close the socket. The show clears, cards leave the page, files stay, and the
+mount frees about five seconds after the last byte.
 
 ---
 
-## 8. The recording writes itself
+## 7 · Recordings
 
-Every broadcast lands in `recordings/` (or `$env:RADIO_RECORD`):
+Every broadcast is written automatically to `recordings/` (or `$env:RADIO_RECORD`):
 
 ```
 20260818-211802-ai.webm     one continuous file, header intact
-20260818-211802-ai.jsonl    {"at":711,"iso":"…","artist":"…","title":"…"}
+20260818-211802-ai.jsonl    {"at":711,"iso":"…","artist":"…","title":"…","show":"…"}
 ```
 
-One file per broadcast, **not one per track** — a webm header exists only in the
+**One file per broadcast, not one per track** — a webm header exists only in the
 first blob, so a stream cut at a boundary is bytes no decoder opens. `at` is
-milliseconds from the first byte. Cut by time with ffmpeg; never cut the stream.
+milliseconds from the first byte of the recording. Cut by time with `ffmpeg`;
+never cut the stream.
 
-This is the input for transcription. Note there is **no Whisper on this machine**
-as of 2026-08-19 — that is a service still to add.
-
----
-
-## 9. Leaving
-
-Close the socket. The station clears the show, the cards leave the page, the
-files stay, and the mount is released about five seconds after the last byte.
+There is **no Whisper on this machine** as of 2026-08-19.
 
 ---
 
-## The order that keeps being right
+## 8 · The host's instructions
 
-Everything that can fail happens before anything that commits.
+```
+GET /host/ai/ai.json      (speaker auth)
+PUT /host/ai/ai.json      max 8KB
+```
 
-Pictures before the markup that names them. The file before the list that
-advertises it. Read the state before writing it back. It is the same rule every
-time, and every bug in this system that reached a listener came from breaking it.
+```json
+{ "auto": false, "prompt": "who you are, what to notice, how long to be",
+  "at": "2026-08-19T…", "by": "an" }
+```
+
+- `prompt` — what the host wants. Written by a human in the console.
+- **`auto`** — may you post without a human. Default `false`: prepare and hold,
+  do not send. Honour it.
+
+---
+
+## 9 · Rules that are not style
+
+1. **Everything that can fail happens before anything that commits.** Pictures
+   before markup, file before list, read before write-back. Every bug in this
+   system that reached a listener came from breaking this.
+2. **The station owns identity.** `show.id`, the track id, the slug decision. Read
+   them; do not compute them.
+3. **A caller cannot silence a listener.** Nothing here mutes, pauses or skips on
+   a listener's behalf except the controls in section 3, which are the room's.
+4. **Attribution is structural.** A card is signed with whoever wrote the file.
+   Content follows the prompt; the name does not.
+
+---
+
+## Quick reference
+
+| | | |
+|---|---|---|
+| `GET` | `/likes/now` | state + show record — public |
+| `GET` | `/control/now` | current track — public |
+| `GET` | `/earlier` | history — public |
+| `GET` | `/stream` | audio — public |
+| `GET` | `/control/search?q=` | search the library |
+| `POST` | `/control/enqueue?id=&now=` | queue a track |
+| `GET/POST` | `/control/queue[/add\|remove\|move\|clear]` | the queue |
+| `POST` | `/control/skip` `/previous` `/again` | move the needle |
+| `POST` | `/control/pause?on=` `/music?on=` `/repeat?on=` | switches |
+| `GET/POST` | `/control/show` | the show record |
+| `PUT` | `/host/post/<show.id>/<file>` | a card or its pictures |
+| `GET` | `/posts/<show.id>/<file>` | read one back — public |
+| `GET/PUT` | `/host/ai/ai.json` | the host's instructions |
+| `WSS` | `/host/onair` | the audio in, subprotocol `webcast` |
