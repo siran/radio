@@ -175,7 +175,7 @@
      this page during a show. Directly under the player is as high as they can
      go without pushing the play button off a phone: somebody who arrives
      mid-show should not have to scroll to start the sound. */
-  .col > .posts { margin-top: 0; }
+  .cols > .posts { margin-top: 0; }
   .show { margin: 2px 0 6px; text-align: center; }
   .show .showname { justify-content: center; }
   /* The station's own track while a show is on: still audible, so still
@@ -196,7 +196,27 @@
   @keyframes airpulse { 50% { opacity: .25; } }
 
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
-  .col { display: flex; flex-direction: column; gap: 20px; }
+  /* WHERE THE FOUR PANELS SIT, said explicitly, because the order they are
+     written in and the order they should appear in are not the same on every
+     screen. Written order is player, cards, chat, guestbook - which is exactly
+     what a phone should show, one under the next. A wide screen wants the cards
+     at the top of the second column instead, beside the player rather than
+     below it, and no arrangement of wrappers gives both.
+
+     Inside the wide query and nowhere else. `grid-area: 1 / 2` on a grid that
+     has been collapsed to one column does not clamp - it invents a second
+     column - and a phone would grow a sideways scroll nobody asked for. */
+  @media (min-width: 721px) {
+    .cols > .p-player { grid-area: 1 / 1; }
+    .cols > .p-chat   { grid-area: 2 / 1; }
+    /* With nothing posted the guestbook keeps the top of its own column, which
+       is where it has always been. `has-posts` is written by the same code that
+       draws the cards, so the layout cannot disagree with what is on screen. */
+    .cols > .p-guest  { grid-area: 1 / 2; }
+    .cols.has-posts > .p-posts { grid-area: 1 / 2; }
+    .cols.has-posts > .p-guest { grid-area: 2 / 2; }
+  }
+
   .chatlog { height: 170px; overflow-y: auto; font-size: .84rem; margin-bottom: 11px;
              display: flex; flex-direction: column; gap: 3px; }
   .chatlog .line { overflow-wrap: anywhere; }
@@ -1735,9 +1755,8 @@
 
   <div class="cols">
 
-   <div class="col">
     <!-- player -->
-    <div class="panel">
+    <div class="panel p-player">
       <div class="np-label" id="npLabel">NOW PLAYING</div>
       <!-- The show used to be here, and the rule it was written under still
            holds: ONE block describes what is on, never two. It is in the header
@@ -1801,12 +1820,12 @@
          rather than a running page: each one was posted as a thing, and a
          listener arriving halfway through should see where one ends and the
          next begins. -->
-    <div class="posts panel" id="postsWrap" hidden>
+    <div class="posts panel p-posts" id="postsWrap" hidden>
       <ol id="posts"></ol>
     </div>
 
     <!-- chat -->
-    <div class="panel">
+    <div class="panel p-chat">
       <h2>CHAT</h2>
       <div class="chatlog" id="chatlog"></div>
       <form id="chatform" autocomplete="off">
@@ -1817,10 +1836,9 @@
         </div>
       </form>
     </div>
-   </div>
 
     <!-- guestbook -->
-    <div class="panel">
+    <div class="panel p-guest">
       <h2>LEAVE A MESSAGE</h2>
       <div class="replying" id="replying" hidden>
         replying to <b id="replyWho"></b>
@@ -3149,6 +3167,7 @@
       if ($('postsWrap').hidden) return;
       $('posts').textContent = '';
       $('postsWrap').hidden = true;
+      postsRoom();
       return;
     }
     if (list === cardSeen) return;
@@ -3189,6 +3208,14 @@
     } finally { cardBusy = false; }
   }
 
+  // Whether the layout has to make room for cards. One writer, called from
+  // both of the places that hide or show the panel, so the grid cannot be left
+  // holding a space for something that is not there.
+  function postsRoom() {
+    const c = document.querySelector('.cols');
+    if (c) c.classList.toggle('has-posts', !$('postsWrap').hidden);
+  }
+
   function cardDraw(want) {
     const ol = $('posts');
     ol.textContent = '';
@@ -3216,6 +3243,7 @@
       b.addEventListener('click', () => cardCopy(built, b));
     }
     $('postsWrap').hidden = !ol.firstChild;
+    postsRoom();
   }
 
   // BOTH FLAVOURS, because the point is that it lands in a rich editor as what
