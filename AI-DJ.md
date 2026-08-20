@@ -35,6 +35,28 @@ The name is the identity everywhere: the folder uploads land in, and **the
 signature on every card posted with it**. A card written by `ai` displays `— ai`
 and no instruction can make it claim otherwise.
 
+### Or over HTTP, with an admin credential
+
+There is an endpoint, and it is **not** the speaker credential — it is a separate
+`admins` login:
+
+```
+PUT /adminapi/req/<anything>.json      {"action":"add","name":"ai"}
+                                       ("password" optional; omitted = generated)
+GET /adminapi/res/<same name>.json     a few seconds later
+    → {"ok":true,"name":"ai","password":"…"}
+```
+
+A watcher outside the request path does the work and writes the answer back. The
+result carries a password in plain text and is **deleted within minutes**, so read
+it promptly. Other actions on that folder: `disable`, `enable`, `remove`.
+
+**This is a larger grant than it looks and an AI DJ does not need it.** Whoever
+holds the admin credential can mint credentials, disable other speakers and
+restart the station. Nothing else in this document requires it. The intended
+shape is: **a human mints once and hands over only the speaker password.** Ask
+for that rather than for admin.
+
 ---
 
 ## 2 · Reading the station
