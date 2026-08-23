@@ -284,11 +284,43 @@ interactive.harbor(port = 8005)
 # rather than twenty rebuilds while they arrive.
 rescan_at = ref(0.0)
 
+# WHAT COUNTS AS MUSIC. Stated here rather than only at the search index far
+# below, because the playlist needs it too and this file is read top to bottom.
+#
+# HALF OF THE LIBRARY IS NOT AUDIO: 1037 pieces of album art, plus .db, .ini,
+# .pdf and an entire software install that found its way in - 1172 of 2374
+# files. `playlist` over a directory offers all of them, and every non-audio
+# candidate that reaches resolution is handed to ffmpeg, which opens a .jpg as
+# an mjpeg VIDEO stream, works out it carries no audio, and is torn down.
+#
+# MEASURED, against a control of the same file count where every file was
+# audio: 194 rejected files cost 55.1 KB each and never gave it back, at
+# 2.09 MB/min, while the all-audio arm sat flat at 0.14. It is a small share of
+# this station's growth at its real rate - about 0.03 MB/min - but it is a leak
+# we cause on purpose by asking a question we already know the answer to.
+music_exts = ["mp3", "m4a", "aac", "mp4", "flac", "ogg", "oga", "opus",
+              "wav", "wma", "aiff"]
+
+# There is no path.extension; remove_extension is what exists, so a file ends
+# in .mp3 exactly when stem ^ ".mp3" is the name again. Lowercased first, so one
+# entry per extension also covers .MP3 and .Mp3.
+def is_music(f) =
+  fl   = string.case(lower = true, f)
+  stem = path.remove_extension(fl)
+  list.exists(fun (e) -> stem ^ ".#{e}" == fl, music_exts)
+end
+
 music = playlist(
   id          = "library",
   mode        = "randomize",
   reload_mode = "watch",
   on_reload   = fun (_) -> rescan_at := time() + 10.0,
+  # BEFORE RESOLUTION - liquidsoap's own words for this argument - which is the
+  # whole point: a picture is turned away here and ffmpeg is never asked about
+  # it. A rejection is not a resolution failure, so max_fail is untouched, and
+  # the library is 51% audio, so there is no risk of the "rejects everything"
+  # consuming loop the manual warns about.
+  check_next  = fun (r) -> is_music(request.uri(r)),
   music_dir
 )
 
@@ -607,24 +639,17 @@ library.on_position(position = 2.0, remaining = true, synchronous = false,
 # just queued.
 search_max = 50
 
-music_exts = ["mp3", "m4a", "aac", "mp4", "flac", "ogg", "oga", "opus",
-              "wav", "wma", "aiff"]
-
 # file.ls with recursive = true ignores `pattern` entirely and hands back
 # directories alongside files - the same trap the voice pickup documents - so
 # the extension filter is what keeps both out. It also yields MIXED
 # separators, forward slashes for the directory it was given and backslashes
 # below it, which costs nothing here because a path is matched as one
-# lowercased string and never split. There is no path.extension;
-# remove_extension is what exists, so a file ends in .mp3 exactly when
-# stem ^ ".mp3" is the name again. Lowercasing first is what makes one entry
-# per extension also cover .MP3 and .Mp3.
+# lowercased string and never split.
+#
+# `is_music` is the one defined up beside the playlist. It used to be declared
+# again right here, and the two were the same rule written twice - which is one
+# edit away from a library the index and the playlist disagree about.
 def scan_paths() =
-  def is_music(f) =
-    fl   = string.case(lower = true, f)
-    stem = path.remove_extension(fl)
-    list.exists(fun (e) -> stem ^ ".#{e}" == fl, music_exts)
-  end
   list.filter(is_music,
     file.ls(music_dir, absolute = true, sorted = true, recursive = true))
 end
