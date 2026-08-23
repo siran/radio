@@ -95,6 +95,12 @@
           -webkit-user-select:all; user-select:all; }
   .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   .btns .tbtn { flex:1 1 auto; }
+  /* The name belongs IN the button row, not above it: it is not a setting, it
+     is the other half of the press. Everywhere else on this page `input` is
+     width:100% with a bottom margin, and both of those are wrong inside a flex
+     row - the first fights the flex basis, the second hangs the row. */
+  #airrecrow input { flex:2 1 12ch; width:auto; margin-bottom:0; }
+  #airrecbtn.on { background:var(--rec); border-color:var(--rec); color:#fff; }
   .tbtn { padding:11px 12px; border:1px solid var(--line); border-radius:8px;
           background:#101013; color:var(--fg); font:inherit; font-size:14px;
           cursor:pointer; }
@@ -301,6 +307,23 @@
       <button class="tbtn" id="airmicmon" disabled>My mic: not in my headphones</button>
     </div>
     <div class="status" id="airhpnote" hidden></div>
+    <!-- KEEPING SOMETHING, which is not the same as being on the air, and the
+         two used to be the same button by accident. The moment a broadcast
+         starts it is already being backed up: one file, automatic, named after
+         nothing but the clock, written whether or not anybody presses this. It
+         is insurance and it should cost nobody a decision.
+
+         This is the other thing. A recording is deliberate and carries a name,
+         because "tonight's show" and "that track that just played" are
+         different objects and only one of them can be asked for later by name.
+
+         The same start and stop are an HTTP route, so the thing watching the
+         shared tab can press this without a finger on it. -->
+    <div class="btns" id="airrecrow" hidden>
+      <input id="airrecname" placeholder="Name this recording" autocomplete="off" maxlength="120">
+      <button class="tbtn" id="airrecbtn" disabled>Record</button>
+    </div>
+    <div class="status" id="airrecnote" hidden></div>
     <!-- The show. Three boxes that are never disabled, and that is the whole
          point of them: everything else in this panel locks while the air is
          up because changing it means rebuilding the stream, and none of
@@ -4301,6 +4324,7 @@
     $('airswap').hidden = !tab;
     $('airswap').disabled = !tab || airSwapping;
     shotLook();
+    airRecLook();
     if (!airOn) return;
     // The mic tap is tapped AFTER the gate that opens on Talk over it, on purpose:
     // what a host hears through it is what the room hears. The cost is that it is
@@ -4397,7 +4421,70 @@
       $('airswap').disabled = !airOn || !airTabGain;
     }
   }
+  // --- keeping something -----------------------------------------------------
+  // Two different things shared the word "record" and this keeps them apart.
+  // Going on air leaves a BACKUP: automatic, one per broadcast, insurance, no
+  // button. A RECORDING is deliberate and named, because "tonight's show" and
+  // "that track that just played" are different objects and only one of them
+  // can be asked for later by name.
+  //
+  // THE BRIDGE IS THE AUTHORITY on which is running, not this variable. Every
+  // press takes its answer from the reply, so a console reloaded mid-recording
+  // catches up rather than arguing with a file that is already open.
+  let airKeep = null;
+
+  function airRecSay(t) {
+    const n = $('airrecnote');
+    n.textContent = t || '';
+    n.hidden = !t;
+  }
+
+  function airRecLook() {
+    const on = !!airOn;
+    $('airrecrow').hidden = !on;
+    // Off the air there is nothing to keep and nothing running, and the bridge
+    // has already closed anything that was - so this is catching up with it,
+    // not deciding anything.
+    if (!on) { airKeep = null; airRecSay(''); }
+    const btn = $('airrecbtn');
+    btn.disabled = !on;
+    btn.classList.toggle('on', !!airKeep);
+    btn.textContent = airKeep ? 'Stop recording' : 'Record';
+    // Locked while one runs, and showing what it is called: renaming a file
+    // that is already being written to is a promise this cannot keep.
+    $('airrecname').disabled = !on || !!airKeep;
+    $('airrecname').placeholder = airKeep ? airKeep.name : 'Name this recording';
+  }
+
+  async function airRecPress() {
+    if (!airOn) return;
+    const btn = $('airrecbtn');
+    btn.disabled = true;
+    const stopping = !!airKeep;
+    try {
+      const name = $('airrecname').value.trim();
+      const q = (stopping || !name) ? '' : '?name=' + encodeURIComponent(name);
+      const res = await fetch('/host/onair/rec/' + (stopping ? 'stop' : 'start') + q,
+        { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+      const j = await res.json().catch(() => ({}));
+      airKeep = (j.state && j.state.recording) || null;
+      if (!j.ok) airRecSay(j.why || 'the station would not take that');
+      else if (stopping) airRecSay('Kept ' + j.file + ' - ' + Math.round(j.secs) + 's.');
+      else { airRecSay(''); $('airrecname').value = ''; }
+    } catch (e) {
+      airRecSay('could not reach the station: ' + e.message);
+    }
+    airRecLook();
+  }
+
   $('airswap').addEventListener('click', airSwapTab);
+  $('airrecbtn').addEventListener('click', airRecPress);
+  // Enter in the name box does the same thing. Somebody naming a track that is
+  // playing right now is typing against the clock, and reaching for the mouse
+  // afterwards is the part that loses the first seconds of it.
+  $('airrecname').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !$('airrecbtn').disabled) { e.preventDefault(); airRecPress(); }
+  });
 
   // ===== the noticeboard the AI reads =====================================
   //

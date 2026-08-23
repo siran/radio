@@ -243,6 +243,19 @@ class Air {
     this.retryTimer = null;
     this.tallyTimer = null;
     this.warnedBackpressure = false;
+    // The webm initialisation segment, kept deliberately. MediaRecorder writes
+    // it once, into the very first blob, and never again - so a file that
+    // begins at any later chunk is one no decoder will open. There is nowhere
+    // to re-derive it from once those bytes have gone past, so it is held here.
+    this.recHead = null;
+    // The named recording in progress, if there is one. Going live leaves a
+    // BACKUP: automatic, one per broadcast, named after nothing but the clock,
+    // there so nothing is ever lost. A RECORDING is a deliberate act - a host
+    // presses record, or whatever is watching the shared tab notices a track
+    // begin - and it carries a name because somebody meant to keep this
+    // particular stretch. They are not the same thing and no longer share a
+    // word.
+    this.cut = null;
 
     sock.on('data', d => this.onData(d));
     sock.on('error', e => this.stop('the console socket failed: ' + e.message));
@@ -425,6 +438,11 @@ class Air {
   recWrite(chunk) {
     if (!this.rec) this.recOpen();
     if (this.rec) { try { this.rec.write(chunk); } catch {} }
+    // The first thing written carries the header, whether or not the backup
+    // itself opened. Kept even when RECORD is unset, because a named recording
+    // is still possible without a backup and would be impossible without this.
+    if (!this.recHead && chunk && chunk.length) this.recHead = Buffer.from(chunk);
+    this.cutWrite(chunk);
   }
 
   // A boundary, written beside the audio rather than into it. `at` is the
@@ -444,7 +462,99 @@ class Air {
     });
   }
 
+  // --- a named recording -----------------------------------------------------
+  // A SECOND FILE written alongside the backup, not a cut taken out of it
+  // afterwards. Cutting afterwards would mean seeking a webm that is still
+  // being appended to and has no index yet - the same header problem recOpen
+  // is careful about, arriving from the other end. Teeing costs one write and
+  // yields a finished, playable file the moment it stops.
+  //
+  // The span is ALSO written into the backup's marks, so a recording survives
+  // as a pair of offsets even if this file fails. Two records of the same fact,
+  // because the cheap one is the one that still works when the other does not.
+  cutStart(name, who) {
+    if (!RECORD) return { ok: false, why: 'no recordings folder is configured' };
+    // Nothing has carried the header past yet, so there is nothing a file could
+    // begin with. Saying so is better than leaving an empty file that looks
+    // like a recording until somebody tries to play it.
+    if (!this.recHead) return { ok: false, why: 'no audio has arrived yet' };
+    // Starting while one runs ENDS it and begins the next. Segments that meet
+    // end to end are exactly what a change detector produces - one track stops
+    // because the next started - and refusing would silently lose the second.
+    if (this.cut) this.cutStop('a new recording started');
+
+    const clean = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    const slug = (clean.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                       .replace(/^-+|-+$/g, '') || 'untitled').slice(0, 60);
+    const d = new Date(), z = (n) => String(n).padStart(2, '0');
+    const stamp = d.getUTCFullYear() + z(d.getUTCMonth() + 1) + z(d.getUTCDate()) +
+                  '-' + z(d.getUTCHours()) + z(d.getUTCMinutes()) + z(d.getUTCSeconds());
+    // Its own folder, so a listing answers "what did somebody mean to keep"
+    // without having to know which filenames are backups.
+    const dir = path.join(RECORD, 'named');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+    const base = path.join(dir, slug + '-' + stamp);
+    const cut = { name: clean || slug, slug, by: String(who || this.who || 'someone'),
+                  base, at: Date.now(), bytes: 0, stream: null };
+    try {
+      cut.stream = fs.createWriteStream(base + '.webm');
+      // Same rule as the backup, for the same reason: a file that goes wrong
+      // must never reach the audio. Every path here logs and drops the file.
+      cut.stream.on('error', (e) => {
+        log('recording failed for', cut.slug + ':', e.message);
+        if (this.cut === cut) this.cut = null;
+      });
+      cut.stream.write(this.recHead);
+      cut.bytes += this.recHead.length;
+    } catch (e) {
+      log('cannot record', cut.slug + ':', e.message);
+      return { ok: false, why: e.message };
+    }
+    this.cut = cut;
+    this.recMark({ kind: 'rec-start', name: cut.name, slug: cut.slug, by: cut.by });
+    log('recording started:', cut.name, '->', base + '.webm', 'asked by', cut.by);
+    return { ok: true, name: cut.name, slug: cut.slug, file: path.basename(base) + '.webm' };
+  }
+
+  cutWrite(chunk) {
+    const cut = this.cut;
+    if (!cut || !cut.stream) return;
+    try { cut.stream.write(chunk); cut.bytes += chunk.length; } catch {}
+  }
+
+  cutStop(why) {
+    const cut = this.cut;
+    if (!cut) return { ok: false, why: 'nothing is being recorded' };
+    this.cut = null;
+    const secs = (Date.now() - cut.at) / 1000;
+    try { if (cut.stream) cut.stream.end(); } catch {}
+    // A sidecar rather than a filename made to carry everything. `backup` and
+    // `offset` are the useful half: they say which broadcast this came out of
+    // and where in it, so the claim can be checked against the original.
+    const meta = {
+      name: cut.name, slug: cut.slug, by: cut.by,
+      started: new Date(cut.at).toISOString(),
+      ended: new Date().toISOString(),
+      secs, bytes: cut.bytes,
+      backup: this.recBase ? path.basename(this.recBase) + '.webm' : null,
+      offset: this.recAt ? cut.at - this.recAt : null,
+      why: why || 'stopped'
+    };
+    fs.writeFile(cut.base + '.json', JSON.stringify(meta, null, 2), (e) => {
+      if (e) log('could not write the sidecar for', cut.slug + ':', e.message);
+    });
+    this.recMark({ kind: 'rec-stop', name: cut.name, slug: cut.slug, secs });
+    log('recording stopped:', cut.name + ',', secs.toFixed(1) + 's,', cut.bytes,
+        'bytes -', why || 'stopped');
+    return { ok: true, name: cut.name, slug: cut.slug, secs,
+             file: path.basename(cut.base) + '.webm' };
+  }
+
   recClose() {
+    // The named recording goes first. It is a span inside the broadcast, so it
+    // cannot outlive it, and stopping it here is what gives a host who simply
+    // went off the air a closed file with a sidecar rather than a stub.
+    if (this.cut) this.cutStop('the broadcast ended');
     if (!this.rec) return;
     const r = this.rec;
     this.rec = null;
@@ -603,15 +713,70 @@ class Air {
 
 // --- the front door --------------------------------------------------------
 const server = http.createServer((req, res) => {
-  // An ordinary GET, so the route can be checked without a browser and the
-  // console can ask who is on before it tries.
-  const state = current
+  const reply = (code, body) => {
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
+  // The path as it arrives, which is two spellings of the same place: caddy
+  // proxies /host/onair without stripping it, and this port is also reachable
+  // directly on loopback for a script or a check from a shell. Both have to
+  // mean the same thing, so the prefix comes off here rather than being
+  // required of every caller.
+  let p;
+  try { p = new URL(req.url, 'http://bridge').pathname; } catch { p = '/'; }
+  p = (p.replace(/^\/host\/onair/, '').replace(/\/+$/, '')) || '/';
+
+  // What is on the air, what it is leaving behind, and whether any of it is
+  // being kept on purpose. `backup` and `recording` are separate fields because
+  // they are separate things: there is always a backup while somebody is on,
+  // and a recording only when somebody asked for one.
+  const state = () => current
     ? { onair: current.live, who: current.who, mime: current.mime,
         secs: current.startedAt ? (Date.now() - current.startedAt) / 1000 : 0,
-        bytes: current.bytes }
-    : { onair: false };
-  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(state));
+        bytes: current.bytes,
+        backup: current.recBase ? path.basename(current.recBase) + '.webm' : null,
+        recording: current.cut
+          ? { name: current.cut.name, slug: current.cut.slug, by: current.cut.by,
+              secs: (Date.now() - current.cut.at) / 1000 }
+          : null }
+    : { onair: false, backup: null, recording: null };
+
+  if (p === '/rec/start' || p === '/rec/stop') {
+    if (req.method !== 'POST') return reply(405, { ok: false, why: 'POST to this' });
+    // Whoever caddy decided this is. A console with a button, a script, the
+    // thing watching the shared tab - they arrive the same way, are named the
+    // same way, and the name lands in the sidecar. Nothing here authenticates
+    // anybody; that is why it listens on loopback only.
+    const who = (req.headers['x-host-user'] || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
+    let body = '';
+    req.on('data', d => {
+      body += d;
+      // A name, not a payload. Anything bigger is a mistake or a probe.
+      if (body.length > 4096) { body = ''; req.destroy(); }
+    });
+    req.on('end', () => {
+      if (!current || !current.live) {
+        return reply(409, { ok: false, why: 'nobody is on the air', state: state() });
+      }
+      let name = '';
+      try { name = new URL(req.url, 'http://bridge').searchParams.get('name') || ''; } catch {}
+      if (!name && body) {
+        // JSON if it parses, otherwise the body itself - so `curl -d "a name"`
+        // works as well as a console posting a field.
+        try { name = (JSON.parse(body) || {}).name || ''; } catch { name = body.slice(0, 200); }
+      }
+      const r = p === '/rec/start'
+        ? current.cutStart(name, who)
+        : current.cutStop('asked by ' + (who || 'someone'));
+      reply(r.ok ? 200 : 409, Object.assign({}, r, { state: state() }));
+    });
+    return;
+  }
+
+  // Anything else is the state, which is all this port answered before there
+  // was anything to ask it for.
+  reply(200, state());
 });
 
 server.on('upgrade', (req, sock, head) => {

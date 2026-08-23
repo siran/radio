@@ -682,6 +682,23 @@ import relays.caddy
 	# console that tries while somebody is on, because the mount holds one and
 	# "403" is not an answer anybody can act on. header_up SETS the header, so
 	# a client sending its own is overwritten and not believed.
+	# Start and stop a NAMED recording. Going live already leaves a backup, and
+	# that is the point of keeping the two apart: the backup is automatic and
+	# costs nobody a decision, while a recording is somebody saying "keep this
+	# stretch, call it this". A separate route because the things that ask are
+	# not all browsers - the console has a button, and whatever is watching the
+	# shared tab asks for the same thing with the same credential.
+	#
+	# Under /host/ for the reason /host/onair is, and it is not a style choice:
+	# the credential a page has is the one the browser cached for the realm, and
+	# a browser sends that to paths at or below where it was challenged.
+	handle /host/onair/rec/* {
+		import speakers
+		reverse_proxy 127.0.0.1:8007 {
+			header_up X-Host-User {http.auth.user.id}
+		}
+	}
+
 	handle /host/onair {
 		import speakers
 		reverse_proxy 127.0.0.1:8007 {

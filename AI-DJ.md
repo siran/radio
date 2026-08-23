@@ -310,7 +310,12 @@ mount frees about five seconds after the last byte.
 
 ## 7 · Recordings
 
-Every broadcast is written automatically to `recordings/` (or `$env:RADIO_RECORD`):
+There are **two** of these and they are not the same thing.
+
+### 7.1 The backup — automatic, nobody asks for it
+
+Going live starts it. One file per broadcast, written to `recordings/` (or
+`$env:RADIO_RECORD`), named after the clock and the speaker:
 
 ```
 20260818-211802-ai.webm     one continuous file, header intact
@@ -321,6 +326,64 @@ Every broadcast is written automatically to `recordings/` (or `$env:RADIO_RECORD
 first blob, so a stream cut at a boundary is bytes no decoder opens. `at` is
 milliseconds from the first byte of the recording. Cut by time with `ffmpeg`;
 never cut the stream.
+
+This is insurance. It needs no decision from you and you cannot turn it off.
+
+### 7.2 A named recording — deliberate, and yours to trigger
+
+**Going live does not mean "recording".** A recording is a stretch somebody
+meant to keep, and it carries a name, because "tonight's show" and "that track
+that just played" are different objects and only one of them can be asked for
+later by name.
+
+```
+POST /host/onair/rec/start?name=Ossanha%20-%20Baden%20Powell
+POST /host/onair/rec/stop
+GET  /host/onair                     → what is on air, and what is being kept
+```
+
+Speaker credential, same as everything else here. The name may also be sent as
+a JSON body `{"name":"…"}` or as the raw body.
+
+```jsonc
+// 200 from /rec/start
+{ "ok": true, "name": "Ossanha - Baden Powell",
+  "slug": "ossanha-baden-powell",
+  "file": "ossanha-baden-powell-20260823-172410.webm",
+  "state": { "onair": true, "who": "ai",
+             "backup": "20260823-172410-ai.webm",
+             "recording": { "name": "…", "by": "ai", "secs": 0.1 } } }
+```
+
+Lands in `recordings/named/` as a **playable file plus a sidecar**:
+
+```jsonc
+{ "name": "Ossanha - Baden Powell", "slug": "…", "by": "ai",
+  "started": "2026-08-23T17:24:10.451Z", "ended": "…", "secs": 214.6,
+  "backup": "20260823-172410-ai.webm",   // which broadcast it came out of
+  "offset": 261                          // and where in it, in ms
+}
+```
+
+`backup` and `offset` are the useful half: they let anything check the named
+file against the original rather than take its word for it.
+
+Four things worth knowing before you drive this:
+
+- **Starting while one runs ends it and starts the next.** That is deliberate:
+  segments that meet end to end are exactly what a change detector produces —
+  one track stops because the next began — and refusing would silently lose the
+  second one. So on a detected track change, just POST `start` again.
+- **It is a second file written alongside, not a cut made afterwards.** It is
+  finished and playable the moment you stop it; there is nothing to extract.
+- `409 "nobody is on the air"` means what it says. `409 "no audio has arrived
+  yet"` means the header has not gone past yet — wait a moment and retry.
+- Going off the air closes any named recording with `why: "the broadcast ended"`,
+  so a show that drops does not leave a stub.
+
+The span is **also** written into the backup's `.jsonl` as `rec-start` /
+`rec-stop` marks. Two records of the same fact, because the cheap one still
+works when the other does not.
 
 There is **no Whisper on this machine** as of 2026-08-19.
 
@@ -376,3 +439,6 @@ PUT /host/ai/ai.json      max 8KB
 | `GET` | `/posts/<show.id>/<file>` | read one back — public |
 | `GET/PUT` | `/host/ai/ai.json` | the host's instructions |
 | `WSS` | `/host/onair` | the audio in, subprotocol `webcast` |
+| `POST` | `/host/onair/rec/start?name=` | begin a NAMED recording |
+| `POST` | `/host/onair/rec/stop` | end it, write its sidecar |
+| `GET` | `/host/onair` | who is on, the backup, what is being kept |
