@@ -2231,6 +2231,16 @@ live = input.harbor(
   # tab, or by losing signal, is not going to come back and clear it.
   on_disconnect = fun () -> begin
     connected  := false
+    # AND THE LIBRARY COMES BACK UP. Pause is only ever safe while something
+    # else is making the sound - a host pauses it so a bucket-DJ'd show is the
+    # only thing on the air - so a source that goes away while it is still set
+    # leaves the mount held, the bytes flowing, and every one of them digital
+    # silence. Not hypothetical: on 2026-08-21 a show's source timed out at
+    # 01:24 with the library paused under it and the station broadcast -inf dB
+    # for thirty-five hours. Nothing showed it. The page still read ON AIR,
+    # correctly - ON AIR is icecast's "a source is on the mount", and one was.
+    # Same reasoning as live_open just below, with a worse failure.
+    paused     := false
     # Reset rather than trusted to be tidied up: a console whose laptop lid
     # closed mid-mute would otherwise leave the next source, of any kind,
     # unable to duck the music.
