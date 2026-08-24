@@ -8,6 +8,12 @@
 # safe to keep in the repo.
 
 settings.log.level        := 3
+# 2.5 fades when a switch cuts into a playing track - up to a second, by
+# default. The switch further down IS the pause, so on 2.5 every pause and
+# unpause would gain a fade the record animation on the listener page was never
+# timed against. Zero keeps the behaviour this station was tuned to; it is one
+# line to raise if the fade turns out to be nicer.
+settings.source.composition.max_fade := 0.
 settings.log.file         := true
 # Where things live. Machine environment variables, so the station can move
 # without editing code - the same mechanism RADIO_HARBOR_PASSWORD already uses
@@ -376,11 +382,16 @@ music = amplify({if music_on() then 1.0 else 0.0 end}, music)
 # otherwise re-announce the child's last metadata, and forward_meta at the
 # bottom of this file turns every metadata into a NEW TRACK in the mix. The
 # stream would report a fresh song starting for one that never restarted.
-music = switch(
-  track_sensitive = false,
-  replay_metadata = false,
-  [({not paused()}, music), ({true}, blank())]
-)
+#
+# 2.5 moved these off the switch and onto each source: what used to be two
+# arguments covering the whole operator is now a method on every branch, so
+# both branches carry them and both must, or the one without would take the
+# defaults and re-announce on the way back exactly as the paragraph above
+# describes.
+music = switch([
+  ({not paused()}, music.{ track_sensitive = false, replay_metadata = false }),
+  ({true},        blank().{ track_sensitive = false, replay_metadata = false })
+])
 
 # What is on the air right now. The path is the point - it is how the operator
 # finds the actual file in D:/Music - so it comes from the request rather than
