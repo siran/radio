@@ -741,7 +741,7 @@ import relays.caddy
 		import speakers
 		@ai {
 			method GET PUT
-			path /host/ai/ai.json
+			path /host/ai/ai.yaml
 		}
 		handle @ai {
 			request_body {

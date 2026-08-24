@@ -501,16 +501,23 @@
   <details class="panel" id="aiwrap">
     <summary>The AI <span class="when">&mdash; what to tell it, and whether it may post
       without asking you first. It reads this; nothing here talks to it.</span></summary>
-    <label class="chk">
-      <input type="checkbox" id="aiauto"> Let it post on its own
-    </label>
-    <!-- OFF by default, and it is the one default in this console that is about
-         somebody else's judgement rather than the host's own convenience. A
-         thing that writes on a public radio under its own name should be let
-         out deliberately, once, by the person whose station it is. -->
-    <div class="status" id="aiautonote">Off: it can prepare a post and leave it for
-      you in the composer, and you decide. On: it posts, and the card is signed with
-      its name rather than yours.</div>
+    <!-- FOUR SWITCHES, NOT ONE. "May it act on its own" is not a single
+         question: writing a card that is signed with its name, renaming what
+         the whole room can see, cutting a recording, and choosing the next
+         record are four different amounts of trust, and a host will happily
+         grant one while refusing another.
+
+         ALL OFF by default. These are the one set of defaults in this console
+         that are about somebody else's judgement rather than the host's own
+         convenience, and each should be let out deliberately, once, by the
+         person whose station it is. -->
+    <label class="chk"><input type="checkbox" id="aiPost"> Post cards on its own</label>
+    <label class="chk"><input type="checkbox" id="aiTag"> Set what is playing &mdash; artist and title</label>
+    <label class="chk"><input type="checkbox" id="aiRecord"> Start and stop recordings</label>
+    <label class="chk"><input type="checkbox" id="aiMusic"> Choose the music &mdash; queue and skip</label>
+    <div class="status" id="aiautonote">Anything left off it may still prepare and
+      leave for you rather than do. Setting what is playing is the one the room sees:
+      a wrong title is on the public page until somebody fixes it.</div>
     <label for="aiprompt">What to tell the model</label>
     <textarea id="aiprompt" maxlength="6000" spellcheck="false"
       placeholder="Who it is, what the show is, what it should notice, how long to be, what never to say."></textarea>
@@ -4557,16 +4564,50 @@
   // flight with the last one queued behind, exactly as the show fields do -
   // two PUTs racing would settle in whatever order the network chose and the
   // loser would be the newer text.
-  const AI_URL = '/host/ai/ai.json';
+  const AI_URL = '/host/ai/ai.yaml';
+
+  // YAML, because this file is written here and read by whatever is DJing -
+  // eGPT today, something local later - and neither wants to be handed JSON.
+  // Flat on purpose: nesting would buy nothing and cost a real parser.
+  //
+  // Every string is quoted. A prompt is free text: it will contain colons and
+  // quotes and newlines, and any of those unquoted is either a parse error or,
+  // worse, a silently different value.
+  const aiSwitches = [["aiPost", "post"], ["aiTag", "tag"],
+                      ["aiRecord", "record"], ["aiMusic", "music"]];
+
+  function yq(v) {
+    if (typeof v === "boolean") return v ? "true" : "false";
+    return JSON.stringify(String(v));   // JSON string escaping is valid YAML
+  }
+
+  function aiToYaml(o) {
+    return Object.keys(o).map((k) => k + ": " + yq(o[k])).join("\n") + "\n";
+  }
+
+  function aiFromYaml(text) {
+    const out = {};
+    for (const line of String(text).split(/\r?\n/)) {
+      const m = line.match(/^([A-Za-z_][\w]*):\s*(.*)$/);
+      if (!m) continue;
+      const raw = m[2].trim();
+      if (raw === "true" || raw === "false") { out[m[1]] = raw === "true"; continue; }
+      if (raw.startsWith('"')) { try { out[m[1]] = JSON.parse(raw); continue; } catch {} }
+      out[m[1]] = raw;
+    }
+    return out;
+  }
   let aiTimer = 0, aiSending = false, aiAgain = false;
 
   async function aiLoad() {
     try {
       const r = await fetch(AI_URL, { credentials: 'same-origin', cache: 'no-store' });
       if (!r.ok) return;                       // no file yet is not an error
-      const d = await r.json();
-      if (d && typeof d.auto === 'boolean') $('aiauto').checked = d.auto;
-      if (d && typeof d.prompt === 'string') $('aiprompt').value = d.prompt.slice(0, 6000);
+      const d = aiFromYaml(await r.text());
+      for (const [el, key] of aiSwitches) {
+        if (typeof d['auto_' + key] === 'boolean') $(el).checked = d['auto_' + key];
+      }
+      if (typeof d.prompt === 'string') $('aiprompt').value = d.prompt.slice(0, 6000);
       aiSay(d);
     } catch {}
   }
@@ -4574,27 +4615,36 @@
   function aiSay(d) {
     $('aistat').textContent = !d ? ''
       : 'Saved' + (d.at ? ' ' + new Date(d.at).toLocaleTimeString() : '') +
-        ($('aiauto').checked ? '. It may post on its own.'
-                             : '. It will leave posts for you rather than send them.');
+        '. ' + aiAllowed();
+  }
+
+  // Says what it may do, in the host's words rather than four booleans.
+  function aiAllowed() {
+    const on = aiSwitches.filter(([el]) => $(el).checked)
+      .map(([, k]) => ({ post: "post", tag: "set what is playing",
+                         record: "record", music: "choose the music" })[k]);
+    return on.length ? "It may " + on.join(", ") + " on its own."
+                     : "It may not do anything on its own; it prepares and waits for you.";
   }
 
   async function aiPush() {
     aiTimer = 0;
     if (aiSending) { aiAgain = true; return; }
     aiSending = true;
-    const body = {
-      auto: $('aiauto').checked,
+    const body = {};
+    for (const [el, key] of aiSwitches) body['auto_' + key] = $(el).checked;
+    Object.assign(body, {
       prompt: $('aiprompt').value.slice(0, 6000),
       at: new Date().toISOString(),
       // Who last touched it, so a station with several speakers can tell whose
       // instructions the AI is following. Not a credential and not used as one.
       by: ($('whoami').textContent || '').trim()
-    };
+    });
     try {
       const r = await fetch(AI_URL, {
         method: 'PUT', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body, null, 1) });
+        headers: { 'Content-Type': 'text/yaml' },
+        body: aiToYaml(body) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       $('aierr').textContent = '';
       aiSay(body);
@@ -4608,8 +4658,8 @@
 
   const aiSoon = () => { clearTimeout(aiTimer); aiTimer = setTimeout(aiPush, 700); };
   $('aiprompt').addEventListener('input', aiSoon);
-  // The switch saves at once. It is one bit and somebody just decided it.
-  $('aiauto').addEventListener('change', aiPush);
+  // A switch saves at once. It is one bit and somebody just decided it.
+  for (const [el] of aiSwitches) $(el).addEventListener('change', aiPush);
   aiLoad();
 
   // ===== watching the still parts of the tab ===============================

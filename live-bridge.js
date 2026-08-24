@@ -158,6 +158,35 @@ function harborPassword() {
   throw new Error(PW_NAME + ' is not on the LiquidsoapRadio service key');
 }
 
+// --- yaml -------------------------------------------------------------------
+// A tiny emitter for flat maps, which is all these records are. Written rather
+// than pulled in: this process has no dependencies and a recording sidecar is
+// not a reason to acquire the first one.
+//
+// EVERY STRING IS QUOTED, unconditionally. A track called "Movement II: Adagio"
+// is a syntax error unquoted, "7" stops being a string, and a title that happens
+// to read "yes" becomes a boolean. Quoting always is shorter than the rules for
+// when not to.
+function yamlValue(v) {
+  if (v === null || v === undefined) return 'null';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'null';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  return '"' + String(v)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+    // control characters would end the document rather than the line
+    .replace(/[\u0000-\u001f]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')) + '"';
+}
+
+function yamlDoc(obj) {
+  const keys = Object.keys(obj);
+  if (!keys.length) return '--- {}\n';
+  return '---\n' + keys.map((k) => k + ': ' + yamlValue(obj[k])).join('\n') + '\n';
+}
+
 // --- websocket, server side ------------------------------------------------
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const accept = key => crypto.createHash('sha1').update(key + GUID).digest('base64');
@@ -453,11 +482,15 @@ class Air {
     if (!this.rec || !this.recBase) return;
     let line;
     try {
-      line = JSON.stringify(Object.assign(
+      line = yamlDoc(Object.assign(
         { at: Date.now() - this.recAt, iso: new Date().toISOString() },
-        data || {})) + '\n';
+        data || {}));
     } catch { return; }
-    fs.appendFile(this.recBase + '.jsonl', line, (e) => {
+    // One YAML document per mark, appended. A stream of records wants documents
+    // rather than one growing list: appending to a list means rewriting it, and
+    // a half-written list is unparseable where a half-written document is just
+    // the last one missing.
+    fs.appendFile(this.recBase + '.marks.yaml', line, (e) => {
       if (e) log('could not write a mark for', this.who + ':', e.message);
     });
   }
@@ -540,7 +573,7 @@ class Air {
       offset: this.recAt ? cut.at - this.recAt : null,
       why: why || 'stopped'
     };
-    fs.writeFile(cut.base + '.json', JSON.stringify(meta, null, 2), (e) => {
+    fs.writeFile(cut.base + '.yaml', yamlDoc(meta), (e) => {
       if (e) log('could not write the sidecar for', cut.slug + ':', e.message);
     });
     this.recMark({ kind: 'rec-stop', name: cut.name, slug: cut.slug, secs });

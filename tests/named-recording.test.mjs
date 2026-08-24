@@ -21,6 +21,27 @@ const TONE = TMP + '/tone.webm';
 const BPORT = 18007;
 const HPORT = 18005;
 
+// The sidecar and the marks are YAML now. These are flat maps of quoted
+// scalars, so a line reader is enough and this test stays dependency-free
+// like the thing it is testing.
+function unyaml(text) {
+  const out = {};
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/^([A-Za-z_][\w]*):\s*(.*)$/);
+    if (!m) continue;
+    let v = m[2].trim();
+    if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) {
+      v = v.slice(1, -1)
+        .replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    } else if (v === 'null') v = null;
+    else if (v === 'true') v = true;
+    else if (v === 'false') v = false;
+    else if (/^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
+    out[m[1]] = v;
+  }
+  return out;
+}
 const ok = [];
 const bad = [];
 const t = (name, cond, detail) => (cond ? ok : bad).push(name + (detail ? '  [' + detail + ']' : ''));
@@ -169,13 +190,13 @@ await sleep(1000);
 const namedDir = REC + '/named';
 const named = fs.existsSync(namedDir) ? fs.readdirSync(namedDir) : [];
 const webm = named.filter((f) => f.endsWith('.webm'));
-const json = named.filter((f) => f.endsWith('.json'));
+const side = named.filter((f) => f.endsWith('.yaml'));
 t('one named recording exists', webm.length === 1, named.join(', ') || '(none)');
 t('it is named after what was asked for', !!webm[0] && webm[0].indexOf('sweet-jane-test-') === 0, webm[0] || '');
-t('it has a sidecar', json.length === 1);
+t('it has a sidecar', side.length === 1);
 
 let meta = {};
-try { meta = JSON.parse(fs.readFileSync(namedDir + '/' + json[0], 'utf8')); } catch (e) { meta = {}; }
+try { meta = unyaml(fs.readFileSync(namedDir + '/' + side[0], 'utf8')); } catch (e) { meta = {}; }
 t('the sidecar names who asked', meta.by === 'tester', JSON.stringify(meta.by));
 t('the sidecar keeps the name', meta.name === 'Sweet Jane Test', JSON.stringify(meta.name));
 t('the sidecar points at its backup', !!meta.backup && fs.existsSync(REC + '/' + meta.backup), String(meta.backup));
@@ -212,10 +233,11 @@ t('CONTROL: the same audio without the header does NOT decode',
   (ctl.split('\n').find((l) => l.trim()) || '').slice(0, 90) || 'it decoded fine - the header capture is doing nothing');
 
 // --- and the backup carries the span ----------------------------------------
-const jl = fs.readdirSync(REC).filter((f) => f.endsWith('.jsonl'));
+const jl = fs.readdirSync(REC).filter((f) => f.endsWith('.marks.yaml'));
 let marks = [];
 try {
-  marks = fs.readFileSync(REC + '/' + jl[0], 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  marks = fs.readFileSync(REC + '/' + jl[0], 'utf8')
+    .split('---').filter((d) => d.trim()).map(unyaml);
 } catch (e) {
   marks = [];
 }

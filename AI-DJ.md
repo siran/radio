@@ -319,7 +319,7 @@ Going live starts it. One file per broadcast, written to `recordings/` (or
 
 ```
 20260818-211802-ai.webm     one continuous file, header intact
-20260818-211802-ai.jsonl    {"at":711,"iso":"…","artist":"…","title":"…","show":"…"}
+20260818-211802-ai.marks.yaml   one YAML document per mark, --- separated
 ```
 
 **One file per broadcast, not one per track** — a webm header exists only in the
@@ -381,9 +381,18 @@ Four things worth knowing before you drive this:
 - Going off the air closes any named recording with `why: "the broadcast ended"`,
   so a show that drops does not leave a stub.
 
-The span is **also** written into the backup's `.jsonl` as `rec-start` /
+The span is **also** written into the backup's `.marks.yaml` as `rec-start` /
 `rec-stop` marks. Two records of the same fact, because the cheap one still
 works when the other does not.
+
+### On formats
+
+Files this station writes for **you** are YAML: the recording marks, the
+sidecars, the noticeboard. Files liquidsoap reads back are still JSON, and that
+is a tool constraint rather than a preference - the build has `yaml.stringify`
+but no `yaml.parse`, so anything the station must read again has to stay JSON.
+
+HTTP responses are JSON throughout. Those are an API, not a file.
 
 There is **no Whisper on this machine** as of 2026-08-19.
 
@@ -392,18 +401,31 @@ There is **no Whisper on this machine** as of 2026-08-19.
 ## 8 · The host's instructions
 
 ```
-GET /host/ai/ai.json      (speaker auth)
-PUT /host/ai/ai.json      max 8KB
+GET /host/ai/ai.yaml      (speaker auth)
+PUT /host/ai/ai.yaml      max 8KB
 ```
 
-```json
-{ "auto": false, "prompt": "who you are, what to notice, how long to be",
-  "at": "2026-08-19T…", "by": "an" }
+```yaml
+auto_post: false      # write cards on its own
+auto_tag: false       # set artist and title on the live show, which the room sees
+auto_record: false    # start and stop named recordings
+auto_music: false     # queue and skip
+prompt: "who you are, what to notice, how long to be"
+at: "2026-08-24T18:00:00Z"   # written by the console, not by you
+by: "an"                      # who last changed it
 ```
 
 - `prompt` — what the host wants. Written by a human in the console.
-- **`auto`** — may you post without a human. Default `false`: prepare and hold,
-  do not send. Honour it.
+- **The four `auto_*` flags** are separate permissions, all `false` by default.
+  Honour each one on its own: `auto_post` is not permission to retitle the show,
+  and `auto_tag` is the one the whole room sees - a wrong title sits on the
+  public page until a person notices. Anything not granted you may still prepare
+  and leave for the host.
+
+The single `auto` flag this replaced asked one question where there were four.
+Writing a card signed with your name, renaming what the whole room can see,
+cutting a recording and choosing the next record are four different amounts of
+trust, and a host will grant one while refusing another.
 
 ---
 
@@ -437,7 +459,7 @@ PUT /host/ai/ai.json      max 8KB
 | `GET/POST` | `/control/show` | the show record |
 | `PUT` | `/host/post/<show.id>/<file>` | a card or its pictures |
 | `GET` | `/posts/<show.id>/<file>` | read one back — public |
-| `GET/PUT` | `/host/ai/ai.json` | the host's instructions |
+| `GET/PUT` | `/host/ai/ai.yaml` | the host's instructions, and four permissions |
 | `WSS` | `/host/onair` | the audio in, subprotocol `webcast` |
 | `POST` | `/host/onair/rec/start?name=` | begin a NAMED recording |
 | `POST` | `/host/onair/rec/stop` | end it, write its sidecar |
