@@ -398,7 +398,10 @@
       <input type="checkbox" id="airwatch"> Watch the still parts of the tab and
       offer me a picture when they change
     </label>
-    <div class="status" id="airwatchnote" hidden></div>
+    <div class="status" id="airwatchnote" hidden></div>
+    <!-- The last boundary it noticed. Phase one leaves a trail and acts on nothing,
+         so this is the only place a host sees the detector working on a real tab. -->
+    <div class="status" id="airwatchmark" hidden></div>
     <label class="chk">
       <input type="checkbox" id="airmute"> Pause the station&rsquo;s autoDJ while I am on air
     </label>
@@ -4704,9 +4707,44 @@
   const SHOT_COOL = 20000;    // ms before another picture may be offered
   const SHOT_WIDE = 960;      // px across for the picture actually kept
 
+  // WHICH CELLS ARE THE VIDEO AND WHICH ARE THE CHROME, and the answer is
+  // already sitting in shotBusy: a cell's restlessness IS "how much does this
+  // part of the tab normally move". No model needed to find the label - only
+  // to read it, later, and only on a crop.
+  //
+  // Against the median rather than a fixed number, because a tab of mostly
+  // text and a tab of mostly video have nothing in common except that one part
+  // of each moves more than the rest of it does.
+  const SHOT_BUSYMULT = 3;    // times the median restlessness that makes a cell video
+  const SHOT_BUSYFLOOR = 3;   // and a floor, so a wholly still tab has no video at all
+
+  // THE PARTITION HAS TO OUTLIVE THE SILENCE IT EXISTS TO DETECT, and getting
+  // this wrong is subtle: shotBusy follows what a cell just did, so the instant
+  // a video stops, its cells stop looking like video. The classification
+  // collapses exactly when it is needed, busyCells falls to zero, and the stall
+  // that was about to be reported resets instead. Measured: the counter went
+  // 0, 1, 0 and never reached the two looks it needed.
+  //
+  // So the partition runs off a second, asymmetric measure: it rises quickly
+  // when a cell moves and decays very slowly when it stops. "This is where the
+  // picture is" should survive the picture pausing, which is the whole point.
+  const SHOT_LONGUP = 0.3;    // how fast a cell earns its place as video
+  const SHOT_LONGDOWN = 0.01; // and how slowly it loses it
+
+  // THE SECOND SIGNAL, and it is the first one inverted. A still cell jumping
+  // says "the label is new". A region that normally moves going QUIET says
+  // "something ended" - a cut, a track finishing, a video paused. Neither is
+  // reliable alone; together they are a track boundary and each half is a
+  // reason to believe the other.
+  const SHOT_STALL = 0.25;    // fraction of its usual movement that counts as stopped
+  const SHOT_STALLRUN = 2;    // consecutive quiet looks before it is called a boundary
+  const SHOT_MARKCOOL = 8000; // ms between marks, so one cut leaves one mark
+
   let airTabVideo = null, shotVid = null, shotTimer = 0, shotCanvas = null,
       shotLast = null, shotBusy = null, shotHits = null, shotRun = null,
       shotSeen = 0, shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
+  let shotStallRun = 0, shotMarkAt = 0, shotBusyCells = 0, shotWasStalled = false;
+  let shotLong = null;        // the slow measure the partition is drawn from
 
   function shotSmall() {
     if (!shotCanvas) {
@@ -4740,6 +4778,7 @@
     if (!shotLast) {
       shotLast = now;
       shotBusy = new Float32Array(SHOT_CELLS);
+      shotLong = new Float32Array(SHOT_CELLS);
       shotHits = new Uint16Array(SHOT_CELLS);
       shotRun = new Uint8Array(SHOT_CELLS);
       return;
@@ -4763,10 +4802,21 @@
     // by almost nothing is enormous.
     let fired = 0, known = 0;
     const cellHit = new Uint8Array(SHOT_CELLS);
+    // kept, because the partition below needs what each cell did THIS look and
+    // not only what it usually does
+    const cellD = new Float32Array(SHOT_CELLS);
     for (let cy = 0; cy < SHOT_ROWS; cy++) {
       for (let cx = 0; cx < SHOT_COLS; cx++) {
         const i = cy * SHOT_COLS + cx;
         const d = shotCell(now, shotLast, cx, cy);
+        cellD[i] = d;
+        // Rises fast, falls slowly, and unlike shotBusy it learns from the
+        // events too: a cell that jumps IS a cell that moves, and for the
+        // purpose of "where is the picture" that is exactly what we want to
+        // remember.
+        shotLong[i] = d > shotLong[i]
+          ? shotLong[i] * (1 - SHOT_LONGUP) + d * SHOT_LONGUP
+          : shotLong[i] * (1 - SHOT_LONGDOWN) + d * SHOT_LONGDOWN;
         if (shotHits[i] >= SHOT_KNOWN) known++;
         const hot = d > SHOT_CELLMOVE &&
                     d / Math.max(shotBusy[i], SHOT_DENOM) > SHOT_RATIO;
@@ -4801,8 +4851,42 @@
     const moved = want >= (identified ? 1 : SHOT_HITS);
 
     for (let i = 0; i < SHOT_CELLS; i++) if (cellHit[i]) shotHits[i]++;
-    shotSay(fired, known);
+
+    // --- split the frame into video and chrome ---------------------------
+    // Recomputed every look rather than settled once: a page changes layout
+    // under you, a video goes fullscreen, an ad takes half the screen.
+    const ranked = Float32Array.from(shotLong).sort();
+    const median = ranked[SHOT_CELLS >> 1];
+    const busyLine = Math.max(SHOT_BUSYFLOOR, median * SHOT_BUSYMULT);
+    let busyCells = 0, busyNow = 0, busyUsual = 0, stillFired = 0;
+    for (let i = 0; i < SHOT_CELLS; i++) {
+      if (shotLong[i] > busyLine) { busyCells++; busyNow += cellD[i]; busyUsual += shotLong[i]; }
+      else if (cellHit[i]) stillFired++;
+    }
+    shotBusyCells = busyCells;
+
+    // A region that normally moves and has stopped. Needs somewhere that
+    // normally moves in the first place: on a page of pure text there is no
+    // video to stall and this signal simply never speaks.
+    const stalled = busyCells > 0 && busyNow < busyUsual * SHOT_STALL;
+    if (stalled) shotStallRun++; else shotStallRun = 0;
+    // The EDGE, not the state. A paused video is quiet for as long as it is
+    // paused, and that is one boundary, not one per look.
+    const boundary = shotStallRun === SHOT_STALLRUN;
+
+    shotSay(fired, known, busyCells, shotStallRun);
     if (shotSeen < SHOT_WARM) return;
+
+    // --- leave a mark ------------------------------------------------------
+    // Marks are free and a wrong one costs nothing: the backup is whole and
+    // anything can be re-cut from it afterwards. So mark liberally here, and
+    // let whatever acts on them be the conservative one.
+    if (boundary || stillFired) {
+      shotMark(boundary && stillFired ? 'strong' : 'weak',
+               boundary && stillFired ? 'label changed and the video stopped'
+               : boundary ? 'the video stopped' : 'a still part changed',
+               { still: stillFired, busy: busyCells });
+    }
 
     if (moved) { shotMoving = true; shotQuiet = 0; return; }
     if (!shotMoving) return;
@@ -4814,9 +4898,31 @@
     shotOffer();
   }
 
+  // A boundary, written beside the audio. The webcast metadata frame is the
+  // path the show fields already use and the bridge already writes it into the
+  // marks file, so this needs no new route, no new endpoint and no credential
+  // of its own - it is the same host saying "something happened here".
+  //
+  // NOTHING IS ACTED ON. No recording starts, no title is set. This is phase
+  // one: leave a trail on a real broadcast so the signal can be judged before
+  // anything is wired to it.
+  function shotMark(strength, why, extra) {
+    if (!airOn || !airWS || airWS.readyState !== WebSocket.OPEN) return;
+    const t = Date.now();
+    if (t - shotMarkAt < SHOT_MARKCOOL) return;
+    shotMarkAt = t;
+    try {
+      airWS.send(JSON.stringify({ type: 'metadata', data: Object.assign(
+        { kind: 'boundary', strength, why }, extra || {}) }));
+    } catch {}
+    $('airwatchmark').hidden = false;
+    $('airwatchmark').textContent = new Date().toLocaleTimeString() +
+      ' \u2014 ' + why + ' (' + strength + ')';
+  }
+
   // What it is doing, in the panel, because a detector nobody can see the working
   // of is a detector nobody can tell is broken.
-  function shotSay(fired, known) {
+  function shotSay(fired, known, busyCells, stallRun) {
     $('airwatchnote').hidden = false;
     $('airwatchnote').textContent =
       shotSeen < SHOT_WARM
@@ -4826,6 +4932,11 @@
             ' on this tab that report a change, and is watching those.'
           : 'Watching the whole tab, and comparing every part of it against its ' +
             'own usual. Nothing has reported twice yet.';
+    const bits = [];
+    if (busyCells > 0) bits.push(busyCells + ' cell' + (busyCells === 1 ? '' : 's') + ' of moving picture');
+    else bits.push('nothing on it moves like video');
+    if (stallRun > 0) bits.push('the picture has gone quiet');
+    $('airwatchnote').textContent += ' ' + bits.join('; ') + '.';
   }
 
   // JPEG rather than PNG, and not for looks: a screenshot as PNG is most of a
