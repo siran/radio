@@ -1,7 +1,21 @@
 # liquidsoap 2.4.5 win64 — unbounded private commit in 266,240-byte blocks
 
-Status: **unresolved.** Fingerprint is precise. 24 hypotheses eliminated against controls. Root
-cause not found.
+Status: **identified upstream — see `LEAK-reply.md`.**
+
+OCaml's `Unix.select` on Windows falls onto a worker-thread/`WSAEventSelect` path whenever any
+descriptor in the set is not a socket, and that path leaks native memory per call. Liquidsoap kept
+two `Unix.pipe` descriptors in the scheduler set permanently (`harbor.ml` accept-loop control,
+`duppy.ml` mutex wake), so every scheduler call took it. Fixed upstream with
+`Unix_utils.socketpair` — savonet/liquidsoap#5290, merged as `1b05d07`.
+
+That accounts for the two regimes in §2.1: leak rate follows scheduler wake rate, so harbor
+activity drives it and quiet operation still trickles. It also explains why reply size, handler
+body, live request count, handle count and the OCaml heap all failed to correlate — none of them
+owns the allocation. The 266,240-byte regions in §3 stand as a measurement fingerprint, but they
+are allocator-level evidence rather than the root object.
+
+What follows is the investigation as it stood before that reply. The eliminations in §6 are kept
+as the record of what was ruled out and how.
 
 Every number below was measured on this machine. Anything inferred rather than measured is marked
 **[inference]**. Anything not independently verified is marked **[unverified]**. See §12 on why that
