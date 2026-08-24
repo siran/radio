@@ -11,6 +11,21 @@
     --fg:#e8e8ea; --dim:#8a8a93; --on:#4ade80; --rec:#f87171;
   }
   * { box-sizing:border-box; }
+  /* `hidden` has to actually hide. The browser supplies [hidden]{display:none}
+     at specificity (0,0,1,0), which ANY id selector beats outright and any
+     class selector ties and then wins on order, because the author sheet comes
+     last. So an element with `hidden` and a display rule of its own stays on
+     screen and the attribute silently means nothing.
+
+     That had happened five times here: #shotwrap held an <img> with no src, so
+     an empty panel showing a broken-image icon and the words "what the shared
+     tab settled on" sat above the composer permanently. #airhprow, #airrecrow,
+     #airduckwrap and #airwatchwrap were all showing off-air for the same reason.
+
+     One rule rather than a guard per element - the per-element form is what the
+     listener page does and is exactly what got forgotten five times. Nothing
+     else in this sheet uses !important, so this ties with nothing. */
+  [hidden] { display: none !important; }
   body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
          font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
          -webkit-text-size-adjust:100%; }
