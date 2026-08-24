@@ -635,6 +635,27 @@ import relays.caddy
 	#
 	# flush_interval -1 for the same reason /stream has it: never buffer a
 	# response that has no end.
+	# The broadcasts themselves. Every show leaves a backup and any named
+	# recording sits under named/; both are on disk already and nothing could
+	# reach them. This is the link.
+	#
+	# BEHIND THE SPEAKER CREDENTIAL, not public. These are raw broadcasts - a
+	# host's open microphone between tracks, whatever a shared tab was playing -
+	# and unlike a card nobody chose what went into them. The posts folder is
+	# world-readable because a post is written to be read; a recording is not.
+	#
+	# handle_path rather than handle: the site root is RADIO_HOME, and these live
+	# in RADIO_HOME/recordings, so the prefix comes off and the root moves.
+	# browse gives the listing for free, and answers it as JSON to anything that
+	# asks with Accept: application/json - which is how the shows page already
+	# discovers posts.
+	handle_path /host/recordings/* {
+		import speakers
+		header X-Content-Type-Options "nosniff"
+		root * {env.RADIO_HOME}/recordings
+		file_server browse
+	}
+
 	handle /host/monitor {
 		import speakers
 		rewrite * /monitor
