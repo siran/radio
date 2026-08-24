@@ -3943,6 +3943,44 @@
     return '';
   }
 
+  // --- keeping the screen awake ---------------------------------------------
+  // A phone locks its screen after a minute or two and suspends the page with
+  // it: the microphone stops and the broadcast ends mid sentence, with nothing
+  // on screen to say why. The Screen Wake Lock API is the whole fix.
+  //
+  // ASKED FOR ONLY WHILE ON THE AIR. Holding it on an idle console would be a
+  // web page deciding somebody's laptop may never sleep.
+  //
+  // The browser DROPS the lock whenever the page is hidden and does not give it
+  // back by itself, so the visibilitychange handler is not tidiness - without
+  // it, one glance at another app ends the wake lock for the rest of the show.
+  //
+  // Chrome on Android has it, and Safari from 16.4. Anything older simply does
+  // not, and there is no polyfill for keeping a backlight on. Feature-detected,
+  // and silent when missing: a host whose phone will sleep is not helped by a
+  // warning they cannot act on.
+  let airWake = null;
+
+  async function wakeOn() {
+    if (!("wakeLock" in navigator) || airWake) return;
+    try { airWake = await navigator.wakeLock.request("screen"); }
+    catch { airWake = null; return; }
+    // The browser announces its own release through this event. Dropping the
+    // handle here is what lets the visibility handler know to ask again.
+    airWake.addEventListener("release", () => { airWake = null; });
+  }
+
+  function wakeOff() {
+    if (!airWake) return;
+    const w = airWake;
+    airWake = null;
+    try { w.release(); } catch {}
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && airOn) wakeOn();
+  });
+
   function airLook() {
     document.body.classList.toggle('onair', airOn);
     $('airbtn').classList.toggle('on', airOn);
@@ -4221,6 +4259,7 @@
     airRec.onstop = () => { if (airWS && airWS.readyState <= WebSocket.OPEN) airWS.close(1000, 'off air'); };
     airRec.start(AIR_CHUNK_MS);
     airOn = true;
+    wakeOn();
 
     // PAUSE, not music off, and radio.liq is explicit that the two are not one
     // thing: with the music off the record keeps turning, so half an hour of
@@ -5325,6 +5364,7 @@
     try { airAC && airAC.close(); } catch {}
     airAC = null; airAnalyser = null;
     airOn = false;
+    wakeOff();
     airLook();
     airStat();
   }
