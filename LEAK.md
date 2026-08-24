@@ -455,3 +455,5 @@ and are not asserted here.
 - Measurement scripts: `VirtualQueryEx` walker and bucketer, `ReadProcessMemory` dumper, clean-room
   clone harness (ports remapped, socket sink), per-endpoint pricer, A/B/A runner.
 - `radio.liq` in full (3,060 lines).
+- Host access, service control, telnet commands and reproduction recipes: supplied separately,
+  deliberately not in this repo.
