@@ -59,8 +59,16 @@ messages/*.md
 # the narrator's current line, rewritten every announcement
 live/
 
-# scratch, written to be read and thrown away
+# Scratch, written to be read and thrown away. `.disposable` anywhere in the
+# name is the mark, and it goes BEFORE the real extension so editors still
+# highlight the file: LEAK-access.disposable.md is still markdown.
+#
+# For anything that must not reach the remote but wants to live beside the
+# work: host access notes, a memory dump, a credential-adjacent scratch file.
+# Ignored by name, so the mark survives being moved between clones.
 disposable.md
+*.disposable
+*.disposable.*
 
 # Broadcast recordings and their tag marks. Tens of megabytes an hour, kept for
 # whatever transcribes or clips them later; RADIO_RECORD moves them off C: if
