@@ -2634,6 +2634,27 @@ end
 
 thread.run(every = 0.25, pickup)
 
+# Cut a voice note short.
+#
+# A note is ONE recording however long it runs - that is deliberate, it is
+# what stops a sentence being chopped into fragments - but it means a long
+# one holds the air until it ends and nothing could stop it. The telnet has
+# had voice0.flush_and_skip all along; the console had no way to reach it.
+#
+# set_queue([]) drops whatever is waiting behind it and skip() ends the one
+# playing. Every lane, not just the one that is talking: a host cutting a note
+# off does not know or care which lane it landed in, and a note queued behind
+# the one being cut would otherwise start the moment the first stopped.
+#
+# Registered HERE rather than beside the other /control/ endpoints, because
+# `queues` is built further up this file and liquidsoap reads top to bottom -
+# up there the name does not exist yet.
+harbor.http.register(port = 8005, method = "POST", "/control/voice/flush",
+  endpoint(fun (_) -> begin
+    list.iter(fun (q) -> begin q.set_queue([]) ; q.skip() end, queues)
+    log.important(label = "voice", "flushed from the console")
+  end))
+
 # --- the voice chain -------------------------------------------------------
 # This is what makes a phone microphone sound like radio rather than like a
 # phone. The compressor matters more than any amount of EQ: it closes the gap

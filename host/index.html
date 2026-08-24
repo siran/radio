@@ -532,6 +532,7 @@
       <button class="tbtn" id="bRepeat">Repeat</button>
       <button class="tbtn" id="bMusic" title="off is silence">Music</button>
       <button class="tbtn" id="bPause" title="on freezes the stream">Pause</button>
+      <button class="tbtn" id="bNote" title="cut a voice note short, and drop anything queued behind it">Skip the note</button>
     </div>
     <div class="err" id="cerr"></div>
   </details>
@@ -913,6 +914,7 @@
 
 <div class="foot">
   <a href="/" target="_blank" title="opens in a new tab, so the station sits beside this page">the station &#8599;</a>
+  <span class="sep">&middot; <a href="/host/recordings/" target="_blank" title="every broadcast is kept; named recordings are under named/">the recordings &#8599;</a></span>
     <span class="sep" id="whoamiwrap" hidden>&middot; <span id="whoami"></span> &middot; <a href="/host/logout">log out</a></span>
   &middot; <a href="/host/logout">sign out</a>
 </div>
@@ -2280,6 +2282,9 @@
   $('bRepeat').addEventListener('click', e => control('repeat?on=' + !cur.repeat, 'POST', e.currentTarget));
   $('bMusic').addEventListener('click', e => control('music?on=' + !cur.music, 'POST', e.currentTarget));
   $('bPause').addEventListener('click', e => control('pause?on=' + !cur.paused, 'POST', e.currentTarget));
+  // Nothing to toggle and nothing to read back: a note is either playing or it
+  // is not, and afterwards it is gone either way.
+  $('bNote').addEventListener('click', e => control('voice/flush', 'POST', e.currentTarget));
 
   nowPlaying();
   setInterval(nowPlaying, 3000);   // the track changes on its own; so must the name
