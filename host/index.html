@@ -4755,6 +4755,7 @@
   let shotStallRun = 0, shotMarkAt = 0, shotBusyCells = 0, shotWasStalled = false;
   let shotLooks = 0, shotFirstAt = 0;   // how often it is ACTUALLY managing to look
   let shotLong = null;        // the slow measure the partition is drawn from
+  let shotWas = null;         // and what it was BEFORE this look - see shotTick
 
   // A VideoFrame is a CanvasImageSource, so it goes straight onto the canvas -
   // there is no <video> in this any more and nothing has to be playing.
@@ -4790,6 +4791,7 @@
       shotLast = now;
       shotBusy = new Float32Array(SHOT_CELLS);
       shotLong = new Float32Array(SHOT_CELLS);
+      shotWas = new Float32Array(SHOT_CELLS);
       shotHits = new Uint16Array(SHOT_CELLS);
       shotRun = new Uint8Array(SHOT_CELLS);
       return;
@@ -4825,6 +4827,15 @@
         // events too: a cell that jumps IS a cell that moves, and for the
         // purpose of "where is the picture" that is exactly what we want to
         // remember.
+        //
+        // KEPT AS IT WAS BEFORE THIS LOOK, and the partition reads THAT. A
+        // label changing is a big jump in a cell that is normally still, so
+        // folding it in first is enough to push that very cell over the line
+        // and file it as picture - the one thing it must not be, at the one
+        // moment it matters. The measure still learns from the event; it just
+        // does not get to use the event to reclassify the cell that reported
+        // it. Measured: without this a real title change scored zero.
+        shotWas[i] = shotLong[i];
         shotLong[i] = d > shotLong[i]
           ? shotLong[i] * (1 - SHOT_LONGUP) + d * SHOT_LONGUP
           : shotLong[i] * (1 - SHOT_LONGDOWN) + d * SHOT_LONGDOWN;
@@ -4866,14 +4877,51 @@
     // --- split the frame into video and chrome ---------------------------
     // Recomputed every look rather than settled once: a page changes layout
     // under you, a video goes fullscreen, an ad takes half the screen.
-    const ranked = Float32Array.from(shotLong).sort();
+    const ranked = Float32Array.from(shotWas).sort();
     const median = ranked[SHOT_CELLS >> 1];
     const busyLine = Math.max(SHOT_BUSYFLOOR, median * SHOT_BUSYMULT);
-    let busyCells = 0, busyNow = 0, busyUsual = 0, stillFired = 0;
+
+    // THE PICTURE IS A RECTANGLE, AND THAT IS THE WHOLE CORRECTION. Judging
+    // every cell on its own restlessness gets a dark film wrong in the worst
+    // possible way: most of a Dark Side of the Moon frame is black, those cells
+    // barely move, so they sit under the line and are filed as chrome - and then
+    // a scene lighting up reads as "a still part changed", which is exactly what
+    // a label changing is supposed to look like. Reported from a real show: two
+    // frames nine seconds apart, same song, same labels, both announced as new.
+    //
+    // A quiet cell INSIDE the picture is still the picture. So the box decides,
+    // not the cell - and the box is the same one the reader was already being
+    // handed, which is why it is computed here now instead of further down.
+    let busyCells = 0, busyNow = 0, busyUsual = 0;
+    let x0 = SHOT_COLS, y0 = SHOT_ROWS, x1 = -1, y1 = -1;
     for (let i = 0; i < SHOT_CELLS; i++) {
-      if (shotLong[i] > busyLine) { busyCells++; busyNow += cellD[i]; busyUsual += shotLong[i]; }
-      else if (cellHit[i]) stillFired++;
+      if (shotWas[i] <= busyLine) continue;
+      busyCells++; busyNow += cellD[i]; busyUsual += shotWas[i];
+      const bx = i % SHOT_COLS, by = (i / SHOT_COLS) | 0;
+      if (bx < x0) x0 = bx; if (bx > x1) x1 = bx;
+      if (by < y0) y0 = by; if (by > y1) y1 = by;
     }
+    // A cell of margin for the letterboxing and the player's own edge, which
+    // belong to the picture and move like neither side of this split.
+    if (x1 >= 0) {
+      x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1);
+      x1 = Math.min(SHOT_COLS - 1, x1 + 1); y1 = Math.min(SHOT_ROWS - 1, y1 + 1);
+    }
+    const inPicture = (i) => x1 >= 0 &&
+      (i % SHOT_COLS) >= x0 && (i % SHOT_COLS) <= x1 &&
+      ((i / SHOT_COLS) | 0) >= y0 && ((i / SHOT_COLS) | 0) <= y1;
+
+    let stillFired = 0, stillKnown = 0;
+    for (let i = 0; i < SHOT_CELLS; i++) {
+      if (!cellHit[i] || inPicture(i)) continue;
+      stillFired++;
+      if (shotHits[i] >= SHOT_KNOWN) stillKnown++;
+    }
+    // AND ONE CELL IS NOT A LABEL. A single chrome cell twitching is a clock, a
+    // view count, a hover state, a cursor. Either two of them agree, or one that
+    // has reported a change before does - that one has earned the benefit of the
+    // doubt, which is what shotHits was being kept for all along.
+    const labelChanged = stillKnown > 0 || stillFired >= SHOT_HITS;
     shotBusyCells = busyCells;
 
     // A region that normally moves and has stopped. Needs somewhere that
@@ -4892,22 +4940,23 @@
     // Marks are free and a wrong one costs nothing: the backup is whole and
     // anything can be re-cut from it afterwards. So mark liberally here, and
     // let whatever acts on them be the conservative one.
-    if (boundary || stillFired) {
-      const why = boundary && stillFired ? 'label changed and the video stopped'
+    if (boundary || labelChanged) {
+      const why = boundary && labelChanged ? 'label changed and the video stopped'
                 : boundary ? 'the video stopped' : 'a still part changed';
-      shotMark(boundary && stillFired ? 'strong' : 'weak', why,
+      shotMark(boundary && labelChanged ? 'strong' : 'weak', why,
                { still: stillFired, busy: busyCells });
-      // The bounding box of the moving part, in cells, so the reader can leave
-      // it alone. Empty when nothing on the tab moves like video.
-      let x0 = SHOT_COLS, y0 = SHOT_ROWS, x1 = -1, y1 = -1;
-      for (let i = 0; i < SHOT_CELLS; i++) {
-        if (shotLong[i] <= busyLine) continue;
-        const cx2 = i % SHOT_COLS, cy2 = (i / SHOT_COLS) | 0;
-        if (cx2 < x0) x0 = cx2; if (cx2 > x1) x1 = cx2;
-        if (cy2 < y0) y0 = cy2; if (cy2 > y1) y1 = cy2;
+      // MARKING STAYS LIBERAL; OFFERING DOES NOT. A mark costs nothing and can
+      // be ignored later, but a picture is a prompt in the host's face and a
+      // handover is a file on the station and a model's attention. The cooldown
+      // the quiet-after-movement path always respected was simply missed when
+      // this branch was added, and the show that found it was being offered a
+      // fresh picture every nine seconds and refused with 429 by the station -
+      // 240 writes a minute is the rate limit, two PUTs a handover, so it had
+      // reached a hundred and twenty boundaries a minute.
+      if (Date.now() - shotAt >= SHOT_COOL) {
+        shotOffer(frame);   // the very frame the boundary was found in
+        readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null);
       }
-      shotOffer(frame);   // the very frame the boundary was found in
-      readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null);
     }
 
     if (moved) { shotMoving = true; shotQuiet = 0; return; }
