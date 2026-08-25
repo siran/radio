@@ -727,37 +727,6 @@ import relays.caddy
 		}
 	}
 
-	# What the host wants the AI to be, and whether it may post without being
-	# asked. One file the console writes and the AI reads - the AI holds a
-	# speaker credential already, because it needs one to post at all, so this
-	# sits behind the same door as everything else it touches.
-	#
-	# 8KB where desk.json has 1KB, and the difference is prose. Same measured
-	# trap, and it is why the number is generous rather than tight: max_size
-	# TRUNCATES and webdav writes the truncated bytes, so a prompt over the cap
-	# would be saved cut in half with nothing said - and a model handed
-	# instructions that stop mid sentence does something confidently wrong.
-	handle /host/ai/* {
-		import speakers
-		@ai {
-			method GET PUT
-			path /host/ai/ai.yaml
-		}
-		handle @ai {
-			request_body {
-				max_size 8KB
-			}
-			webdav {
-				root {env.RADIO_HOME}/config
-				prefix /host/ai
-			}
-		}
-		# one file, one shape, nothing else reachable under this path
-		handle {
-			respond 404
-		}
-	}
-
 	# WHAT THE WATCHER SAW, for whatever is reading the tab.
 	#
 	# File-mediated on purpose, and that is the whole design decision: the
@@ -968,7 +937,46 @@ import relays.caddy
 	}
 	handle /host* {
 		import speakers
-		file_server
+
+		# THE AI FILE IS SERVED FROM INSIDE THIS BLOCK, and that is not tidiness.
+		# As its own `handle /host/ai/*` it LOST to this one. Caddy sorts handle
+		# blocks itself, and it put that block at position 33 against this block's
+		# 27 - so file_server claimed /host/ai/ai.yaml, looked for a file of that
+		# name on disk, found none and answered 404 to both GET and PUT. The
+		# console said "Could not save that: HTTP 404" and was telling the truth.
+		#
+		# Measured, not guessed: every other /host/... block sorts BEFORE this one
+		# (/host/desk/* at 18, /host/read/* at 21) and only /host/ai/* landed
+		# after. Moving the block in the file changed nothing - it stayed at 33 -
+		# so the position is the adapter's decision and not source order.
+		#
+		# Inside here the question cannot arise. `order webdav before file_server`
+		# is a global option, so this is reached first no matter how blocks sort.
+		#
+		# 8KB where desk.json has 1KB, and the difference is prose. max_size
+		# TRUNCATES and webdav writes the truncated bytes, so a prompt over the cap
+		# would be saved cut in half with nothing said - and a model handed
+		# instructions that stop mid sentence does something confidently wrong.
+		@ai {
+			method GET PUT
+			path /host/ai/ai.yaml
+		}
+		handle @ai {
+			request_body {
+				max_size 8KB
+			}
+			webdav {
+				root {env.RADIO_HOME}/config
+				prefix /host/ai
+			}
+		}
+
+		# Anything else under /host is the console and its assets. A bare
+		# file_server here would also run for the request above, so it is wrapped:
+		# sibling handle blocks are mutually exclusive, a loose directive is not.
+		handle {
+			file_server
+		}
 	}
 	# The old name. Hosts have /talk/ bookmarked on their phones, and a dead
 	# bookmark mid-show is worse than an untidy config, so it still resolves.

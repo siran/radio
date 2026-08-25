@@ -4637,7 +4637,16 @@
         method: 'PUT', credentials: 'same-origin',
         headers: { 'Content-Type': 'text/yaml' },
         body: aiToYaml(body) });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) {
+        // WHAT WAS ASKED FOR AND WHAT CAME BACK. A bare status is not enough to
+        // act on: it cost a whole session of guessing at the server from the
+        // outside, when the one thing nobody had was the actual request.
+        let note = "";
+        try { note = (await r.text()).trim().slice(0, 120); } catch {}
+        throw new Error("PUT " + new URL(AI_URL, location.href).href +
+          " answered " + r.status + (r.statusText ? " " + r.statusText : "") +
+          (note ? " \u2014 " + note : " \u2014 empty body"));
+      }
       $('aierr').textContent = '';
       aiSay(body);
     } catch (e) {
