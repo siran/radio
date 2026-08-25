@@ -249,6 +249,13 @@
              background:#0a0a0c; }
   #shotside { flex:1; min-width:0; font-size:12.5px; color:#9a9aa4; }
   #shotside .btns { margin-top:8px; }
+  #readlist { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+  .rprop { border:1px solid #26262e; border-radius:8px; padding:9px 11px; background:#101013; }
+  .rprop .rwhen { font-size:11.5px; color:#8a8a93; letter-spacing:.04em; text-transform:uppercase; }
+  .rprop .rfield { display:flex; gap:8px; align-items:baseline; margin-top:3px; font-size:13px; }
+  .rprop .rkey { color:#8a8a93; min-width:5.2em; }
+  .rprop .rval { color:#e8e8ea; }
+  .rprop .rval:empty::after { content:"\2014"; color:#4a4a55; }
   #aiprompt { width:100%; min-height:104px; padding:11px 12px; margin:8px 0;
               background:#101013; border:1px solid #26262e; border-radius:8px;
               color:#e8e8ea; font:13.5px/1.5 ui-monospace,Consolas,monospace;
@@ -518,6 +525,16 @@
     <label class="chk"><input type="checkbox" id="aiTag"> Set what is playing &mdash; artist and title</label>
     <label class="chk"><input type="checkbox" id="aiRecord"> Start and stop recordings</label>
     <label class="chk"><input type="checkbox" id="aiMusic"> Choose the music &mdash; queue and skip</label>
+    <!-- Separate from the four above, because it is not a permission to ACT.
+         Reading costs whoever reads, so it is the host who decides whether the
+         watcher hands anything over at all. Off and the detector still runs and
+         still marks the recording; it simply offers nothing to anyone. -->
+    <label class="chk"><input type="checkbox" id="aiRead"> Let it read the tab when something changes</label>
+    <div class="status" id="readnote" hidden></div>
+    <!-- Every change, newest first. A proposal is a proposal: nothing here has
+         been applied to anything, and the fields are the whole vocabulary -
+         an answer that does not fit one of them is not usable by the station. -->
+    <div id="readlist"></div>
     <div class="status" id="aiautonote">Anything left off it may still prepare and
       leave for you rather than do. Setting what is playing is the one the room sees:
       a wrong title is on the public page until somebody fixes it.</div>
@@ -4663,6 +4680,14 @@
   $('aiprompt').addEventListener('input', aiSoon);
   // A switch saves at once. It is one bit and somebody just decided it.
   for (const [el] of aiSwitches) $(el).addEventListener('change', aiPush);
+  // Not part of aiSwitches: those four are permissions written to the
+  // noticeboard for a reader to honour. This one is local - it decides whether
+  // a frame is handed over at all, and nothing downstream needs to know.
+  $('aiRead').addEventListener('change', () => {
+    readSay($('aiRead').checked
+      ? 'It will be handed a frame each time the tab changes.'
+      : 'Nothing will be handed over. The detector still marks the recording.');
+  });
   aiLoad();
 
   // ===== watching the still parts of the tab ===============================
@@ -4882,10 +4907,21 @@
     // anything can be re-cut from it afterwards. So mark liberally here, and
     // let whatever acts on them be the conservative one.
     if (boundary || stillFired) {
-      shotMark(boundary && stillFired ? 'strong' : 'weak',
-               boundary && stillFired ? 'label changed and the video stopped'
-               : boundary ? 'the video stopped' : 'a still part changed',
+      const why = boundary && stillFired ? 'label changed and the video stopped'
+                : boundary ? 'the video stopped' : 'a still part changed';
+      shotMark(boundary && stillFired ? 'strong' : 'weak', why,
                { still: stillFired, busy: busyCells });
+      // The bounding box of the moving part, in cells, so the reader can leave
+      // it alone. Empty when nothing on the tab moves like video.
+      let x0 = SHOT_COLS, y0 = SHOT_ROWS, x1 = -1, y1 = -1;
+      for (let i = 0; i < SHOT_CELLS; i++) {
+        if (shotLong[i] <= busyLine) continue;
+        const cx2 = i % SHOT_COLS, cy2 = (i / SHOT_COLS) | 0;
+        if (cx2 < x0) x0 = cx2; if (cx2 > x1) x1 = cx2;
+        if (cy2 < y0) y0 = cy2; if (cy2 > y1) y1 = cy2;
+      }
+      shotOffer();   // takes the picture that is about to be handed over
+      readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null);
     }
 
     if (moved) { shotMoving = true; shotQuiet = 0; return; }
@@ -4918,6 +4954,94 @@
     $('airwatchmark').hidden = false;
     $('airwatchmark').textContent = new Date().toLocaleTimeString() +
       ' \u2014 ' + why + ' (' + strength + ')';
+  }
+
+  // ===== handing a frame to whatever is reading ============================
+  //
+  // The station does not know who reads. The console drops a JPEG and a little
+  // context into /host/read/ and waits for a reply to appear beside it. eGPT
+  // does that today; a local model on the Pi does it tomorrow and nothing here
+  // changes. That is why this is files and not a call: swapping the reader is
+  // a different process opening the same folder, not a migration.
+  //
+  // THE ANSWER MUST COME FROM A SET. A reader that invents its own field names
+  // has produced prose, and the station has no slot to put prose in. These five
+  // are the whole vocabulary; anything seen that fits none of them goes in
+  // `other`, which is where a reader should put what it is unsure about rather
+  // than guessing at a better-sounding slot.
+  const READ_FIELDS = ["show", "artist", "title", "host", "other"];
+  const READ_POLL = 3000;     // ms between looks for a reply
+  const READ_GIVEUP = 90000;  // ms before a frame nobody answered is forgotten
+  let readSeq = 0;
+
+  async function readOffer(why, box) {
+    if (!$("aiRead").checked || !shotData) return;
+    const id = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14) +
+               "-" + (++readSeq);
+    // The context tells the reader what fired and WHERE THE PICTURE IS, so it
+    // can ignore the moving part and read the chrome. It is the one thing the
+    // console knows that a model looking at a flat frame does not.
+    const ctx = {
+      id, why,
+      at: new Date().toISOString(),
+      video_box: box ? box.join(",") : "",
+      show_now: $("showname").value.trim(),
+      artist_now: $("showartist").value.trim(),
+      title_now: $("showtitle").value.trim(),
+      answer_with: READ_FIELDS.join(",") + ",confidence"
+    };
+    try {
+      const jpg = await (await fetch(shotData)).blob();
+      await fetch("/host/read/" + id + ".jpg", { method: "PUT", credentials: "same-origin", body: jpg });
+      await fetch("/host/read/" + id + ".yaml", { method: "PUT", credentials: "same-origin",
+        headers: { "Content-Type": "text/yaml" }, body: aiToYaml(ctx) });
+    } catch (e) { readSay("could not hand that frame over: " + e.message); return; }
+    readSay("handed over " + id + " \u2014 waiting for a reading");
+    readWait(id, why, Date.now());
+  }
+
+  async function readWait(id, why, since) {
+    if (Date.now() - since > READ_GIVEUP) { readSay("nobody read " + id); return; }
+    try {
+      const r = await fetch("/host/read/" + id + ".reply.yaml",
+        { credentials: "same-origin", cache: "no-store" });
+      if (r.ok) { readDraw(id, why, aiFromYaml(await r.text())); readSay(""); return; }
+    } catch {}
+    setTimeout(() => readWait(id, why, since), READ_POLL);
+  }
+
+  function readSay(t) {
+    $("readnote").hidden = !t;
+    $("readnote").textContent = t || "";
+  }
+
+  // Shown, never applied. Phase two is about finding out whether the readings
+  // are any good, and a proposal that quietly rewrote the show would destroy
+  // the evidence it exists to produce.
+  function readDraw(id, why, p) {
+    const box = document.createElement("div");
+    box.className = "rprop";
+    const head = document.createElement("div");
+    head.className = "rwhen";
+    head.textContent = new Date().toLocaleTimeString() + " \u00b7 " + why +
+      (p.confidence ? " \u00b7 " + p.confidence : "");
+    box.appendChild(head);
+    for (const f of READ_FIELDS) {
+      if (!p[f]) continue;
+      const row = document.createElement("div");
+      row.className = "rfield";
+      const k = document.createElement("span");
+      k.className = "rkey"; k.textContent = f;
+      const v = document.createElement("span");
+      // textContent, not innerHTML: this string came from a model that was
+      // looking at somebody else's web page.
+      v.className = "rval"; v.textContent = p[f];
+      row.appendChild(k); row.appendChild(v);
+      box.appendChild(row);
+    }
+    const list = $("readlist");
+    list.insertBefore(box, list.firstChild);
+    while (list.children.length > 20) list.removeChild(list.lastChild);
   }
 
   // What it is doing, in the panel, because a detector nobody can see the working

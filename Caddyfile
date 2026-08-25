@@ -758,6 +758,50 @@ import relays.caddy
 		}
 	}
 
+	# WHAT THE WATCHER SAW, for whatever is reading the tab.
+	#
+	# File-mediated on purpose, and that is the whole design decision: the
+	# station does not know or care WHO reads. The console drops a crop and a
+	# little context; something picks it up and writes a reply beside it. eGPT
+	# does that today over its speaker credential; a local model on the Pi does
+	# it tomorrow with nothing here changing. Swapping the reader is not a
+	# migration, it is a different process opening the same folder.
+	#
+	# 4MB like the post uploads, because it carries a JPEG. The .yaml beside it
+	# is tiny, but max_size TRUNCATES rather than refuses - the trap this
+	# Caddyfile has hit twice - so one generous cap for both beats a tight cap
+	# that silently halves a picture.
+	#
+	# GET is allowed as well as PUT: the console has to poll for the reply, and
+	# the reader has to fetch the crop it was handed.
+	handle /host/read/* {
+		import speakers
+		@read {
+			method GET PUT DELETE
+			path *.jpg *.yaml
+		}
+		handle @read {
+			rate_limit {
+				zone read_writes {
+					key {remote_host}
+					events 240
+					window 1m
+				}
+			}
+			request_body {
+				max_size 4MB
+			}
+			webdav {
+				root {env.RADIO_HOME}/read
+				prefix /host/read
+			}
+		}
+		# anything else refused rather than written under a name nothing serves
+		handle {
+			respond 403
+		}
+	}
+
 	handle /host/desk/* {
 		import speakers
 		@desk {
