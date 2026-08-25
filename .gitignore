@@ -47,6 +47,7 @@ config/desk.json
 config/narrator.json
 config/history.json
 config/limits.json
+config/ai.yaml
 
 # bcrypt hashes for each speaker - safe-ish, but it is a user list
 speakers.caddy
