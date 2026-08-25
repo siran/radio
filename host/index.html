@@ -4967,11 +4967,19 @@
       title_now: $("showtitle").value.trim(),
       answer_with: READ_FIELDS.join(",") + ",confidence"
     };
+    // CHECKED, because fetch only rejects on a NETWORK failure: a 404 from the
+    // server resolves perfectly happily. The first version announced "handed
+    // over" for frames the server had refused, and that is precisely how a
+    // folder the station could not write into stayed invisible for a whole
+    // broadcast - the console said it was working the entire time.
     try {
       const jpg = await (await fetch(shotData)).blob();
-      await fetch("/host/read/" + id + ".jpg", { method: "PUT", credentials: "same-origin", body: jpg });
-      await fetch("/host/read/" + id + ".yaml", { method: "PUT", credentials: "same-origin",
+      const a = await fetch("/host/read/" + id + ".jpg",
+        { method: "PUT", credentials: "same-origin", body: jpg });
+      if (!a.ok) throw new Error("the picture was refused, HTTP " + a.status);
+      const b = await fetch("/host/read/" + id + ".yaml", { method: "PUT", credentials: "same-origin",
         headers: { "Content-Type": "text/yaml" }, body: aiToYaml(ctx) });
+      if (!b.ok) throw new Error("the context was refused, HTTP " + b.status);
     } catch (e) { readSay("could not hand that frame over: " + e.message); return; }
     readSay("handed over " + id + " \u2014 waiting for a reading");
     readWait(id, why, Date.now());
