@@ -745,6 +745,34 @@ import relays.caddy
 	# the reader has to fetch the crop it was handed.
 	handle /host/read/* {
 		import speakers
+
+		# WHAT IS WAITING TO BE READ.
+		#
+		# The console never needs this - it polls for ids it created itself - but
+		# nothing else can DISCOVER a frame without it, and the whole point of
+		# handing work over through files is that the station does not know or
+		# care who reads. Without a listing the contract quietly only works for a
+		# reader with filesystem access to this machine, which is the one thing it
+		# was designed not to require.
+		#
+		# DELIBERATELY UNFILTERED. It lists the folder, not "the pending ones":
+		# a frame is pending exactly when <id>.yaml has no <id>.reply.yaml beside
+		# it, and that is a join the reader can do for itself. Teaching the
+		# station which frames are outstanding would make it care who has
+		# answered, and it does not.
+		#
+		# The rewrite is not decoration: root is the read folder, so without it
+		# file_server would look for <root>/host/read/ and find nothing.
+		@list {
+			method GET
+			path /host/read/
+		}
+		handle @list {
+			root * {env.RADIO_HOME}/read
+			rewrite * /
+			file_server browse
+		}
+
 		@read {
 			method GET PUT DELETE
 			path *.jpg *.yaml
