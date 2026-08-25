@@ -428,34 +428,6 @@
          unless somebody said so on this visit. A default that silences a radio
          has to be asked for every time, not remembered from a session where it
          made sense. -->
-    <div class="status" id="airmutenote">Off unless you tick it. Pausing stops the autoDJ
-      pulling the playlist at all, so it resumes on the note it stopped on rather than however far into
-      the library half an hour of talking would have carried it. Untick it to go out over the station
-      instead of in place of it. This is not the dip &mdash; the music sinking under your voice is the
-      desk&rsquo;s own <span class="when">duck</span> knob and is unaffected either way.</div>
-    <!-- Named here because the operator had to ask where it was, and the answer
-         was a fold away under a different word. Named, not duplicated: a second
-         control writing the same interactive variable is a second thing to
-         disagree with the first, and this console already has one pair of
-         gain-shaped controls that were mistaken for each other. -->
-    <div class="status">How loud you are <span class="when">for listeners</span> is
-      <span class="when">Mic volume</span> on the mixing desk below &mdash; it is on the air the moment it
-      moves, so it can be set while you talk. The <span class="when">mic</span> slider in your monitor is
-      not it: that one is your headphones and reaches nobody. The seven bands on the desk shape your
-      voice in this browser before it is sent, so they are yours and not the station&rsquo;s.</div>
-    <div class="status">This sends what you pick above to the station, mixed over the music, which dips
-      for you. It is <span class="when">not</span> the monitor below &mdash; Hear my mic there only reaches
-      your own headphones. While you are on air the top of this page turns red and the tab says so.</div>
-    <div class="status" id="airtalknote" hidden><span class="when">Talk over it</span> opens your microphone
-      and mixes it into what the tab is playing, and it works while you are on air &mdash; press it when you
-      have something to say and press it again when you are done. The first press may ask for the microphone.
-      Once granted it stays open, silent, until you leave the air.</div>
-    <div class="status" id="airbucketnote" hidden>Picking a tab: your browser asks which one, and you must
-      tick <span class="when">Share tab audio</span> in that dialog &mdash; without it you share a picture and
-      nothing else, and the station gets silence. Chrome and Edge only; Firefox and Safari accept the request
-      and drop the sound. Nothing is watched or recorded: the picture is thrown away the instant it arrives
-      and only the sound leaves this page.
-      <br>Use headphones. On speakers the tab feeds your microphone and the microphone feeds the tab.</div>
     <div class="status" id="airstat">off air</div>
     <div class="status" id="airmsg"></div>
     <div class="err" id="airerr"></div>
@@ -4769,6 +4741,7 @@
       shotLast = null, shotBusy = null, shotHits = null, shotRun = null,
       shotSeen = 0, shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
   let shotStallRun = 0, shotMarkAt = 0, shotBusyCells = 0, shotWasStalled = false;
+  let shotLooks = 0, shotFirstAt = 0;   // how often it is ACTUALLY managing to look
   let shotLong = null;        // the slow measure the partition is drawn from
 
   function shotSmall() {
@@ -4800,6 +4773,10 @@
     if (!shotVid || shotVid.readyState < 2) return;
     let now;
     try { now = shotSmall(); } catch { return; }
+    shotLooks++;
+    if (!shotFirstAt) shotFirstAt = Date.now();
+    // Rides here rather than on a timer of its own; see readPoll.
+    if (Date.now() - readPolledAt >= READ_POLL) { readPolledAt = Date.now(); readPoll(); }
     if (!shotLast) {
       shotLast = now;
       shotBusy = new Float32Array(SHOT_CELLS);
@@ -5000,14 +4977,34 @@
     readWait(id, why, Date.now());
   }
 
-  async function readWait(id, why, since) {
-    if (Date.now() - since > READ_GIVEUP) { readSay("nobody read " + id); return; }
-    try {
-      const r = await fetch("/host/read/" + id + ".reply.yaml",
-        { credentials: "same-origin", cache: "no-store" });
-      if (r.ok) { readDraw(id, why, aiFromYaml(await r.text())); readSay(""); return; }
-    } catch {}
-    setTimeout(() => readWait(id, why, since), READ_POLL);
+  // WAITING IS DRIVEN BY THE WATCHER'S TICK, NOT BY setTimeout, for the reason
+  // measured above: a hidden tab gets one timer call a minute, and this console
+  // is hidden the whole time a host is looking at the tab they are sharing. On
+  // setTimeout this loop would poll at 0s and 60s and then give up at 90 - so a
+  // reader that answered in ten seconds would usually be missed, and phase two
+  // would look like nobody was reading. The watcher's tick comes from a worker
+  // and keeps its cadence, so the poll rides on that instead.
+  const readPending = new Map();   // id -> { why, since }
+  let readPolledAt = 0;
+
+  function readWait(id, why, since) { readPending.set(id, { why, since }); }
+
+  async function readPoll() {
+    if (!readPending.size) return;
+    for (const [id, p] of [...readPending]) {
+      if (Date.now() - p.since > READ_GIVEUP) {
+        readPending.delete(id); readSay("nobody read " + id); continue;
+      }
+      try {
+        const r = await fetch("/host/read/" + id + ".reply.yaml",
+          { credentials: "same-origin", cache: "no-store" });
+        if (r.ok) {
+          readPending.delete(id);
+          readDraw(id, p.why, aiFromYaml(await r.text()));
+          readSay("");
+        }
+      } catch {}
+    }
   }
 
   function readSay(t) {
@@ -5060,7 +5057,17 @@
     if (busyCells > 0) bits.push(busyCells + ' cell' + (busyCells === 1 ? '' : 's') + ' of moving picture');
     else bits.push('nothing on it moves like video');
     if (stallRun > 0) bits.push('the picture has gone quiet');
+    // THE RATE IT IS ACTUALLY MANAGING, because the one failure this had was
+    // invisible from here: a throttled tab and a quiet tab look identical, and
+    // both of them say nothing at all. Now it says how often it is looking, so
+    // an asleep detector can be told apart from an uneventful one.
+    const gap = shotLooks > 1 ? (Date.now() - shotFirstAt) / (shotLooks - 1) / 1000 : 0;
+    if (gap) bits.push('a look every ' + gap.toFixed(1) + 's');
     $('airwatchnote').textContent += ' ' + bits.join('; ') + '.';
+    if (shotLooks > 3 && gap > SHOT_EVERY / 1000 * 2.5) {
+      $('airwatchnote').textContent +=
+        ' The browser is throttling this tab, so it is looking far less often than it should.';
+    }
   }
 
   // JPEG rather than PNG, and not for looks: a screenshot as PNG is most of a
@@ -5084,8 +5091,45 @@
     $('postwrap').open = true;
   }
 
+  // WHY A WORKER TIMER AND NOT setInterval, and this was measured rather than
+  // assumed. Chrome 151, this machine, tab hidden, both timers asked for the
+  // same 1.2s: over four minutes the page's setInterval fired 4 times and a
+  // worker's fired 200. A hidden tab's timers are cut to one call a minute.
+  //
+  // AND THIS CONSOLE IS HIDDEN EXACTLY WHEN THE WATCHER MATTERS. The host is
+  // looking at the tab they are sharing, so the console is behind it - the one
+  // arrangement in which the whole feature is supposed to earn its keep.
+  //
+  // At a look a minute none of this can work: the warm-up alone takes eight
+  // minutes, every frame is compared against one from a minute ago so no
+  // baseline means anything, and the two consecutive quiet looks a boundary
+  // needs would span two minutes of a paused video. The detector was never
+  // wrong. It was asleep, and it had no way to say so.
+  //
+  // The worker only says WHEN. The looking stays on this thread, because the
+  // video element and the canvas live here.
+  let shotWorker = null, shotWorkerURL = '';
+
+  function shotEvery(on) {
+    if (shotWorker) { shotWorker.terminate(); shotWorker = null; }
+    if (shotWorkerURL) { URL.revokeObjectURL(shotWorkerURL); shotWorkerURL = ''; }
+    if (shotTimer) { clearInterval(shotTimer); shotTimer = 0; }
+    if (!on) return;
+    try {
+      shotWorkerURL = URL.createObjectURL(new Blob(
+        ['setInterval(function () { postMessage(0); }, ' + SHOT_EVERY + ');'],
+        { type: 'text/javascript' }));
+      shotWorker = new Worker(shotWorkerURL);
+      shotWorker.onmessage = function () { shotTick(); };
+      return;
+    } catch {}
+    // A throttled watcher still beats no watcher, so this is a fallback and not
+    // a failure. The rate in the panel says which one is running.
+    shotTimer = setInterval(shotTick, SHOT_EVERY);
+  }
+
   function shotStart() {
-    if (shotTimer || !airTabVideo) return;
+    if (shotWorker || shotTimer || !airTabVideo) return;
     shotVid = document.createElement('video');
     shotVid.muted = true;
     shotVid.playsInline = true;
@@ -5093,15 +5137,17 @@
     shotVid.play().catch(() => {});
     shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
     shotSeen = 0; shotMoving = false; shotQuiet = 0;
-    shotTimer = setInterval(shotTick, SHOT_EVERY);
+    shotLooks = 0; shotFirstAt = 0;
+    shotEvery(true);
   }
 
   function shotStop() {
-    if (shotTimer) { clearInterval(shotTimer); shotTimer = 0; }
+    shotEvery(false);
     if (shotVid) { try { shotVid.pause(); } catch {} shotVid.srcObject = null; shotVid = null; }
     shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
     shotCanvas = null; shotSeen = 0;
     shotMoving = false; shotQuiet = 0;
+    shotLooks = 0; shotFirstAt = 0; shotStallRun = 0; shotBusyCells = 0;
     $('airwatchnote').hidden = true;
   }
 
@@ -5799,8 +5845,6 @@
 
   function airSrcLook() {
     const tab = $('airsrc').value !== 'mic';
-    $('airbucketnote').hidden = !tab;
-    $('airtalknote').hidden = !tab;
     // Shown for both sources: it is the microphone switch, and there is a
     // microphone either way. Only its wording changes.
     $('airtalk').hidden = false;
