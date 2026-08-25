@@ -4681,7 +4681,10 @@
   // canvas, so the pixels can be read at all; a grab at this size costs about
   // 4ms; and two grabs of an unchanged tab differ by exactly 0.00, so 'nothing
   // moved' is a real zero and not a small number.
-  const SHOT_EVERY = 1200;    // ms between looks. A page change is not urgent.
+  // HOW FAR APART TWO ANALYSED FRAMES MUST BE, in the STREAM'S OWN CLOCK. Not
+  // an interval: nothing here is scheduled. Frames arrive when the tab produces
+  // them, and this only decides which of them are worth the arithmetic.
+  const SHOT_GAP = 1200000;   // microseconds of media time between looks
   const SHOT_W = 256, SHOT_H = 144;
   const SHOT_COLS = 16, SHOT_ROWS = 9;          // 144 cells of 16 by 16
   const SHOT_CELLS = SHOT_COLS * SHOT_ROWS;
@@ -4737,20 +4740,22 @@
   const SHOT_STALLRUN = 2;    // consecutive quiet looks before it is called a boundary
   const SHOT_MARKCOOL = 8000; // ms between marks, so one cut leaves one mark
 
-  let airTabVideo = null, shotVid = null, shotTimer = 0, shotCanvas = null,
+  let airTabVideo = null, shotTrack = null, shotReader = null, shotCanvas = null,
       shotLast = null, shotBusy = null, shotHits = null, shotRun = null,
       shotSeen = 0, shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
   let shotStallRun = 0, shotMarkAt = 0, shotBusyCells = 0, shotWasStalled = false;
   let shotLooks = 0, shotFirstAt = 0;   // how often it is ACTUALLY managing to look
   let shotLong = null;        // the slow measure the partition is drawn from
 
-  function shotSmall() {
+  // A VideoFrame is a CanvasImageSource, so it goes straight onto the canvas -
+  // there is no <video> in this any more and nothing has to be playing.
+  function shotSmall(frame) {
     if (!shotCanvas) {
       shotCanvas = document.createElement('canvas');
       shotCanvas.width = SHOT_W; shotCanvas.height = SHOT_H;
     }
     const cx = shotCanvas.getContext('2d', { willReadFrequently: true });
-    cx.drawImage(shotVid, 0, 0, SHOT_W, SHOT_H);
+    cx.drawImage(frame, 0, 0, SHOT_W, SHOT_H);
     return cx.getImageData(0, 0, SHOT_W, SHOT_H).data;
   }
 
@@ -4769,14 +4774,9 @@
     return n ? sum / n : 0;
   }
 
-  function shotTick() {
-    if (!shotVid || shotVid.readyState < 2) return;
+  function shotTick(frame) {
     let now;
-    try { now = shotSmall(); } catch { return; }
-    shotLooks++;
-    if (!shotFirstAt) shotFirstAt = Date.now();
-    // Rides here rather than on a timer of its own; see readPoll.
-    if (Date.now() - readPolledAt >= READ_POLL) { readPolledAt = Date.now(); readPoll(); }
+    try { now = shotSmall(frame); } catch { return; }
     if (!shotLast) {
       shotLast = now;
       shotBusy = new Float32Array(SHOT_CELLS);
@@ -4897,7 +4897,7 @@
         if (cx2 < x0) x0 = cx2; if (cx2 > x1) x1 = cx2;
         if (cy2 < y0) y0 = cy2; if (cy2 > y1) y1 = cy2;
       }
-      shotOffer();   // takes the picture that is about to be handed over
+      shotOffer(frame);   // the very frame the boundary was found in
       readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null);
     }
 
@@ -4908,7 +4908,7 @@
     if (++shotQuiet < 1) return;
     shotMoving = false; shotQuiet = 0;
     if (Date.now() - shotAt < SHOT_COOL) return;
-    shotOffer();
+    shotOffer(frame);
   }
 
   // A boundary, written beside the audio. The webcast metadata frame is the
@@ -5064,22 +5064,27 @@
     const gap = shotLooks > 1 ? (Date.now() - shotFirstAt) / (shotLooks - 1) / 1000 : 0;
     if (gap) bits.push('a look every ' + gap.toFixed(1) + 's');
     $('airwatchnote').textContent += ' ' + bits.join('; ') + '.';
-    if (shotLooks > 3 && gap > SHOT_EVERY / 1000 * 2.5) {
+    // Kept even though nothing is scheduled any more: if the SOURCE slows down -
+    // a tab that stops producing frames, a machine that cannot keep up - the
+    // looking slows with it, and that is worth seeing rather than guessing at.
+    if (shotLooks > 3 && gap > SHOT_GAP / 1000000 * 2.5) {
       $('airwatchnote').textContent +=
-        ' The browser is throttling this tab, so it is looking far less often than it should.';
+        ' The tab is sending frames more slowly than that, so it is looking less often than it would like.';
     }
   }
 
   // JPEG rather than PNG, and not for looks: a screenshot as PNG is most of a
   // megabyte, the post route truncates over 4MB and this console refuses over 3.
   // A page of text at .82 is a fraction of that and reads perfectly.
-  function shotOffer() {
-    const w = shotVid.videoWidth, h = shotVid.videoHeight;
+  function shotOffer(frame) {
+    if (!frame) return;
+    const w = frame.displayWidth || frame.codedWidth;
+    const h = frame.displayHeight || frame.codedHeight;
     if (!w || !h) return;
     const c = document.createElement('canvas');
     c.width = Math.min(SHOT_WIDE, w);
     c.height = Math.round(c.width * h / w);
-    c.getContext('2d').drawImage(shotVid, 0, 0, c.width, c.height);
+    c.getContext('2d').drawImage(frame, 0, 0, c.width, c.height);
     try { shotData = c.toDataURL('image/jpeg', 0.82); } catch { return; }
     shotAt = Date.now();
     $('shotimg').src = shotData;
@@ -5091,59 +5096,80 @@
     $('postwrap').open = true;
   }
 
-  // WHY A WORKER TIMER AND NOT setInterval, and this was measured rather than
-  // assumed. Chrome 151, this machine, tab hidden, both timers asked for the
-  // same 1.2s: over four minutes the page's setInterval fired 4 times and a
-  // worker's fired 200. A hidden tab's timers are cut to one call a minute.
+  // NOTHING HERE IS SCHEDULED, and that is the whole point. The tab is a
+  // continuous source that already announces every new frame, so asking it on a
+  // clock what it currently looks like was the wrong shape for the problem. A
+  // timer is also the one thing a browser will quietly take away: measured on
+  // this machine, a hidden tab's setInterval is cut to ONE CALL A MINUTE, and
+  // this console is hidden for the whole broadcast because the host is looking
+  // at the tab they are sharing.
   //
-  // AND THIS CONSOLE IS HIDDEN EXACTLY WHEN THE WATCHER MATTERS. The host is
-  // looking at the tab they are sharing, so the console is behind it - the one
-  // arrangement in which the whole feature is supposed to earn its keep.
+  // MediaStreamTrackProcessor turns the track into a stream of VideoFrames, so
+  // the looking is driven by the source. Measured the same way, tab hidden,
+  // against 917 frames the source produced:
   //
-  // At a look a minute none of this can work: the warm-up alone takes eight
-  // minutes, every frame is compared against one from a minute ago so no
-  // baseline means anything, and the two consecutive quiet looks a boundary
-  // needs would span two minutes of a paused video. The detector was never
-  // wrong. It was asleep, and it had no way to say so.
+  //   this, read on the main thread             917 of 917   100%
+  //   the same readable handed to a worker      917 of 917   100%
+  //   requestVideoFrameCallback on a <video>      9 of 917     1%
   //
-  // The worker only says WHEN. The looking stays on this thread, because the
-  // video element and the canvas live here.
-  let shotWorker = null, shotWorkerURL = '';
-
-  function shotEvery(on) {
-    if (shotWorker) { shotWorker.terminate(); shotWorker = null; }
-    if (shotWorkerURL) { URL.revokeObjectURL(shotWorkerURL); shotWorkerURL = ''; }
-    if (shotTimer) { clearInterval(shotTimer); shotTimer = 0; }
-    if (!on) return;
-    try {
-      shotWorkerURL = URL.createObjectURL(new Blob(
-        ['setInterval(function () { postMessage(0); }, ' + SHOT_EVERY + ');'],
-        { type: 'text/javascript' }));
-      shotWorker = new Worker(shotWorkerURL);
-      shotWorker.onmessage = function () { shotTick(); };
-      return;
-    } catch {}
-    // A throttled watcher still beats no watcher, so this is a fallback and not
-    // a failure. The rate in the panel says which one is running.
-    shotTimer = setInterval(shotTick, SHOT_EVERY);
+  // So no worker is needed, and no <video> element either. Note the third row:
+  // requestVideoFrameCallback is NOT a fallback. It is tied to rendering, and a
+  // hidden tab does not render - it stopped dead the moment the tab went behind
+  // another one, which is precisely when this has to work.
+  //
+  // PACING COMES OFF THE MEDIA CLOCK. A shared tab can arrive at sixty frames a
+  // second and none of this wants that, so every frame is taken and closed at
+  // once, and one is ANALYSED only when the frame's own timestamp has moved
+  // SHOT_GAP past the last analysed one. The stream says when we look; the
+  // stream's own clock says which looks are far enough apart to mean anything.
+  //
+  // Every frame is closed on every path. A VideoFrame holds a real buffer and
+  // leaking them stalls the producer within a second or two.
+  async function shotPump(reader) {
+    let lastTs = -Infinity;
+    for (;;) {
+      let r;
+      try { r = await reader.read(); } catch { return; }
+      if (r.done) return;
+      const frame = r.value;
+      try {
+        if (shotReader !== reader) return;          // a later share took over
+        if (frame.timestamp - lastTs >= SHOT_GAP) {
+          lastTs = frame.timestamp;
+          shotLooks++;
+          if (!shotFirstAt) shotFirstAt = Date.now();
+          // Rides here rather than on a timer of its own; see readPoll.
+          if (Date.now() - readPolledAt >= READ_POLL) { readPolledAt = Date.now(); readPoll(); }
+          shotTick(frame);
+        }
+      } finally { frame.close(); }
+    }
   }
 
   function shotStart() {
-    if (shotWorker || shotTimer || !airTabVideo) return;
-    shotVid = document.createElement('video');
-    shotVid.muted = true;
-    shotVid.playsInline = true;
-    try { shotVid.srcObject = new MediaStream([airTabVideo]); } catch { return; }
-    shotVid.play().catch(() => {});
+    if (shotReader || !airTabVideo) return;
+    if (typeof MediaStreamTrackProcessor === 'undefined') {
+      $('airwatchnote').hidden = false;
+      $('airwatchnote').textContent =
+        'This browser will not hand the tab\u2019s frames to the page, so the ' +
+        'watcher cannot run here. Chrome and Edge will.';
+      return;
+    }
+    // A CLONE, so stopping the watcher never touches the track the share owns.
+    try {
+      shotTrack = airTabVideo.clone();
+      shotReader = new MediaStreamTrackProcessor({ track: shotTrack }).readable.getReader();
+    } catch { shotTrack = null; shotReader = null; return; }
     shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
     shotSeen = 0; shotMoving = false; shotQuiet = 0;
     shotLooks = 0; shotFirstAt = 0;
-    shotEvery(true);
+    shotPump(shotReader);
   }
 
   function shotStop() {
-    shotEvery(false);
-    if (shotVid) { try { shotVid.pause(); } catch {} shotVid.srcObject = null; shotVid = null; }
+    if (shotReader) { const r = shotReader; shotReader = null;
+                      try { r.cancel(); } catch {} }
+    if (shotTrack) { try { shotTrack.stop(); } catch {} shotTrack = null; }
     shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
     shotCanvas = null; shotSeen = 0;
     shotMoving = false; shotQuiet = 0;
