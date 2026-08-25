@@ -4749,11 +4749,24 @@
   const SHOT_STALLRUN = 2;    // consecutive quiet looks before it is called a boundary
   const SHOT_MARKCOOL = 8000; // ms between marks, so one cut leaves one mark
 
+  // THE THIRD SIGNAL, and it is the middle of the other two. Neither the
+  // picture stopping nor a label changing: the picture CHANGING A LOT while
+  // the labels sit still. New artwork, a new scene, something worth remarking
+  // on rather than retagging - and it is the same two numbers the stall is
+  // measured from, read the other way up.
+  //
+  // Allowed often on purpose: noticing costs almost nothing and it keeps the
+  // feed alive. The limit is not there to be thrifty, it is there so a busy
+  // video cannot flood the room - one every thirty seconds, no more.
+  const SHOT_CUT = 2.5;        // times its usual movement that counts as a cut
+  const SHOT_ARTCOOL = 30000;  // ms between pictures offered for remarking
+
   let airTabVideo = null, shotTrack = null, shotReader = null, shotCanvas = null,
       shotLast = null, shotBusy = null, shotHits = null, shotRun = null,
       shotSeen = 0, shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
   let shotStallRun = 0, shotMarkAt = 0, shotBusyCells = 0, shotWasStalled = false;
   let shotLooks = 0, shotFirstAt = 0;   // how often it is ACTUALLY managing to look
+  let shotArtAt = 0;                    // when a picture was last offered to remark on
   let shotLong = null;        // the slow measure the partition is drawn from
   let shotWas = null;         // and what it was BEFORE this look - see shotTick
 
@@ -4954,9 +4967,26 @@
       // 240 writes a minute is the rate limit, two PUTs a handover, so it had
       // reached a hundred and twenty boundaries a minute.
       if (Date.now() - shotAt >= SHOT_COOL) {
-        shotOffer(frame);   // the very frame the boundary was found in
+        shotOffer(frame, why === 'the video stopped' ? 'The video stopped'
+                       : 'What the tab is showing changed');
         readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null);
       }
+    }
+
+    // --- c) the picture changed a lot, and the labels did not ---------------
+    // Deliberately AFTER the two above and suppressed by either of them: a
+    // track boundary is a better reason to offer a picture than a scene is,
+    // and offering both at once would put two cards up for one event.
+    const cut = busyCells > 0 && busyNow > busyUsual * SHOT_CUT;
+    if (cut && !boundary && !labelChanged && Date.now() - shotArtAt >= SHOT_ARTCOOL) {
+      shotArtAt = Date.now();
+      shotOffer(frame, 'The picture changed');
+      // A DIFFERENT ERRAND, and the reader is told so. This is not "what is
+      // playing" - the labels already answer that and they have not moved. It
+      // is "here is something to say a word about", which wants a different
+      // answer and belongs in a post rather than a tag.
+      readOffer('the picture changed, the labels did not',
+                x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null);
     }
 
     if (moved) { shotMoving = true; shotQuiet = 0; return; }
@@ -4966,7 +4996,7 @@
     if (++shotQuiet < 1) return;
     shotMoving = false; shotQuiet = 0;
     if (Date.now() - shotAt < SHOT_COOL) return;
-    shotOffer(frame);
+    shotOffer(frame, 'The tab settled after moving');
   }
 
   // A boundary, written beside the audio. The webcast metadata frame is the
@@ -5142,7 +5172,7 @@
   // JPEG rather than PNG, and not for looks: a screenshot as PNG is most of a
   // megabyte, the post route truncates over 4MB and this console refuses over 3.
   // A page of text at .82 is a fraction of that and reads perfectly.
-  function shotOffer(frame) {
+  function shotOffer(frame, why) {
     if (!frame) return;
     const w = frame.displayWidth || frame.codedWidth;
     const h = frame.displayHeight || frame.codedHeight;
@@ -5154,8 +5184,15 @@
     try { shotData = c.toDataURL('image/jpeg', 0.82); } catch { return; }
     shotAt = Date.now();
     $('shotimg').src = shotData;
-    $('shotwhen').textContent = 'The still parts of the tab changed at ' +
-      new Date().toLocaleTimeString() + '.';
+    // WITH THE LABELS ON IT. A picture offered on its own is a picture nobody
+    // can place later - and the whole point of the cut signal is that the
+    // labels have NOT changed, so they are the context that makes it mean
+    // something. Whatever is playing right now goes on the card.
+    const nowShow = [$('showartist').value.trim(), $('showtitle').value.trim()]
+      .filter(Boolean).join(' \u2014 ');
+    $('shotwhen').textContent = (why || 'The still parts of the tab changed') +
+      ' at ' + new Date().toLocaleTimeString() + '.' +
+      (nowShow ? ' ' + nowShow + '.' : '');
     $('shotwrap').hidden = false;
     // The one thing here allowed to open something by itself: a picture offered
     // inside a shut panel is a picture nobody was offered.
@@ -5240,6 +5277,7 @@
     shotCanvas = null; shotSeen = 0;
     shotMoving = false; shotQuiet = 0;
     shotLooks = 0; shotFirstAt = 0; shotStallRun = 0; shotBusyCells = 0;
+    shotArtAt = 0;
     $('airwatchnote').hidden = true;
   }
 
