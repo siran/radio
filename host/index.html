@@ -4995,9 +4995,7 @@
         shotOffer(frame, why === 'the video stopped' ? 'The video stopped'
                        : 'What the tab is showing changed');
         readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null, {
-          // full width, a row of margin either side of whatever fired
-          label: ly1 >= 0 ? shotCut(frame, 0, Math.max(0, ly0 - 1),
-                                    SHOT_COLS - 1, Math.min(SHOT_ROWS - 1, ly1 + 1)) : '',
+          label: shotLabelCut(frame, y1, ly0, ly1),
           shot: x1 >= 0 ? shotCut(frame, x0, y0, x1, y1) : ''
         });
       }
@@ -5244,6 +5242,33 @@
       c.getContext('2d').drawImage(frame, sx, sy, sw, sh, 0, 0, c.width, c.height);
       return c.toDataURL('image/jpeg', 0.9);
     } catch { return ''; }
+  }
+
+  // WHERE A TITLE ACTUALLY IS, rather than wherever something twitched.
+  //
+  // The first version cut the rows the still cells fired in, which sounded
+  // right and is not. Measured on a real tab: it returned the YouTube top bar
+  // - search box, Create button, and a notification badge that had gone from 1
+  // to 8. All of those are genuine changes outside the picture, and none of
+  // them is the title. A clock, a like count and a hover state do the same.
+  //
+  // Titles live UNDER the player. That is true of YouTube, and of every other
+  // video page worth sharing, so the strip is taken from the bottom edge of the
+  // picture down - deterministic, and it cannot be lured away by a badge. The
+  // box's own last row is included because the title often sits tight against
+  // the player with no gap.
+  //
+  // Falls back to the fired rows when there is no picture to be under, which is
+  // the only case where "wherever it moved" is the best guess available.
+  function shotLabelCut(frame, boxBottom, ly0, ly1) {
+    if (boxBottom >= 0 && boxBottom < SHOT_ROWS - 1) {
+      return shotCut(frame, 0, boxBottom, SHOT_COLS - 1, SHOT_ROWS - 1);
+    }
+    if (ly1 >= 0) {
+      return shotCut(frame, 0, Math.max(0, ly0 - 1),
+                     SHOT_COLS - 1, Math.min(SHOT_ROWS - 1, ly1 + 1));
+    }
+    return '';
   }
 
   function shotOffer(frame, why) {
