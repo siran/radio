@@ -1003,6 +1003,17 @@ import relays.caddy
 		# file_server here would also run for the request above, so it is wrapped:
 		# sibling handle blocks are mutually exclusive, a loose directive is not.
 		handle {
+			# ALWAYS ASK. This block had no cache header at all, so a browser was
+			# free to keep serving a console it already had without checking - and
+			# it did: a host went on the air, the watcher handed over frames with no
+			# crops in them, and the cause was a tab still running a build from
+			# before the crops existed. The deploy was fine; the browser never asked.
+			#
+			# no-cache is not no-store: the copy is kept and REVALIDATED, so the
+			# usual answer is a 304 and nothing is re-sent. Cheap, and it removes a
+			# whole class of "but I deployed it" from every future session. The chat
+			# and the listener page carry the same header for the same reason.
+			header Cache-Control "no-cache, must-revalidate"
 			file_server
 		}
 	}
