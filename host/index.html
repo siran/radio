@@ -4714,6 +4714,14 @@
   const SHOT_RUN = 3;         // consecutive fires that mean a new level, not an event
   const SHOT_WARM = 8;        // looks spent learning before any of this is trusted
   const SHOT_COOL = 20000;    // ms before another picture may be offered
+  // A LABEL CHANGE DOES NOT WAIT ITS TURN. Measured on a real show: a track
+  // change on YouTube arrives as TWO events twenty-one seconds apart - the old
+  // video stops, and only then does the new title appear - and the stop is
+  // the one that gets there first and takes the cooldown with it. The title is
+  // the half worth having: it is what a tag is made of, and a title changing
+  // IS the track changing, where the picture stopping is only a hint that one
+  // might be about to. So it gets its own, much shorter wait.
+  const SHOT_LABELCOOL = 5000; // ms before another LABEL change may be offered
   const SHOT_WIDE = 960;      // px across for the picture actually kept
 
   // WHICH CELLS ARE THE VIDEO AND WHICH ARE THE CHROME, and the answer is
@@ -4962,8 +4970,19 @@
     if (boundary || labelChanged) {
       const why = boundary && labelChanged ? 'label changed and the video stopped'
                 : boundary ? 'the video stopped' : 'a still part changed';
-      shotMark(boundary && labelChanged ? 'strong' : 'weak', why,
+      // A label changing is strong on its own. It was only strong in company
+      // before, which had it agreeing with the weaker signal to be believed -
+      // the wrong way round, since the title is the thing that actually says a
+      // track changed.
+      shotMark(labelChanged ? 'strong' : 'weak', why,
                { still: stillFired, busy: busyCells });
+      // A LABEL CHANGE OUTRANKS A PICTURE STOPPING, and this is the whole of
+      // the priority: it is not a different code path, it is a shorter wait.
+      // The pair that made the case, twenty-one seconds apart on a real show:
+      // Miguel Bose - Morenamia stops, then The Verve - Bitter Sweet Symphony
+      // appears. Two events, one track change, and only the second one says
+      // what is now playing.
+      //
       // MARKING STAYS LIBERAL; OFFERING DOES NOT. A mark costs nothing and can
       // be ignored later, but a picture is a prompt in the host's face and a
       // handover is a file on the station and a model's attention. The cooldown
@@ -4972,7 +4991,7 @@
       // fresh picture every nine seconds and refused with 429 by the station -
       // 240 writes a minute is the rate limit, two PUTs a handover, so it had
       // reached a hundred and twenty boundaries a minute.
-      if (Date.now() - shotAt >= SHOT_COOL) {
+      if (Date.now() - shotAt >= (labelChanged ? SHOT_LABELCOOL : SHOT_COOL)) {
         shotOffer(frame, why === 'the video stopped' ? 'The video stopped'
                        : 'What the tab is showing changed');
         readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null, {
