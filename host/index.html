@@ -528,11 +528,8 @@
   </details>
   <audio id="mon" preload="none"></audio>
   <details class="panel" id="queuewrap">
-    <summary>The queue <span class="when">&mdash; what is going to play, in order, once the track on the air finishes</span></summary>
-    <div class="status">The <span class="when">queue</span> is what actually plays next. It lives inside
-      liquidsoap and not in a file, so it does not survive a restart, and a track leaves it the moment
-      it starts playing. A <span class="when">playlist</span>, in the panel below, is a list you keep and
-      plays nothing until you send it here.</div>
+    <summary>The queue <span class="when">&mdash; what plays next, in order, once the track on the air finishes. A track leaves it as it starts, and a restart empties it.</span></summary>
+
 
     <label>In order, the top one next.
       <span class="when">Remove</span> drops one so it never plays, <span class="when">Up</span> and
@@ -559,9 +556,6 @@
        feeds, so the box and both of its destinations are on one screen. -->
   <details class="panel" id="findwrap" open>
     <summary>Find a track <span class="when">&mdash; search the library, then put what you find in the queue or in a playlist</span></summary>
-    <div class="status">Searching by itself changes nothing and reaches nobody. A result goes where the
-      <span class="when">Add to</span> box says: the <span class="when">queue</span> plays it, a
-      <span class="when">playlist</span> only keeps it.</div>
     <div id="qfind">
       <label for="qsearch"><span class="band">Find a track</span> &mdash; searches title, artist and filename across the whole library. A result can go on the air now, play next, or be added wherever the box above says &mdash; the queue, or one of your playlists.</label>
       <div class="ctl">
@@ -579,11 +573,8 @@
   <!-- What is left of the panel the queue moved out of: the lists this
        speaker keeps, in a file of their own that outlives a restart. -->
   <details class="panel" id="plwrap">
-    <summary>Playlists <span class="when">&mdash; lists you keep, saved on the server under a name</span></summary>
-    <div class="status" id="plnote">A <span class="when">playlist</span> is a list you keep, saved on the server
-      in your own folder. It does not play. The <span class="when">queue</span>, in its own panel above, is what
-      is going to play, in that order, once what is on the air now finishes. Sending a playlist to the queue
-      copies the tracks across, so changing the playlist afterwards does not change what will play.</div>
+    <summary>Playlists <span class="when">&mdash; lists you keep, saved under a name. Sending one to the queue copies its tracks across; the playlist itself plays nothing.</span></summary>
+
 
     <label for="pllist"><span class="band">Your playlists</span> &mdash; pick one to see and change what is in it; picking one plays nothing</label>
     <select id="pllist" aria-label="Saved playlists"></select>
@@ -608,7 +599,7 @@
       <button class="tbtn" id="plul">Upload</button>
       <input id="plulfile" type="file" accept="application/json,.json" hidden>
     </div>
-    <div class="status"><span class="when">Downloading takes the playlist selected above. Uploading writes the tracks in the file into the playlist selected above, replacing what was in it &mdash; the name inside the file is ignored, no other playlist changes, and nothing reaches the air until you press Send to the queue.</span></div>
+    <div class="status">Download saves the playlist above to a file. Upload replaces it with the tracks in a file.</div>
     <div class="err" id="plerr"></div>
   </details>
 
@@ -749,7 +740,7 @@
        second copy of a number anywhere. -->
   <details class="panel" id="capwrap">
     <summary>Streaming <span class="when">&mdash; everything this phone does to your voice before it is sent</span></summary>
-    <div class="status" id="capnote">Kept on this device, like the microphone above.
+    <div class="status" id="capnote">Kept on this device.
       <span class="when">next note</span> lands on the next thing you record;
       <span class="when">mic reopen</span> needs Stop talking, then Start talking.</div>
 
@@ -810,11 +801,9 @@
        what makes it survive a cleared cache and arrive on a second phone. -->
   <details class="panel" id="preswrap" open>
     <summary>Presets <span class="when">&mdash; both halves of your sound, saved on the server under a name</span></summary>
-    <div class="status" id="presnote">Your voice and your streaming settings together, saved in your
-      own folder on the server &mdash; not on this phone, so clearing your browser cannot lose them.
-      Loading one puts your voice on the air <span class="when">within a quarter second</span>;
-      bitrate and bitrate mode land on the <span class="when">next note</span>;
-      everything else on Streaming needs a <span class="when">mic reopen</span>.</div>
+    <div class="status" id="presnote">Loading one changes your voice within a quarter second.
+      Bitrate lands on your <span class="when">next note</span>; everything else on Streaming needs
+      Stop talking, then Start talking.</div>
 
     <label for="presname"><span class="band">Name</span> &mdash; what to call this sound; letters, digits, space, hyphen, underscore</label>
     <input id="presname" type="text" maxlength="24" placeholder="dj" autocomplete="off"
@@ -841,7 +830,7 @@
       <button class="tbtn" id="ulall">Upload</button>
       <input id="ulfile" type="file" accept="application/json,.json" hidden>
     </div>
-    <div class="status"><span class="when">Downloading takes the sound selected above. Uploading saves the one in the file under the name in the box, replacing only that one &mdash; nothing else you have saved changes, and nothing reaches the air until you press Load.</span></div>
+    <div class="status">Download saves the preset above to a file. Upload saves the one in a file under the name in the box.</div>
     <div class="status" id="iomsg"></div>
     <div class="err" id="preserr"></div>
   </details>
