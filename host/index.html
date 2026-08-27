@@ -511,32 +511,19 @@
       <input id="micmonvol" type="range" min="0" max="100" value="60">
     </div>
     <div class="row">
-      <label class="lbl" for="monsync">sync &mdash; my ears</label>
+      <label class="lbl" for="monsync" title="only helps if you land early; it can only add delay">sync &mdash; my ears</label>
       <input id="monsync" type="range" min="0" max="2" step="0.05" value="0">
       <span class="when" id="monsyncval"></span>
     </div>
     <div class="status" id="monsyncgate"></div>
-    <div class="status">All three of these are <span class="when">this browser&rsquo;s headphones</span>.
-      None of them touches what anybody else hears. The volume listeners hear you at is
-      <span class="when">Mic volume</span> on the mixing desk, which is a different control on a different
-      panel and is on the air the moment it moves.</div>
-    <div class="status">Use this when your voice lands <span class="when">EARLY</span> &mdash; ahead of the beat
-      you were aiming at. It holds this bed further behind the station, so you hear each beat later and
-      therefore say your word later, which walks you back onto it. It moves the moment you let go, and
-      only in your headphones &mdash; nothing about the air changes.
-      <br>If your voice lands <span class="when">LATE</span>, this is the wrong control and will make it
-      worse. Late is fixed by <span class="when">Music held for the air</span> on the mixing desk, which
-      holds the music back for everybody and needs a restart. The arithmetic is one line:
-      <br><span class="when">how late you land = your monitor lag + your voice&rsquo;s trip to the station
-      &minus; music held for the air</span>
-      <br>So set the desk knob PAST what you need, until you land early, and bring yourself back with
-      this. Overshooting is the point: this slider can only add.</div>
-    <!-- Said here as well as in the panel above, because this is the button
-         that has been mistaken for the air. -->
-    <div class="status">Hear my mic is <span class="when">your headphones only</span>. Nothing in this panel
-      reaches anybody else. To transmit, use <span class="when">Go on air</span> at the top of the page.</div>
-    <div class="status"><span class="when">The bed comes straight from liquidsoap and skips icecast, which hands every new listener four seconds of backlog. Your own mic is added here in the browser, at no delay at all &mdash; the station deliberately does not send your voice back, because hearing yourself a second late does not just distract, it breaks the sentence you are saying.</span></div>
-    <div class="status">behind the live edge: <span id="mondrift">&mdash;</span></div>
+    <!-- ONE LINE, and it is the one that has actually been got wrong: Hear my
+         mic has been mistaken for the air. Everything else that stood here -
+         which knob is which, why the bed skips icecast, and a paragraph of
+         arithmetic about landing early or late - was written for whoever
+         maintains this, not for whoever is about to talk. -->
+    <div class="status">Headphones only. Nothing in this panel reaches anybody else &mdash;
+      to transmit, use <span class="when">Go on air</span> at the top of the page.</div>
+    <div class="status" id="mondriftrow" hidden>behind the station: <span id="mondrift">&mdash;</span></div>
     <div class="status" id="monmsg"></div>
   </details>
   <audio id="mon" preload="none"></audio>
@@ -1121,9 +1108,9 @@
         showSync();
         try { localStorage.removeItem(SYNC_KEY); } catch (e) {}
       }
-      $('monsyncgate').textContent = 'Sync is off because the station is not holding the music back for you. That is Music held for the air on the mixing desk, and it is at 0 - until it is set, holding this bed back can only make your voice land later.';
+      $('monsyncgate').textContent = 'Sync does nothing until Music held for the air is set on the mixing desk.';
     } else {
-      $('monsyncgate').textContent = 'The station is holding the music back ' + d.toFixed(2) + 's. Sync spends that: raise it until your voice sits on the beat.';
+      $('monsyncgate').textContent = 'Held back ' + d.toFixed(2) + 's. Raise sync until you sit on the beat.';
     }
   }
   monSyncGate();
@@ -1288,7 +1275,8 @@
 
   function monWatch() {
     const lag = monLag();
-    if (lag === null) { $('mondrift').textContent = "—"; return; }
+    if (lag === null) { $('mondriftrow').hidden = true; return; }
+    $('mondriftrow').hidden = false;
     $('mondrift').textContent = lag.toFixed(2) + 's' +
       (mon.playbackRate !== 1 ? ' (catching up)' : '') +
       (monFeed.kind === 'element' ? ' - this browser has no low-latency path' : '');
@@ -1333,7 +1321,7 @@
   function monWatchOn()  { if (!monTimer) monTimer = setInterval(monWatch, 500); }
   function monWatchOff() { if (monTimer) { clearInterval(monTimer); monTimer = null; }
                            mon.playbackRate = 1;
-                           $('mondrift').textContent = "—"; }
+                           $('mondriftrow').hidden = true; }
   $('micmonvol').addEventListener('input', () => {
     if (micGain) micGain.gain.value = $('micmonvol').value / 100;
   });
