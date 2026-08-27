@@ -668,7 +668,8 @@
     <div class="btns">
       <button class="tbtn" id="lockalldesk" title="every slider in this panel at once">Unlock all</button>
     </div>
-    <label for="mic_gain"><span class="band">Live mic</span> &mdash; volume of a microphone streaming straight into the station; this one alone never touches a voice note &mdash; <span id="mic_gainval"></span></label>
+    <div class="status">Live for every listener the moment you move them, except where marked.</div>
+    <label for="mic_gain"><span class="band">Live mic</span> &mdash; how loud the live microphone is on the air &mdash; <span id="mic_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockmic_gain" aria-pressed="true">&#128274;</button>
       <input id="mic_gain" type="range" disabled>
@@ -678,22 +679,22 @@
       <button class="lock" type="button" id="lockvoice_gain" aria-pressed="true">&#128274;</button>
       <input id="voice_gain" type="range" disabled>
     </div>
-    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; removes rumble below this from the live mic only; on a note, use the 100 Hz band instead &mdash; <span id="hp_freqval"></span></label>
+    <label for="hp_freq"><span class="band">Mic low cut</span> &mdash; cuts rumble below this, live mic only &mdash; <span id="hp_freqval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockhp_freq" aria-pressed="true">&#128274;</button>
       <input id="hp_freq" type="range" disabled>
     </div>
-    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; the level at which a voice starts being held back; lower evens out more. Applies to voice notes AND the live mic &mdash; <span id="comp_thrval"></span></label>
+    <label for="comp_thr"><span class="band">Compressor threshold</span> &mdash; where a voice starts being held back; lower evens out more &mdash; <span id="comp_thrval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_thr" aria-pressed="true">&#128274;</button>
       <input id="comp_thr" type="range" disabled>
     </div>
-    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; how hard it holds back once over that level; 1 is off, 4 is normal speech. Voice notes AND the live mic &mdash; <span id="comp_ratioval"></span></label>
+    <label for="comp_ratio"><span class="band">Compressor ratio</span> &mdash; how hard, once over the threshold; 1 is off, 4 is normal speech &mdash; <span id="comp_ratioval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_ratio" aria-pressed="true">&#128274;</button>
       <input id="comp_ratio" type="range" disabled>
     </div>
-    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; loudness added back after the compressor; raise this if you are still too quiet. Voice notes AND the live mic &mdash; <span id="comp_gainval"></span></label>
+    <label for="comp_gain"><span class="band">Make-up volume</span> &mdash; loudness added back after the compressor &mdash; <span id="comp_gainval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockcomp_gain" aria-pressed="true">&#128274;</button>
       <input id="comp_gain" type="range" disabled>
@@ -703,22 +704,22 @@
       <button class="lock" type="button" id="lockduck_to" aria-pressed="true">&#128274;</button>
       <input id="duck_to" type="range" disabled>
     </div>
-    <label for="hold"><span class="band">Music hold</span> &mdash; seconds of quiet before the music comes back up, so a pause does not lift it &mdash; <span id="holdval"></span></label>
+    <label for="hold"><span class="band">Music hold</span> &mdash; quiet before the music comes back up, so a pause does not lift it &mdash; <span id="holdval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockhold" aria-pressed="true">&#128274;</button>
       <input id="hold" type="range" disabled>
     </div>
-    <label for="glide"><span class="band">Fader speed</span> &mdash; how fast the music moves between those two levels; smaller is smoother &mdash; <span id="glideval"></span></label>
+    <label for="glide"><span class="band">Fader speed</span> &mdash; how fast the music moves between those levels &mdash; <span id="glideval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockglide" aria-pressed="true">&#128274;</button>
       <input id="glide" type="range" disabled>
     </div>
-    <label for="air_delay"><span class="band">Music held for the air</span> &mdash; seconds the station sits on the music before sending it, so a host talking over it lands on the beat they heard; costs every listener that much delay, and takes effect at the next restart &mdash; <span id="air_delayval"></span></label>
+    <label for="air_delay"><span class="band">Music held for the air</span> &mdash; so a host talking over the music lands on the beat they heard; costs every listener this much delay &mdash; <span id="air_delayval"></span> <span class="when">next restart</span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockair_delay" aria-pressed="true">&#128274;</button>
       <input id="air_delay" type="range" disabled>
     </div>
-    <label for="record_min"><span class="band">Record change, shortest</span> &mdash; the listener page times a change of record from its own buffering, so a fast connection can finish it in a blink; this is the least it may take &mdash; <span id="record_minval"></span></label>
+    <label for="record_min"><span class="band">Record change, shortest</span> &mdash; the least time the listener page may take to turn a record over &mdash; <span id="record_minval"></span></label>
     <div class="ctl">
       <button class="lock" type="button" id="lockrecord_min" aria-pressed="true">&#128274;</button>
       <input id="record_min" type="range" disabled>
