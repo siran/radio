@@ -726,79 +726,6 @@ import relays.caddy
 			header_up X-Host-User {http.auth.user.id}
 		}
 	}
-
-	# WHAT THE WATCHER SAW, for whatever is reading the tab.
-	#
-	# File-mediated on purpose, and that is the whole design decision: the
-	# station does not know or care WHO reads. The console drops a crop and a
-	# little context; something picks it up and writes a reply beside it. eGPT
-	# does that today over its speaker credential; a local model on the Pi does
-	# it tomorrow with nothing here changing. Swapping the reader is not a
-	# migration, it is a different process opening the same folder.
-	#
-	# 4MB like the post uploads, because it carries a JPEG. The .yaml beside it
-	# is tiny, but max_size TRUNCATES rather than refuses - the trap this
-	# Caddyfile has hit twice - so one generous cap for both beats a tight cap
-	# that silently halves a picture.
-	#
-	# GET is allowed as well as PUT: the console has to poll for the reply, and
-	# the reader has to fetch the crop it was handed.
-	handle /host/read/* {
-		import speakers
-
-		# WHAT IS WAITING TO BE READ.
-		#
-		# The console never needs this - it polls for ids it created itself - but
-		# nothing else can DISCOVER a frame without it, and the whole point of
-		# handing work over through files is that the station does not know or
-		# care who reads. Without a listing the contract quietly only works for a
-		# reader with filesystem access to this machine, which is the one thing it
-		# was designed not to require.
-		#
-		# DELIBERATELY UNFILTERED. It lists the folder, not "the pending ones":
-		# a frame is pending exactly when <id>.yaml has no <id>.reply.yaml beside
-		# it, and that is a join the reader can do for itself. Teaching the
-		# station which frames are outstanding would make it care who has
-		# answered, and it does not.
-		#
-		# The rewrite is not decoration: root is the read folder, so without it
-		# file_server would look for <root>/host/read/ and find nothing.
-		@list {
-			method GET
-			path /host/read/
-		}
-		handle @list {
-			root * {env.RADIO_HOME}/read
-			rewrite * /
-			file_server browse
-		}
-
-		@read {
-			method GET PUT DELETE
-			path *.jpg *.yaml
-		}
-		handle @read {
-			rate_limit {
-				zone read_writes {
-					key {remote_host}
-					events 240
-					window 1m
-				}
-			}
-			request_body {
-				max_size 4MB
-			}
-			webdav {
-				root {env.RADIO_HOME}/read
-				prefix /host/read
-			}
-		}
-		# anything else refused rather than written under a name nothing serves
-		handle {
-			respond 403
-		}
-	}
-
 	handle /host/desk/* {
 		import speakers
 		@desk {
@@ -965,39 +892,6 @@ import relays.caddy
 	}
 	handle /host* {
 		import speakers
-
-		# THE AI FILE IS SERVED FROM INSIDE THIS BLOCK, and that is not tidiness.
-		# As its own `handle /host/ai/*` it LOST to this one. Caddy sorts handle
-		# blocks itself, and it put that block at position 33 against this block's
-		# 27 - so file_server claimed /host/ai/ai.yaml, looked for a file of that
-		# name on disk, found none and answered 404 to both GET and PUT. The
-		# console said "Could not save that: HTTP 404" and was telling the truth.
-		#
-		# Measured, not guessed: every other /host/... block sorts BEFORE this one
-		# (/host/desk/* at 18, /host/read/* at 21) and only /host/ai/* landed
-		# after. Moving the block in the file changed nothing - it stayed at 33 -
-		# so the position is the adapter's decision and not source order.
-		#
-		# Inside here the question cannot arise. `order webdav before file_server`
-		# is a global option, so this is reached first no matter how blocks sort.
-		#
-		# 8KB where desk.json has 1KB, and the difference is prose. max_size
-		# TRUNCATES and webdav writes the truncated bytes, so a prompt over the cap
-		# would be saved cut in half with nothing said - and a model handed
-		# instructions that stop mid sentence does something confidently wrong.
-		@ai {
-			method GET PUT
-			path /host/ai/ai.yaml
-		}
-		handle @ai {
-			request_body {
-				max_size 8KB
-			}
-			webdav {
-				root {env.RADIO_HOME}/config
-				prefix /host/ai
-			}
-		}
 
 		# Anything else under /host is the console and its assets. A bare
 		# file_server here would also run for the request above, so it is wrapped:

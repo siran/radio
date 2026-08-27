@@ -47,7 +47,6 @@ config/desk.json
 config/narrator.json
 config/history.json
 config/limits.json
-config/ai.yaml
 
 # bcrypt hashes for each speaker - safe-ish, but it is a user list
 speakers.caddy
@@ -70,10 +69,6 @@ live/
 disposable.md
 *.disposable
 *.disposable.*
-
-# Frames handed to whatever is reading the tab, and the replies. Scratch:
-# a crop is worth something for about a minute and nothing afterwards.
-read/
 
 # Broadcast recordings and their tag marks. Tens of megabytes an hour, kept for
 # whatever transcribes or clips them later; RADIO_RECORD moves them off C: if

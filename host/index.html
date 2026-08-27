@@ -357,7 +357,7 @@
     <div class="live" id="airlive"><span class="dot"></span><span class="lbl" id="airstat">off air</span></div>
     <div class="btns">
       <button class="tbtn" id="airbtn">Go on air</button>
-      <button class="tbtn" id="airtalk" hidden disabled>Talk over it</button>
+      <button class="tbtn" id="airtalk" hidden disabled>Open my mic</button>
       <button class="tbtn" id="airswap" hidden disabled>Change tab</button>
     </div>
     <div class="btns" id="airhprow" hidden>
@@ -480,7 +480,6 @@
         <div id="shotwhen"></div>
         <div class="btns">
           <button class="tbtn" id="shotuse">Put it in the post</button>
-          <button class="tbtn" id="shotai">Send to AI</button>
           <button class="tbtn" id="shotdrop">No</button>
         </div>
         <div class="status" id="shotstat"></div>
@@ -4310,9 +4309,10 @@
     }
     $('airtalk').classList.toggle('on', airTalking);
     const tab = $('airsrc').value !== 'mic';
-    $('airtalk').textContent = airTalking
-      ? (tab ? 'Stop talking' : 'Close my mic')
-      : (tab ? 'Talk over it' : 'Open my mic');
+    // ONE NAME, WHICHEVER SOURCE IS OUT. It said "Talk over it" for a tab and
+    // "Open my mic" for a microphone, which made a host wonder what the other
+    // one was. It is the same switch doing the same thing either way.
+    $('airtalk').textContent = airTalking ? 'Close my mic' : 'Open my mic';
     // The station cannot see a gain in this browser, and it ducks the music
     // off whether a host is speaking. Without this, going on air shut would
     // dip the music for the whole broadcast under somebody saying nothing.
@@ -4341,12 +4341,12 @@
     shotLook();
     airRecLook();
     if (!airOn) return;
-    // The mic tap is tapped AFTER the gate that opens on Talk over it, on purpose:
+    // The mic tap is tapped AFTER the gate that opens on Open my mic, on purpose:
     // what a host hears through it is what the room hears. The cost is that it is
     // armed and silent until the mic is open, which looks exactly like a broken
     // switch unless it is said out loud, so it is said out loud.
     const armed = airMicHp && !airTalking
-      ? ' Your mic reaches your headphones only while it is open, so this is armed and silent until you press Talk over it.'
+      ? ' Your mic reaches your headphones only while it is open, so this is armed and silent until you press Open my mic.'
       : '';
     $('airhpnote').textContent = (!tab
       ? 'Your microphone is what is going out, so hearing it here is a rehearsal of it, at no delay.'
@@ -4575,48 +4575,10 @@
     shotSay('');
   }
 
-  // ===== sending a picture to whatever is reading ==========================
-  //
-  // The same folder as before, minus the machine that used to fill it. A host
-  // presses a button; a frame and a line of context land in /host/read/ and
-  // something else may look at them. Nothing polls for a reply: there is no
-  // proposal list any more, because a DJ that can read the tab acts through the
-  // station's own controls rather than through this console.
-  let readSeq = 0;
-  const yq = (v) => '"' + String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
-
-  async function shotSend() {
-    if (!shotData) return;
-    const id = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14) +
-               '-' + (++readSeq);
-    const ctx = [
-      'id: ' + yq(id),
-      'why: ' + yq('the host sent it'),
-      'at: ' + yq(new Date().toISOString()),
-      'show_now: ' + yq($('showname').value.trim()),
-      'artist_now: ' + yq($('showartist').value.trim()),
-      'title_now: ' + yq($('showtitle').value.trim())
-    ].join('\n') + '\n';
-    shotSay('sending\u2026');
-    try {
-      // The picture BEFORE the context that names it: everything that can fail
-      // happens before anything that commits.
-      const a = await fetch('/host/read/' + id + '.jpg', { method: 'PUT',
-        credentials: 'same-origin', body: await (await fetch(shotData)).blob() });
-      if (!a.ok) throw new Error('the picture was refused, HTTP ' + a.status);
-      const b = await fetch('/host/read/' + id + '.yaml', { method: 'PUT',
-        credentials: 'same-origin', headers: { 'Content-Type': 'text/yaml' },
-        body: ctx });
-      if (!b.ok) throw new Error('the context was refused, HTTP ' + b.status);
-      shotSay('sent ' + id);
-    } catch (e) { shotSay('could not send that: ' + e.message); }
-  }
-
   $('airshot').addEventListener('click', async () => {
     const d = await shotGrab();
     if (d) shotShow(d); else shotSay('could not take a picture of that tab');
   });
-  $('shotai').addEventListener('click', shotSend);
 
   // ===== posts: what the room reads while a show is on =====================
   //
@@ -5174,7 +5136,7 @@
     if (airMicFn) airMicFn.opened = false;
     airMicFn = null;
     $('airtalk').classList.remove('on');
-    $('airtalk').textContent = 'Talk over it';
+    $('airtalk').textContent = 'Open my mic';
     // The station resets this on disconnect too. Said from both ends because
     // the two failures are different: this covers leaving the air tidily,
     // the station's own reset covers a laptop lid closing mid-mute.
@@ -5357,7 +5319,7 @@
     // Shown for both sources: it is the microphone switch, and there is a
     // microphone either way. Only its wording changes.
     $('airtalk').hidden = false;
-    $('airtalk').textContent = tab ? 'Talk over it' : 'Open my mic';
+    $('airtalk').textContent = 'Open my mic';
     $('airduckwrap').hidden = !tab;
     // Nothing about the pause box is decided here any more. It used to be set
     // at the moment of choosing a source, because the two sources were thought
