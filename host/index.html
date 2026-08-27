@@ -19,8 +19,8 @@
 
      That had happened five times here: #shotwrap held an <img> with no src, so
      an empty panel showing a broken-image icon and the words "what the shared
-     tab settled on" sat above the composer permanently. #airhprow, #airrecrow,
-     #airduckwrap and #airwatchwrap were all showing off-air for the same reason.
+     tab settled on" sat above the composer permanently. #airhprow, #airrecrow
+     and #airduckwrap were all showing off-air for the same reason.
 
      One rule rather than a guard per element - the per-element form is what the
      listener page does and is exactly what got forgotten five times. Nothing
@@ -398,17 +398,9 @@
     <label class="chk" id="airduckwrap" hidden>
       <input type="checkbox" id="airduck" checked> Dip the shared tab under my mic
     </label>
-    <!-- OFF by default. The host is already sharing this tab on purpose, but
-         reading its PICTURE is a different act from broadcasting its sound, and
-         a thing that takes photographs should be asked for rather than assumed. -->
-    <label class="chk" id="airwatchwrap" hidden>
-      <input type="checkbox" id="airwatch"> Watch the still parts of the tab and
-      offer me a picture when they change
-    </label>
-    <div class="status" id="airwatchnote" hidden></div>
-    <!-- The last boundary it noticed. Phase one leaves a trail and acts on nothing,
-         so this is the only place a host sees the detector working on a real tab. -->
-    <div class="status" id="airwatchmark" hidden></div>
+    <div class="btns" id="airshotwrap" hidden>
+      <button class="tbtn" id="airshot">Take a picture of the tab</button>
+    </div>
     <label class="chk">
       <input type="checkbox" id="airmute"> Pause the station&rsquo;s autoDJ while I am on air
     </label>
@@ -448,15 +440,18 @@
       <button class="tbtn" data-cmd="insertUnorderedList" title="list">&bull;</button>
       <button class="tbtn" id="postlink" title="turn the selected words into a link">Link</button>
       <button class="tbtn" data-cmd="removeFormat" title="strip the formatting from the selection">Plain</button>
+      <button class="tbtn" id="postshot" hidden title="a picture of the tab you are sharing">Add screenshot</button>
     </div>
     <div id="shotwrap" hidden>
-      <img id="shotimg" alt="what the shared tab settled on">
+      <img id="shotimg" alt="a picture of the shared tab">
       <div id="shotside">
         <div id="shotwhen"></div>
         <div class="btns">
           <button class="tbtn" id="shotuse">Put it in the post</button>
+          <button class="tbtn" id="shotai">Send to AI</button>
           <button class="tbtn" id="shotdrop">No</button>
         </div>
+        <div class="status" id="shotstat"></div>
       </div>
     </div>
     <div id="postbox" contenteditable="true" role="textbox" aria-multiline="true"
@@ -470,51 +465,6 @@
     <div class="status" id="postmsg"></div>
     <div class="err" id="posterr"></div>
     <ol class="postlist" id="postlist"></ol>
-  </details>
-
-  <!-- The AI is not something this console calls. It is a speaker that calls
-       the station: it holds a credential, it posts through the same route a
-       host does, and its cards are signed with its own name because the
-       signature comes from who wrote the file rather than from what the
-       prompt asked it to claim.
-
-       So this panel is a NOTICEBOARD and not an integration. Nothing here
-       reaches an AI; it writes one file that an AI reads. -->
-  <details class="panel" id="aiwrap">
-    <summary>The AI <span class="when">&mdash; what to tell it, and whether it may post
-      without asking you first. It reads this; nothing here talks to it.</span></summary>
-    <!-- FOUR SWITCHES, NOT ONE. "May it act on its own" is not a single
-         question: writing a card that is signed with its name, renaming what
-         the whole room can see, cutting a recording, and choosing the next
-         record are four different amounts of trust, and a host will happily
-         grant one while refusing another.
-
-         ALL OFF by default. These are the one set of defaults in this console
-         that are about somebody else's judgement rather than the host's own
-         convenience, and each should be let out deliberately, once, by the
-         person whose station it is. -->
-    <label class="chk"><input type="checkbox" id="aiPost"> Post cards on its own</label>
-    <label class="chk"><input type="checkbox" id="aiTag"> Set what is playing &mdash; artist and title</label>
-    <label class="chk"><input type="checkbox" id="aiRecord"> Start and stop recordings</label>
-    <label class="chk"><input type="checkbox" id="aiMusic"> Choose the music &mdash; queue and skip</label>
-    <!-- Separate from the four above, because it is not a permission to ACT.
-         Reading costs whoever reads, so it is the host who decides whether the
-         watcher hands anything over at all. Off and the detector still runs and
-         still marks the recording; it simply offers nothing to anyone. -->
-    <label class="chk"><input type="checkbox" id="aiRead"> Let it read the tab when something changes</label>
-    <div class="status" id="readnote" hidden></div>
-    <!-- Every change, newest first. A proposal is a proposal: nothing here has
-         been applied to anything, and the fields are the whole vocabulary -
-         an answer that does not fit one of them is not usable by the station. -->
-    <div id="readlist"></div>
-    <div class="status" id="aiautonote">Anything left off it may still prepare and
-      leave for you rather than do. Setting what is playing is the one the room sees:
-      a wrong title is on the public page until somebody fixes it.</div>
-    <label for="aiprompt">What to tell the model</label>
-    <textarea id="aiprompt" maxlength="6000" spellcheck="false"
-      placeholder="Who it is, what the show is, what it should notice, how long to be, what never to say."></textarea>
-    <div class="status" id="aistat"></div>
-    <div class="err" id="aierr"></div>
   </details>
 
   <details class="panel" id="musicpanel" open>
@@ -4544,869 +4494,119 @@
     if (e.key === 'Enter' && !$('airrecbtn').disabled) { e.preventDefault(); airRecPress(); }
   });
 
-  // ===== the noticeboard the AI reads =====================================
+  // ===== a picture of the shared tab, when the host asks ===================
   //
-  // Written here, read there, and nothing in between. This console does not
-  // know whether anything is listening - which is the point: an AI that holds a
-  // speaker credential can read this file and post through the same route a
-  // host does, and the day there is no AI this is a text box nobody collects.
+  // NOTHING HERE IS AUTOMATIC ANY MORE, and that is a deletion rather than a
+  // regression. There was a watcher: it read the tab every 1.2s, split it into
+  // moving and still, and handed frames over on its own guess about what had
+  // changed. It worked. It was the wrong thing to have built - the DJ can read
+  // the tab's DOM directly, which gives the title exactly, instantly, as text.
+  // No crop, no OCR, no threshold, no lag, and no rule about where a title
+  // lives that has to be right on every site in the world.
   //
-  // Saved as it is typed, debounced, because a prompt is written slowly and a
-  // host who closes the tab mid-sentence should not lose it. One write in
-  // flight with the last one queued behind, exactly as the show fields do -
-  // two PUTs racing would settle in whatever order the network chose and the
-  // loser would be the newer text.
-  const AI_URL = '/host/ai/ai.yaml';
+  // What a DOM cannot give is the PICTURE. So that is all this does now, and
+  // only when a person asks for it.
+  const SHOT_WIDE = 960;      // px across for the picture kept
+  let airTabVideo = null, shotData = '';
 
-  // YAML, because this file is written here and read by whatever is DJing -
-  // eGPT today, something local later - and neither wants to be handed JSON.
-  // Flat on purpose: nesting would buy nothing and cost a real parser.
-  //
-  // Every string is quoted. A prompt is free text: it will contain colons and
-  // quotes and newlines, and any of those unquoted is either a parse error or,
-  // worse, a silently different value.
-  const aiSwitches = [["aiPost", "post"], ["aiTag", "tag"],
-                      ["aiRecord", "record"], ["aiMusic", "music"]];
-
-  function yq(v) {
-    if (typeof v === "boolean") return v ? "true" : "false";
-    return JSON.stringify(String(v));   // JSON string escaping is valid YAML
-  }
-
-  function aiToYaml(o) {
-    return Object.keys(o).map((k) => k + ": " + yq(o[k])).join("\n") + "\n";
-  }
-
-  function aiFromYaml(text) {
-    const out = {};
-    for (const line of String(text).split(/\r?\n/)) {
-      const m = line.match(/^([A-Za-z_][\w]*):\s*(.*)$/);
-      if (!m) continue;
-      const raw = m[2].trim();
-      if (raw === "true" || raw === "false") { out[m[1]] = raw === "true"; continue; }
-      if (raw.startsWith('"')) { try { out[m[1]] = JSON.parse(raw); continue; } catch {} }
-      out[m[1]] = raw;
-    }
-    return out;
-  }
-  let aiTimer = 0, aiSending = false, aiAgain = false;
-
-  async function aiLoad() {
+  // ONE FRAME, ON DEMAND. MediaStreamTrackProcessor rather than a <video>: the
+  // track is already there, a frame is the next thing it will produce, and this
+  // needs no element, no playback, and nothing to wait on. The track is cloned
+  // and stopped again so pressing the button never touches the share itself.
+  async function shotGrab() {
+    if (!airTabVideo || typeof MediaStreamTrackProcessor === 'undefined') return '';
+    let track = null, reader = null;
     try {
-      const r = await fetch(AI_URL, { credentials: 'same-origin', cache: 'no-store' });
-      if (!r.ok) return;                       // no file yet is not an error
-      const d = aiFromYaml(await r.text());
-      for (const [el, key] of aiSwitches) {
-        if (typeof d['auto_' + key] === 'boolean') $(el).checked = d['auto_' + key];
-      }
-      if (typeof d.prompt === 'string') $('aiprompt').value = d.prompt.slice(0, 6000);
-      aiSay(d);
-    } catch {}
-  }
-
-  function aiSay(d) {
-    $('aistat').textContent = !d ? ''
-      : 'Saved' + (d.at ? ' ' + new Date(d.at).toLocaleTimeString() : '') +
-        '. ' + aiAllowed();
-  }
-
-  // Says what it may do, in the host's words rather than four booleans.
-  function aiAllowed() {
-    const on = aiSwitches.filter(([el]) => $(el).checked)
-      .map(([, k]) => ({ post: "post", tag: "set what is playing",
-                         record: "record", music: "choose the music" })[k]);
-    return on.length ? "It may " + on.join(", ") + " on its own."
-                     : "It may not do anything on its own; it prepares and waits for you.";
-  }
-
-  async function aiPush() {
-    aiTimer = 0;
-    if (aiSending) { aiAgain = true; return; }
-    aiSending = true;
-    const body = {};
-    for (const [el, key] of aiSwitches) body['auto_' + key] = $(el).checked;
-    Object.assign(body, {
-      prompt: $('aiprompt').value.slice(0, 6000),
-      at: new Date().toISOString(),
-      // Who last touched it, so a station with several speakers can tell whose
-      // instructions the AI is following. Not a credential and not used as one.
-      by: ($('whoami').textContent || '').trim()
-    });
-    try {
-      const r = await fetch(AI_URL, {
-        method: 'PUT', credentials: 'same-origin',
-        headers: { 'Content-Type': 'text/yaml' },
-        body: aiToYaml(body) });
-      if (!r.ok) {
-        // WHAT WAS ASKED FOR AND WHAT CAME BACK. A bare status is not enough to
-        // act on: it cost a whole session of guessing at the server from the
-        // outside, when the one thing nobody had was the actual request.
-        let note = "";
-        try { note = (await r.text()).trim().slice(0, 120); } catch {}
-        throw new Error("PUT " + new URL(AI_URL, location.href).href +
-          " answered " + r.status + (r.statusText ? " " + r.statusText : "") +
-          (note ? " \u2014 " + note : " \u2014 empty body"));
-      }
-      $('aierr').textContent = '';
-      aiSay(body);
-    } catch (e) {
-      $('aierr').textContent = 'Could not save that: ' + e.message;
-    } finally {
-      aiSending = false;
-      if (aiAgain) { aiAgain = false; aiPush(); }
-    }
-  }
-
-  const aiSoon = () => { clearTimeout(aiTimer); aiTimer = setTimeout(aiPush, 700); };
-  $('aiprompt').addEventListener('input', aiSoon);
-  // A switch saves at once. It is one bit and somebody just decided it.
-  for (const [el] of aiSwitches) $(el).addEventListener('change', aiPush);
-  // Not part of aiSwitches: those four are permissions written to the
-  // noticeboard for a reader to honour. This one is local - it decides whether
-  // a frame is handed over at all, and nothing downstream needs to know.
-  $('aiRead').addEventListener('change', () => {
-    readSay($('aiRead').checked
-      ? 'It will be handed a frame each time the tab changes.'
-      : 'Nothing will be handed over. The detector still marks the recording.');
-  });
-  aiLoad();
-
-  // ===== watching the still parts of the tab ===============================
-  //
-  // "TELL ME WHEN THE PICTURE CHANGES" IS USELESS HERE. A playing video changes
-  // every frame, so a difference threshold fires for ever and says nothing. The
-  // first design answered that with a heuristic - a change followed by stillness,
-  // since video never stills and a page does - and the operator had the better
-  // idea before it was built: the moving part of a tab is a REGION. It can be
-  // found, and it can be ignored.
-  //
-  // So the frame is a grid and every cell carries a running measure of how
-  // restless it is. A video pane saturates that within seconds; a track title,
-  // the chrome, a sidebar, the labels sit near zero. Watching only the quiet
-  // cells makes a track name changing an event and a whole film playing under it
-  // nothing at all.
-  //
-  // Measured before any of it was built: a captured surface does NOT taint a
-  // canvas, so the pixels can be read at all; a grab at this size costs about
-  // 4ms; and two grabs of an unchanged tab differ by exactly 0.00, so 'nothing
-  // moved' is a real zero and not a small number.
-  // HOW FAR APART TWO ANALYSED FRAMES MUST BE, in the STREAM'S OWN CLOCK. Not
-  // an interval: nothing here is scheduled. Frames arrive when the tab produces
-  // them, and this only decides which of them are worth the arithmetic.
-  const SHOT_GAP = 1200000;   // microseconds of media time between looks
-  const SHOT_W = 256, SHOT_H = 144;
-  const SHOT_COLS = 16, SHOT_ROWS = 9;          // 144 cells of 16 by 16
-  const SHOT_CELLS = SHOT_COLS * SHOT_ROWS;
-  const SHOT_CW = SHOT_W / SHOT_COLS, SHOT_CH = SHOT_H / SHOT_ROWS;
-  // How fast a cell's restlessness follows what it just did, and the ceiling any
-  // single look may contribute. THE CLAMP IS NOT DECORATION: without it the very
-  // event being detected would spike its own cells' restlessness and exclude the
-  // labels that reported it, so the second track change in a row would be
-  // invisible. Clamped, a busy cell still saturates near the clamp and a cell
-  // that moved once barely stirs.
-  const SHOT_ALPHA = 0.12;    // how fast a cell's baseline follows what it does
-  const SHOT_DENOM = 1.5;     // floor under the baseline, so a dead cell's noise
-                              // cannot divide its way into a huge ratio
-  const SHOT_RATIO = 3.5;     // times its own usual change that makes a cell fire
-  const SHOT_CELLMOVE = 6;    // and an absolute floor, so 0.1 -> 0.5 is not an event
-  const SHOT_HITS = 2;        // cells that must fire together, before identification
-  const SHOT_KNOWN = 2;       // times a cell must have fired to be an identifier
-  const SHOT_RUN = 3;         // consecutive fires that mean a new level, not an event
-  const SHOT_WARM = 8;        // looks spent learning before any of this is trusted
-  const SHOT_COOL = 20000;    // ms before another picture may be offered
-  // A LABEL CHANGE DOES NOT WAIT ITS TURN. Measured on a real show: a track
-  // change on YouTube arrives as TWO events twenty-one seconds apart - the old
-  // video stops, and only then does the new title appear - and the stop is
-  // the one that gets there first and takes the cooldown with it. The title is
-  // the half worth having: it is what a tag is made of, and a title changing
-  // IS the track changing, where the picture stopping is only a hint that one
-  // might be about to. So it gets its own, much shorter wait.
-  const SHOT_LABELCOOL = 5000; // ms before another LABEL change may be offered
-  const SHOT_WIDE = 960;      // px across for the picture actually kept
-
-  // WHICH CELLS ARE THE VIDEO AND WHICH ARE THE CHROME, and the answer is
-  // already sitting in shotBusy: a cell's restlessness IS "how much does this
-  // part of the tab normally move". No model needed to find the label - only
-  // to read it, later, and only on a crop.
-  //
-  // Against the median rather than a fixed number, because a tab of mostly
-  // text and a tab of mostly video have nothing in common except that one part
-  // of each moves more than the rest of it does.
-  const SHOT_BUSYMULT = 3;    // times the median restlessness that makes a cell video
-  const SHOT_BUSYFLOOR = 3;   // and a floor, so a wholly still tab has no video at all
-
-  // THE PARTITION HAS TO OUTLIVE THE SILENCE IT EXISTS TO DETECT, and getting
-  // this wrong is subtle: shotBusy follows what a cell just did, so the instant
-  // a video stops, its cells stop looking like video. The classification
-  // collapses exactly when it is needed, busyCells falls to zero, and the stall
-  // that was about to be reported resets instead. Measured: the counter went
-  // 0, 1, 0 and never reached the two looks it needed.
-  //
-  // So the partition runs off a second, asymmetric measure: it rises quickly
-  // when a cell moves and decays very slowly when it stops. "This is where the
-  // picture is" should survive the picture pausing, which is the whole point.
-  const SHOT_LONGUP = 0.3;    // how fast a cell earns its place as video
-  const SHOT_LONGDOWN = 0.01; // and how slowly it loses it
-
-  // THE SECOND SIGNAL, and it is the first one inverted. A still cell jumping
-  // says "the label is new". A region that normally moves going QUIET says
-  // "something ended" - a cut, a track finishing, a video paused. Neither is
-  // reliable alone; together they are a track boundary and each half is a
-  // reason to believe the other.
-  const SHOT_STALL = 0.25;    // fraction of its usual movement that counts as stopped
-  const SHOT_STALLRUN = 2;    // consecutive quiet looks before it is called a boundary
-  const SHOT_MARKCOOL = 8000; // ms between marks, so one cut leaves one mark
-
-  // THE THIRD SIGNAL, and it is the middle of the other two. Neither the
-  // picture stopping nor a label changing: the picture CHANGING A LOT while
-  // the labels sit still. New artwork, a new scene, something worth remarking
-  // on rather than retagging - and it is the same two numbers the stall is
-  // measured from, read the other way up.
-  //
-  // Allowed often on purpose: noticing costs almost nothing and it keeps the
-  // feed alive. The limit is not there to be thrifty, it is there so a busy
-  // video cannot flood the room - one every thirty seconds, no more.
-  const SHOT_CUT = 2.5;        // times its usual movement that counts as a cut
-  const SHOT_ARTCOOL = 30000;  // ms between pictures offered for remarking
-
-  let airTabVideo = null, shotTrack = null, shotReader = null, shotCanvas = null,
-      shotLast = null, shotBusy = null, shotHits = null, shotRun = null,
-      shotSeen = 0, shotQuiet = 0, shotMoving = false, shotAt = 0, shotData = '';
-  let shotStallRun = 0, shotMarkAt = 0, shotBusyCells = 0, shotWasStalled = false;
-  let shotLooks = 0, shotFirstAt = 0;   // how often it is ACTUALLY managing to look
-  let shotArtAt = 0;                    // when a picture was last offered to remark on
-  let shotLong = null;        // the slow measure the partition is drawn from
-  let shotWas = null;         // and what it was BEFORE this look - see shotTick
-
-  // A VideoFrame is a CanvasImageSource, so it goes straight onto the canvas -
-  // there is no <video> in this any more and nothing has to be playing.
-  function shotSmall(frame) {
-    if (!shotCanvas) {
-      shotCanvas = document.createElement('canvas');
-      shotCanvas.width = SHOT_W; shotCanvas.height = SHOT_H;
-    }
-    const cx = shotCanvas.getContext('2d', { willReadFrequently: true });
-    cx.drawImage(frame, 0, 0, SHOT_W, SHOT_H);
-    return cx.getImageData(0, 0, SHOT_W, SHOT_H).data;
-  }
-
-  // The red channel and every other pixel. This is a movement detector, not a
-  // comparison: it has to be cheap enough to run beside an encoder, and a region
-  // that changed changed by more than one channel of every fourth pixel.
-  function shotCell(a, b, cx, cy) {
-    let sum = 0, n = 0;
-    const x0 = cx * SHOT_CW, y0 = cy * SHOT_CH;
-    for (let y = y0; y < y0 + SHOT_CH; y += 2) {
-      for (let x = x0; x < x0 + SHOT_CW; x += 2) {
-        const p = (y * SHOT_W + x) * 4;
-        sum += Math.abs(a[p] - b[p]); n++;
-      }
-    }
-    return n ? sum / n : 0;
-  }
-
-  function shotTick(frame) {
-    let now;
-    try { now = shotSmall(frame); } catch { return; }
-    if (!shotLast) {
-      shotLast = now;
-      shotBusy = new Float32Array(SHOT_CELLS);
-      shotLong = new Float32Array(SHOT_CELLS);
-      shotWas = new Float32Array(SHOT_CELLS);
-      shotHits = new Uint16Array(SHOT_CELLS);
-      shotRun = new Uint8Array(SHOT_CELLS);
-      return;
-    }
-    shotSeen++;
-
-    // EVERY CELL IS MEASURED AGAINST ITSELF, and that one rule replaced two
-    // classes. The first version found the restless cells and ignored them,
-    // which is wrong in the case the operator named: sometimes the labels do
-    // not change and the video does - a cut, a slide, a record whose only sign
-    // is its artwork. A busy region is not noise. It is a channel with a high
-    // noise floor, and what matters in it is a change much larger than usual.
-    //
-    //   a still label whose text changes  baseline ~0   ratio enormous   fires
-    //   a video pane playing normally     baseline 25   ratio near 1     quiet
-    //   that same pane at a cut           baseline 25   ratio 3 or 4     FIRES
-    //   dead chrome, sensor noise         tiny change   absolute floor   quiet
-    //
-    // The absolute floor matters as much as the ratio: without it a cell that
-    // never moves would fire on a rounding difference, because anything divided
-    // by almost nothing is enormous.
-    let fired = 0, known = 0;
-    const cellHit = new Uint8Array(SHOT_CELLS);
-    // kept, because the partition below needs what each cell did THIS look and
-    // not only what it usually does
-    const cellD = new Float32Array(SHOT_CELLS);
-    for (let cy = 0; cy < SHOT_ROWS; cy++) {
-      for (let cx = 0; cx < SHOT_COLS; cx++) {
-        const i = cy * SHOT_COLS + cx;
-        const d = shotCell(now, shotLast, cx, cy);
-        cellD[i] = d;
-        // Rises fast, falls slowly, and unlike shotBusy it learns from the
-        // events too: a cell that jumps IS a cell that moves, and for the
-        // purpose of "where is the picture" that is exactly what we want to
-        // remember.
-        //
-        // KEPT AS IT WAS BEFORE THIS LOOK, and the partition reads THAT. A
-        // label changing is a big jump in a cell that is normally still, so
-        // folding it in first is enough to push that very cell over the line
-        // and file it as picture - the one thing it must not be, at the one
-        // moment it matters. The measure still learns from the event; it just
-        // does not get to use the event to reclassify the cell that reported
-        // it. Measured: without this a real title change scored zero.
-        shotWas[i] = shotLong[i];
-        shotLong[i] = d > shotLong[i]
-          ? shotLong[i] * (1 - SHOT_LONGUP) + d * SHOT_LONGUP
-          : shotLong[i] * (1 - SHOT_LONGDOWN) + d * SHOT_LONGDOWN;
-        if (shotHits[i] >= SHOT_KNOWN) known++;
-        const hot = d > SHOT_CELLMOVE &&
-                    d / Math.max(shotBusy[i], SHOT_DENOM) > SHOT_RATIO;
-        if (hot) { cellHit[i] = 1; fired++; shotRun[i]++; } else { shotRun[i] = 0; }
-        // THE BASELINE IS NOT TAUGHT BY THE EVENTS IT IS MEANT TO CATCH. A cell
-        // that fired does not fold that reading in, or the first cut would raise
-        // its own floor and hide the second one.
-        //
-        // Unless it keeps firing. Three in a row is not three events, it is a
-        // region that has changed what it does - a video starting after a pause -
-        // and the baseline has to be allowed to follow that or the cell shouts
-        // for ever. During the warm-up everything is learned, because a baseline
-        // of zero makes every cell look like an event.
-        if (!hot || shotRun[i] >= SHOT_RUN || shotSeen <= SHOT_WARM) {
-          shotBusy[i] = shotBusy[i] * (1 - SHOT_ALPHA) + d * SHOT_ALPHA;
-        }
-      }
-    }
-    shotLast = now;
-
-    // Once some cells have fired more than once, they ARE the identification -
-    // the place this particular tab reports itself - and one of them is enough.
-    // Before that is known, two have to agree, so a cursor blinking somewhere is
-    // not a track change.
-    const identified = known > 0;
-    let want = 0;
-    if (identified) {
-      for (let i = 0; i < SHOT_CELLS; i++) if (cellHit[i] && shotHits[i] >= 1) want++;
-    } else {
-      want = fired;
-    }
-    const moved = want >= (identified ? 1 : SHOT_HITS);
-
-    for (let i = 0; i < SHOT_CELLS; i++) if (cellHit[i]) shotHits[i]++;
-
-    // --- split the frame into video and chrome ---------------------------
-    // Recomputed every look rather than settled once: a page changes layout
-    // under you, a video goes fullscreen, an ad takes half the screen.
-    const ranked = Float32Array.from(shotWas).sort();
-    const median = ranked[SHOT_CELLS >> 1];
-    const busyLine = Math.max(SHOT_BUSYFLOOR, median * SHOT_BUSYMULT);
-
-    // THE PICTURE IS A RECTANGLE, AND THAT IS THE WHOLE CORRECTION. Judging
-    // every cell on its own restlessness gets a dark film wrong in the worst
-    // possible way: most of a Dark Side of the Moon frame is black, those cells
-    // barely move, so they sit under the line and are filed as chrome - and then
-    // a scene lighting up reads as "a still part changed", which is exactly what
-    // a label changing is supposed to look like. Reported from a real show: two
-    // frames nine seconds apart, same song, same labels, both announced as new.
-    //
-    // A quiet cell INSIDE the picture is still the picture. So the box decides,
-    // not the cell - and the box is the same one the reader was already being
-    // handed, which is why it is computed here now instead of further down.
-    let busyCells = 0, busyNow = 0, busyUsual = 0;
-    let x0 = SHOT_COLS, y0 = SHOT_ROWS, x1 = -1, y1 = -1;
-    for (let i = 0; i < SHOT_CELLS; i++) {
-      if (shotWas[i] <= busyLine) continue;
-      busyCells++; busyNow += cellD[i]; busyUsual += shotWas[i];
-      const bx = i % SHOT_COLS, by = (i / SHOT_COLS) | 0;
-      if (bx < x0) x0 = bx; if (bx > x1) x1 = bx;
-      if (by < y0) y0 = by; if (by > y1) y1 = by;
-    }
-    // A cell of margin for the letterboxing and the player's own edge, which
-    // belong to the picture and move like neither side of this split.
-    if (x1 >= 0) {
-      x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1);
-      x1 = Math.min(SHOT_COLS - 1, x1 + 1); y1 = Math.min(SHOT_ROWS - 1, y1 + 1);
-    }
-    const inPicture = (i) => x1 >= 0 &&
-      (i % SHOT_COLS) >= x0 && (i % SHOT_COLS) <= x1 &&
-      ((i / SHOT_COLS) | 0) >= y0 && ((i / SHOT_COLS) | 0) <= y1;
-
-    // The ROWS matter as well as the count. A label is a horizontal strip of
-    // text - a title, a channel, a counter - so the rows that fired say where
-    // to cut, and the cut is taken full width because a tight box around the
-    // cells that happened to change would slice a title in half.
-    let stillFired = 0, stillKnown = 0, ly0 = SHOT_ROWS, ly1 = -1;
-    for (let i = 0; i < SHOT_CELLS; i++) {
-      if (!cellHit[i] || inPicture(i)) continue;
-      stillFired++;
-      if (shotHits[i] >= SHOT_KNOWN) stillKnown++;
-      const ry = (i / SHOT_COLS) | 0;
-      if (ry < ly0) ly0 = ry; if (ry > ly1) ly1 = ry;
-    }
-    // AND ONE CELL IS NOT A LABEL. A single chrome cell twitching is a clock, a
-    // view count, a hover state, a cursor. Either two of them agree, or one that
-    // has reported a change before does - that one has earned the benefit of the
-    // doubt, which is what shotHits was being kept for all along.
-    const labelChanged = stillKnown > 0 || stillFired >= SHOT_HITS;
-    shotBusyCells = busyCells;
-
-    // A region that normally moves and has stopped. Needs somewhere that
-    // normally moves in the first place: on a page of pure text there is no
-    // video to stall and this signal simply never speaks.
-    const stalled = busyCells > 0 && busyNow < busyUsual * SHOT_STALL;
-    if (stalled) shotStallRun++; else shotStallRun = 0;
-    // The EDGE, not the state. A paused video is quiet for as long as it is
-    // paused, and that is one boundary, not one per look.
-    const boundary = shotStallRun === SHOT_STALLRUN;
-
-    shotSay(fired, known, busyCells, shotStallRun);
-    if (shotSeen < SHOT_WARM) return;
-
-    // --- leave a mark ------------------------------------------------------
-    // Marks are free and a wrong one costs nothing: the backup is whole and
-    // anything can be re-cut from it afterwards. So mark liberally here, and
-    // let whatever acts on them be the conservative one.
-    if (boundary || labelChanged) {
-      const why = boundary && labelChanged ? 'label changed and the video stopped'
-                : boundary ? 'the video stopped' : 'a still part changed';
-      // A label changing is strong on its own. It was only strong in company
-      // before, which had it agreeing with the weaker signal to be believed -
-      // the wrong way round, since the title is the thing that actually says a
-      // track changed.
-      shotMark(labelChanged ? 'strong' : 'weak', why,
-               { still: stillFired, busy: busyCells });
-      // A LABEL CHANGE OUTRANKS A PICTURE STOPPING, and this is the whole of
-      // the priority: it is not a different code path, it is a shorter wait.
-      // The pair that made the case, twenty-one seconds apart on a real show:
-      // Miguel Bose - Morenamia stops, then The Verve - Bitter Sweet Symphony
-      // appears. Two events, one track change, and only the second one says
-      // what is now playing.
-      //
-      // MARKING STAYS LIBERAL; OFFERING DOES NOT. A mark costs nothing and can
-      // be ignored later, but a picture is a prompt in the host's face and a
-      // handover is a file on the station and a model's attention. The cooldown
-      // the quiet-after-movement path always respected was simply missed when
-      // this branch was added, and the show that found it was being offered a
-      // fresh picture every nine seconds and refused with 429 by the station -
-      // 240 writes a minute is the rate limit, two PUTs a handover, so it had
-      // reached a hundred and twenty boundaries a minute.
-      if (Date.now() - shotAt >= (labelChanged ? SHOT_LABELCOOL : SHOT_COOL)) {
-        shotOffer(frame, why === 'the video stopped' ? 'The video stopped'
-                       : 'What the tab is showing changed');
-        readOffer(why, x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null, {
-          label: shotLabelCut(frame, y1, ly0, ly1),
-          shot: x1 >= 0 ? shotCut(frame, x0, y0, x1, y1) : ''
-        });
-      }
-    }
-
-    // --- c) the picture changed a lot, and the labels did not ---------------
-    // Deliberately AFTER the two above and suppressed by either of them: a
-    // track boundary is a better reason to offer a picture than a scene is,
-    // and offering both at once would put two cards up for one event.
-    const cut = busyCells > 0 && busyNow > busyUsual * SHOT_CUT;
-    if (cut && !boundary && !labelChanged && Date.now() - shotArtAt >= SHOT_ARTCOOL) {
-      shotArtAt = Date.now();
-      shotOffer(frame, 'The picture changed');
-      // A DIFFERENT ERRAND, and the reader is told so. This is not "what is
-      // playing" - the labels already answer that and they have not moved. It
-      // is "here is something to say a word about", which wants a different
-      // answer and belongs in a post rather than a tag.
-      readOffer('the picture changed, the labels did not',
-                x1 >= 0 ? [x0, y0, x1, y1, SHOT_COLS, SHOT_ROWS] : null,
-                // no label strip here BY DEFINITION - this signal fires only
-                // when nothing outside the picture moved
-                { label: '', shot: x1 >= 0 ? shotCut(frame, x0, y0, x1, y1) : '' });
-    }
-
-    if (moved) { shotMoving = true; shotQuiet = 0; return; }
-    if (!shotMoving) return;
-    // One quiet look after it, so the picture is not taken in the middle of a
-    // page fading in or a cut being cross-faded.
-    if (++shotQuiet < 1) return;
-    shotMoving = false; shotQuiet = 0;
-    if (Date.now() - shotAt < SHOT_COOL) return;
-    shotOffer(frame, 'The tab settled after moving');
-  }
-
-  // A boundary, written beside the audio. The webcast metadata frame is the
-  // path the show fields already use and the bridge already writes it into the
-  // marks file, so this needs no new route, no new endpoint and no credential
-  // of its own - it is the same host saying "something happened here".
-  //
-  // NOTHING IS ACTED ON. No recording starts, no title is set. This is phase
-  // one: leave a trail on a real broadcast so the signal can be judged before
-  // anything is wired to it.
-  function shotMark(strength, why, extra) {
-    if (!airOn || !airWS || airWS.readyState !== WebSocket.OPEN) return;
-    const t = Date.now();
-    if (t - shotMarkAt < SHOT_MARKCOOL) return;
-    shotMarkAt = t;
-    try {
-      airWS.send(JSON.stringify({ type: 'metadata', data: Object.assign(
-        { kind: 'boundary', strength, why }, extra || {}) }));
-    } catch {}
-    $('airwatchmark').hidden = false;
-    $('airwatchmark').textContent = new Date().toLocaleTimeString() +
-      ' \u2014 ' + why + ' (' + strength + ')';
-  }
-
-  // ===== handing a frame to whatever is reading ============================
-  //
-  // The station does not know who reads. The console drops a JPEG and a little
-  // context into /host/read/ and waits for a reply to appear beside it. eGPT
-  // does that today; a local model on the Pi does it tomorrow and nothing here
-  // changes. That is why this is files and not a call: swapping the reader is
-  // a different process opening the same folder, not a migration.
-  //
-  // THE ANSWER MUST COME FROM A SET. A reader that invents its own field names
-  // has produced prose, and the station has no slot to put prose in. These five
-  // are the whole vocabulary; anything seen that fits none of them goes in
-  // `other`, which is where a reader should put what it is unsure about rather
-  // than guessing at a better-sounding slot.
-  const READ_FIELDS = ["show", "artist", "title", "host", "other"];
-  const READ_POLL = 3000;     // ms between looks for a reply
-  const READ_GIVEUP = 90000;  // ms before a frame nobody answered is forgotten
-  let readSeq = 0;
-
-  async function readOffer(why, box, crops) {
-    if (!$("aiRead").checked || !shotData) return;
-    const id = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14) +
-               "-" + (++readSeq);
-    // The context tells the reader what fired and WHERE THE PICTURE IS, so it
-    // can ignore the moving part and read the chrome. It is the one thing the
-    // console knows that a model looking at a flat frame does not.
-    const ctx = {
-      id, why,
-      at: new Date().toISOString(),
-      video_box: box ? box.join(",") : "",
-      show_now: $("showname").value.trim(),
-      artist_now: $("showartist").value.trim(),
-      title_now: $("showtitle").value.trim(),
-      answer_with: READ_FIELDS.join(",") + ",confidence",
-      // NAMED SO A READER NEED NOT GUESS. Absent means the detector had no
-      // such region this time, which is itself worth knowing: no label strip
-      // means nothing outside the picture changed.
-      label_crop: crops && crops.label ? id + "-label.jpg" : "",
-      shot_crop: crops && crops.shot ? id + "-shot.jpg" : ""
-    };
-    // CHECKED, because fetch only rejects on a NETWORK failure: a 404 from the
-    // server resolves perfectly happily. The first version announced "handed
-    // over" for frames the server had refused, and that is precisely how a
-    // folder the station could not write into stayed invisible for a whole
-    // broadcast - the console said it was working the entire time.
-    try {
-      const jpg = await (await fetch(shotData)).blob();
-      const a = await fetch("/host/read/" + id + ".jpg",
-        { method: "PUT", credentials: "same-origin", body: jpg });
-      if (!a.ok) throw new Error("the picture was refused, HTTP " + a.status);
-      // The crops go up BEFORE the context that names them, for the reason the
-      // whole station is built around: everything that can fail happens before
-      // anything that commits. A context naming a crop that 404s is worse than
-      // a context with no crop in it.
-      for (const [suffix, data] of [["-label.jpg", crops && crops.label],
-                                    ["-shot.jpg", crops && crops.shot]]) {
-        if (!data) continue;
-        const r = await fetch("/host/read/" + id + suffix, { method: "PUT",
-          credentials: "same-origin", body: await (await fetch(data)).blob() });
-        if (!r.ok) throw new Error("the " + suffix + " crop was refused, HTTP " + r.status);
-      }
-      const b = await fetch("/host/read/" + id + ".yaml", { method: "PUT", credentials: "same-origin",
-        headers: { "Content-Type": "text/yaml" }, body: aiToYaml(ctx) });
-      if (!b.ok) throw new Error("the context was refused, HTTP " + b.status);
-    } catch (e) { readSay("could not hand that frame over: " + e.message); return; }
-    readSay("handed over " + id + " \u2014 waiting for a reading");
-    readWait(id, why, Date.now());
-  }
-
-  // WAITING IS DRIVEN BY THE WATCHER'S TICK, NOT BY setTimeout, for the reason
-  // measured above: a hidden tab gets one timer call a minute, and this console
-  // is hidden the whole time a host is looking at the tab they are sharing. On
-  // setTimeout this loop would poll at 0s and 60s and then give up at 90 - so a
-  // reader that answered in ten seconds would usually be missed, and phase two
-  // would look like nobody was reading. The watcher's tick comes from a worker
-  // and keeps its cadence, so the poll rides on that instead.
-  const readPending = new Map();   // id -> { why, since }
-  let readPolledAt = 0;
-
-  function readWait(id, why, since) { readPending.set(id, { why, since }); }
-
-  async function readPoll() {
-    if (!readPending.size) return;
-    for (const [id, p] of [...readPending]) {
-      if (Date.now() - p.since > READ_GIVEUP) {
-        readPending.delete(id); readSay("nobody read " + id); continue;
-      }
+      track = airTabVideo.clone();
+      reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
+      const r = await reader.read();
+      if (r.done || !r.value) return '';
+      const frame = r.value;
       try {
-        const r = await fetch("/host/read/" + id + ".reply.yaml",
-          { credentials: "same-origin", cache: "no-store" });
-        if (r.ok) {
-          readPending.delete(id);
-          readDraw(id, p.why, aiFromYaml(await r.text()));
-          readSay("");
-        }
-      } catch {}
-    }
-  }
-
-  function readSay(t) {
-    $("readnote").hidden = !t;
-    $("readnote").textContent = t || "";
-  }
-
-  // Shown, never applied. Phase two is about finding out whether the readings
-  // are any good, and a proposal that quietly rewrote the show would destroy
-  // the evidence it exists to produce.
-  function readDraw(id, why, p) {
-    const box = document.createElement("div");
-    box.className = "rprop";
-    const head = document.createElement("div");
-    head.className = "rwhen";
-    head.textContent = new Date().toLocaleTimeString() + " \u00b7 " + why +
-      (p.confidence ? " \u00b7 " + p.confidence : "");
-    box.appendChild(head);
-    for (const f of READ_FIELDS) {
-      if (!p[f]) continue;
-      const row = document.createElement("div");
-      row.className = "rfield";
-      const k = document.createElement("span");
-      k.className = "rkey"; k.textContent = f;
-      const v = document.createElement("span");
-      // textContent, not innerHTML: this string came from a model that was
-      // looking at somebody else's web page.
-      v.className = "rval"; v.textContent = p[f];
-      row.appendChild(k); row.appendChild(v);
-      box.appendChild(row);
-    }
-    const list = $("readlist");
-    list.insertBefore(box, list.firstChild);
-    while (list.children.length > 20) list.removeChild(list.lastChild);
-  }
-
-  // What it is doing, in the panel, because a detector nobody can see the working
-  // of is a detector nobody can tell is broken.
-  function shotSay(fired, known, busyCells, stallRun) {
-    $('airwatchnote').hidden = false;
-    $('airwatchnote').textContent =
-      shotSeen < SHOT_WARM
-        ? 'Learning what this tab normally does\u2026'
-        : known
-          ? 'It knows ' + known + ' place' + (known === 1 ? '' : 's') +
-            ' on this tab that report a change, and is watching those.'
-          : 'Watching the whole tab, and comparing every part of it against its ' +
-            'own usual. Nothing has reported twice yet.';
-    const bits = [];
-    if (busyCells > 0) bits.push(busyCells + ' cell' + (busyCells === 1 ? '' : 's') + ' of moving picture');
-    else bits.push('nothing on it moves like video');
-    if (stallRun > 0) bits.push('the picture has gone quiet');
-    // THE RATE IT IS ACTUALLY MANAGING, because the one failure this had was
-    // invisible from here: a throttled tab and a quiet tab look identical, and
-    // both of them say nothing at all. Now it says how often it is looking, so
-    // an asleep detector can be told apart from an uneventful one.
-    const gap = shotLooks > 1 ? (Date.now() - shotFirstAt) / (shotLooks - 1) / 1000 : 0;
-    if (gap) bits.push('a look every ' + gap.toFixed(1) + 's');
-    $('airwatchnote').textContent += ' ' + bits.join('; ') + '.';
-    // Kept even though nothing is scheduled any more: if the SOURCE slows down -
-    // a tab that stops producing frames, a machine that cannot keep up - the
-    // looking slows with it, and that is worth seeing rather than guessing at.
-    if (shotLooks > 3 && gap > SHOT_GAP / 1000000 * 2.5) {
-      $('airwatchnote').textContent +=
-        ' The tab is sending frames more slowly than that, so it is looking less often than it would like.';
-    }
-  }
-
-  // JPEG rather than PNG, and not for looks: a screenshot as PNG is most of a
-  // megabyte, the post route truncates over 4MB and this console refuses over 3.
-  // A page of text at .82 is a fraction of that and reads perfectly.
-  // A CROP, EXPRESSED IN CELLS. The grid is the only geometry any of this has,
-  // so a region is named in it and converted to pixels here.
-  //
-  // TAKEN FROM THE FRAME, NOT FROM THE REDUCED COPY. The detector thinks in a
-  // 256x144 version because it only needs to know what MOVED; something is
-  // going to READ this one, and text does not survive that reduction. Quality
-  // .9 rather than the .82 the full frame uses, for the same reason.
-  function shotCut(frame, x0, y0, x1, y1) {
-    if (!frame || x1 < x0 || y1 < y0) return '';
-    const w = frame.displayWidth || frame.codedWidth;
-    const h = frame.displayHeight || frame.codedHeight;
-    if (!w || !h) return '';
-    const sx = Math.round(x0 * w / SHOT_COLS), sy = Math.round(y0 * h / SHOT_ROWS);
-    const sw = Math.round((x1 - x0 + 1) * w / SHOT_COLS);
-    const sh = Math.round((y1 - y0 + 1) * h / SHOT_ROWS);
-    if (sw < 1 || sh < 1) return '';
-    const c = document.createElement('canvas');
-    c.width = Math.min(SHOT_WIDE, sw);
-    c.height = Math.max(1, Math.round(c.width * sh / sw));
-    try {
-      c.getContext('2d').drawImage(frame, sx, sy, sw, sh, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', 0.9);
+        const w = frame.displayWidth || frame.codedWidth;
+        const h = frame.displayHeight || frame.codedHeight;
+        if (!w || !h) return '';
+        const c = document.createElement('canvas');
+        c.width = Math.min(SHOT_WIDE, w);
+        c.height = Math.round(c.width * h / w);
+        c.getContext('2d').drawImage(frame, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.9);
+      } finally { frame.close(); }
     } catch { return ''; }
+    finally {
+      if (reader) { try { reader.cancel(); } catch {} }
+      if (track) { try { track.stop(); } catch {} }
+    }
   }
 
-  // WHERE A TITLE ACTUALLY IS, rather than wherever something twitched.
-  //
-  // The first version cut the rows the still cells fired in, which sounded
-  // right and is not. Measured on a real tab: it returned the YouTube top bar
-  // - search box, Create button, and a notification badge that had gone from 1
-  // to 8. All of those are genuine changes outside the picture, and none of
-  // them is the title. A clock, a like count and a hover state do the same.
-  //
-  // Titles live UNDER the player. That is true of YouTube, and of every other
-  // video page worth sharing, so the strip is taken from the bottom edge of the
-  // picture down - deterministic, and it cannot be lured away by a badge. The
-  // box's own last row is included because the title often sits tight against
-  // the player with no gap.
-  //
-  // Falls back to the fired rows when there is no picture to be under, which is
-  // the only case where "wherever it moved" is the best guess available.
-  function shotLabelCut(frame, boxBottom, ly0, ly1) {
-    if (boxBottom >= 0 && boxBottom < SHOT_ROWS - 1) {
-      return shotCut(frame, 0, boxBottom, SHOT_COLS - 1, SHOT_ROWS - 1);
-    }
-    if (ly1 >= 0) {
-      return shotCut(frame, 0, Math.max(0, ly0 - 1),
-                     SHOT_COLS - 1, Math.min(SHOT_ROWS - 1, ly1 + 1));
-    }
-    return '';
+  function shotSay(t) {
+    $('shotstat').textContent = t || '';
   }
 
-  function shotOffer(frame, why) {
-    if (!frame) return;
-    const w = frame.displayWidth || frame.codedWidth;
-    const h = frame.displayHeight || frame.codedHeight;
-    if (!w || !h) return;
-    const c = document.createElement('canvas');
-    c.width = Math.min(SHOT_WIDE, w);
-    c.height = Math.round(c.width * h / w);
-    c.getContext('2d').drawImage(frame, 0, 0, c.width, c.height);
-    try { shotData = c.toDataURL('image/jpeg', 0.82); } catch { return; }
-    shotAt = Date.now();
-    $('shotimg').src = shotData;
-    // WITH THE LABELS ON IT. A picture offered on its own is a picture nobody
-    // can place later - and the whole point of the cut signal is that the
-    // labels have NOT changed, so they are the context that makes it mean
-    // something. Whatever is playing right now goes on the card.
-    const nowShow = [$('showartist').value.trim(), $('showtitle').value.trim()]
-      .filter(Boolean).join(' \u2014 ');
-    $('shotwhen').textContent = (why || 'The still parts of the tab changed') +
-      ' at ' + new Date().toLocaleTimeString() + '.' +
-      (nowShow ? ' ' + nowShow + '.' : '');
+  function shotShow(data) {
+    shotData = data;
+    $('shotimg').src = data;
+    $('shotwhen').textContent = 'From the tab at ' + new Date().toLocaleTimeString() + '.';
+    shotSay('');
     $('shotwrap').hidden = false;
-    // The one thing here allowed to open something by itself: a picture offered
-    // inside a shut panel is a picture nobody was offered.
     $('postwrap').open = true;
   }
 
-  // NOTHING HERE IS SCHEDULED, and that is the whole point. The tab is a
-  // continuous source that already announces every new frame, so asking it on a
-  // clock what it currently looks like was the wrong shape for the problem. A
-  // timer is also the one thing a browser will quietly take away: measured on
-  // this machine, a hidden tab's setInterval is cut to ONE CALL A MINUTE, and
-  // this console is hidden for the whole broadcast because the host is looking
-  // at the tab they are sharing.
-  //
-  // MediaStreamTrackProcessor turns the track into a stream of VideoFrames, so
-  // the looking is driven by the source. Measured the same way, tab hidden,
-  // against 917 frames the source produced:
-  //
-  //   this, read on the main thread             917 of 917   100%
-  //   the same readable handed to a worker      917 of 917   100%
-  //   requestVideoFrameCallback on a <video>      9 of 917     1%
-  //
-  // So no worker is needed, and no <video> element either. Note the third row:
-  // requestVideoFrameCallback is NOT a fallback. It is tied to rendering, and a
-  // hidden tab does not render - it stopped dead the moment the tab went behind
-  // another one, which is precisely when this has to work.
-  //
-  // PACING COMES OFF THE MEDIA CLOCK. A shared tab can arrive at sixty frames a
-  // second and none of this wants that, so every frame is taken and closed at
-  // once, and one is ANALYSED only when the frame's own timestamp has moved
-  // SHOT_GAP past the last analysed one. The stream says when we look; the
-  // stream's own clock says which looks are far enough apart to mean anything.
-  //
-  // Every frame is closed on every path. A VideoFrame holds a real buffer and
-  // leaking them stalls the producer within a second or two.
-  async function shotPump(reader) {
-    let lastTs = -Infinity;
-    for (;;) {
-      let r;
-      try { r = await reader.read(); } catch { return; }
-      if (r.done) return;
-      const frame = r.value;
-      try {
-        if (shotReader !== reader) return;          // a later share took over
-        if (frame.timestamp - lastTs >= SHOT_GAP) {
-          lastTs = frame.timestamp;
-          shotLooks++;
-          if (!shotFirstAt) shotFirstAt = Date.now();
-          // Rides here rather than on a timer of its own; see readPoll.
-          if (Date.now() - readPolledAt >= READ_POLL) { readPolledAt = Date.now(); readPoll(); }
-          shotTick(frame);
-        }
-      } finally { frame.close(); }
-    }
-  }
-
-  function shotStart() {
-    if (shotReader || !airTabVideo) return;
-    if (typeof MediaStreamTrackProcessor === 'undefined') {
-      $('airwatchnote').hidden = false;
-      $('airwatchnote').textContent =
-        'This browser will not hand the tab\u2019s frames to the page, so the ' +
-        'watcher cannot run here. Chrome and Edge will.';
-      return;
-    }
-    // A CLONE, so stopping the watcher never touches the track the share owns.
-    try {
-      shotTrack = airTabVideo.clone();
-      shotReader = new MediaStreamTrackProcessor({ track: shotTrack }).readable.getReader();
-    } catch { shotTrack = null; shotReader = null; return; }
-    shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
-    shotSeen = 0; shotMoving = false; shotQuiet = 0;
-    shotLooks = 0; shotFirstAt = 0;
-    shotPump(shotReader);
-  }
-
-  function shotStop() {
-    if (shotReader) { const r = shotReader; shotReader = null;
-                      try { r.cancel(); } catch {} }
-    if (shotTrack) { try { shotTrack.stop(); } catch {} shotTrack = null; }
-    shotLast = null; shotBusy = null; shotHits = null; shotRun = null;
-    shotCanvas = null; shotSeen = 0;
-    shotMoving = false; shotQuiet = 0;
-    shotLooks = 0; shotFirstAt = 0; shotStallRun = 0; shotBusyCells = 0;
-    shotArtAt = 0;
-    $('airwatchnote').hidden = true;
-  }
-
+  // Kept under the old names because the air panel calls them from three places
+  // and there is nothing to gain from renaming a one-line function.
   function shotLook() {
     const can = airOn && !!airTabVideo;
-    $('airwatchwrap').hidden = !can;
-    if (can && $('airwatch').checked) shotStart(); else shotStop();
+    $('airshotwrap').hidden = !can;
+    $('postshot').hidden = !can;
   }
-  $('airwatch').addEventListener('change', shotLook);
-
-  // Into the composer as a data: image, which is exactly what a clipboard paste
-  // already gives - so Post uploads it and rewrites it to a file with no new
-  // storage code at all behind this button.
-  $('shotuse').addEventListener('click', () => {
-    if (!shotData) return;
-    postBox.focus();
-    const sel = document.getSelection();
-    if (!sel.rangeCount || !postBox.contains(sel.anchorNode)) {
-      const r = document.createRange();
-      r.selectNodeContents(postBox); r.collapse(false);
-      sel.removeAllRanges(); sel.addRange(r);
-    }
-    document.execCommand('insertHTML', false,
-      postClean('<img src="' + shotData + '" alt="from the tab">'));
+  function shotStop() {
     $('shotwrap').hidden = true;
     shotData = '';
+    shotSay('');
+  }
+
+  // ===== sending a picture to whatever is reading ==========================
+  //
+  // The same folder as before, minus the machine that used to fill it. A host
+  // presses a button; a frame and a line of context land in /host/read/ and
+  // something else may look at them. Nothing polls for a reply: there is no
+  // proposal list any more, because a DJ that can read the tab acts through the
+  // station's own controls rather than through this console.
+  let readSeq = 0;
+  const yq = (v) => '"' + String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+
+  async function shotSend() {
+    if (!shotData) return;
+    const id = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14) +
+               '-' + (++readSeq);
+    const ctx = [
+      'id: ' + yq(id),
+      'why: ' + yq('the host sent it'),
+      'at: ' + yq(new Date().toISOString()),
+      'show_now: ' + yq($('showname').value.trim()),
+      'artist_now: ' + yq($('showartist').value.trim()),
+      'title_now: ' + yq($('showtitle').value.trim())
+    ].join('\n') + '\n';
+    shotSay('sending\u2026');
+    try {
+      // The picture BEFORE the context that names it: everything that can fail
+      // happens before anything that commits.
+      const a = await fetch('/host/read/' + id + '.jpg', { method: 'PUT',
+        credentials: 'same-origin', body: await (await fetch(shotData)).blob() });
+      if (!a.ok) throw new Error('the picture was refused, HTTP ' + a.status);
+      const b = await fetch('/host/read/' + id + '.yaml', { method: 'PUT',
+        credentials: 'same-origin', headers: { 'Content-Type': 'text/yaml' },
+        body: ctx });
+      if (!b.ok) throw new Error('the context was refused, HTTP ' + b.status);
+      shotSay('sent ' + id);
+    } catch (e) { shotSay('could not send that: ' + e.message); }
+  }
+
+  $('airshot').addEventListener('click', async () => {
+    const d = await shotGrab();
+    if (d) shotShow(d); else shotSay('could not take a picture of that tab');
   });
-  $('shotdrop').addEventListener('click', () => {
-    $('shotwrap').hidden = true; shotData = '';
-  });
+  $('shotai').addEventListener('click', shotSend);
 
   // ===== posts: what the room reads while a show is on =====================
   //
@@ -5808,6 +5008,56 @@
     } finally { postBusy = false; postDraw(); }
   }
 
+  // --- putting a picture in ------------------------------------------------
+  // AN IMAGE ON THE CLIPBOARD IS A FILE, not markup. The paste handler below
+  // calls preventDefault and then looks only at text/html and text/plain, so a
+  // pasted screenshot matched neither branch and simply vanished - the browser
+  // had been told not to handle it and nothing else did.
+  //
+  // It goes in as a data: URL, which is exactly what Post already knows how to
+  // upload and rewrite into a file, so nothing downstream changes.
+  function postImageIn(dt) {
+    if (!dt) return null;
+    const files = dt.files && dt.files.length
+      ? Array.from(dt.files)
+      : Array.from(dt.items || []).map((i) => (i.kind === 'file' ? i.getAsFile() : null));
+    return files.find((f) => f && /^image\//.test(f.type)) || null;
+  }
+
+  // The caret may be anywhere, or nowhere: put it at the end of the box rather
+  // than dropping the picture into whatever had focus a moment ago.
+  function postPutData(data, alt) {
+    postBox.focus();
+    const sel = document.getSelection();
+    if (!sel.rangeCount || !postBox.contains(sel.anchorNode)) {
+      const r = document.createRange();
+      r.selectNodeContents(postBox); r.collapse(false);
+      sel.removeAllRanges(); sel.addRange(r);
+    }
+    document.execCommand('insertHTML', false,
+      postClean('<img src="' + data + '" alt="' + alt + '">'));
+  }
+
+  function postPutFile(file) {
+    const r = new FileReader();
+    r.onload = () => postPutData(String(r.result), 'pasted');
+    r.readAsDataURL(file);
+  }
+
+  // The three buttons that put a picture of the tab into a post. They live here
+  // rather than beside the rest of the picture code because they need postBox
+  // and postClean, and those are defined in this section.
+  $('shotuse').addEventListener('click', () => {
+    if (!shotData) return;
+    postPutData(shotData, 'from the tab');
+    shotStop();
+  });
+  $('shotdrop').addEventListener('click', shotStop);
+  $('postshot').addEventListener('click', async () => {
+    const d = await shotGrab();
+    if (d) postPutData(d, 'from the tab');
+  });
+
   // --- the editor ----------------------------------------------------------
   // PASTE IS THE WHOLE POINT, so it is intercepted rather than left to the
   // browser. What the browser would insert is the source markup with its styles,
@@ -5817,6 +5067,8 @@
     const dt = e.clipboardData;
     if (!dt) return;
     e.preventDefault();
+    const img = postImageIn(dt);
+    if (img) { postPutFile(img); return; }
     const html = dt.getData('text/html');
     if (html) {
       document.execCommand('insertHTML', false, postClean(html));
@@ -5834,6 +5086,8 @@
     const dt = e.dataTransfer;
     if (!dt) return;
     e.preventDefault();
+    const img = postImageIn(dt);
+    if (img) { postPutFile(img); return; }
     const html = dt.getData('text/html');
     document.execCommand(html ? 'insertHTML' : 'insertText', false,
                          html ? postClean(html) : (dt.getData('text/plain') || ''));
