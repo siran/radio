@@ -26,6 +26,23 @@
      listener page does and is exactly what got forgotten five times. Nothing
      else in this sheet uses !important, so this ties with nothing. */
   [hidden] { display: none !important; }
+
+  /* The record button says what it does with a mark as well as a word, and
+     turns red while it is doing it. */
+  .recdot { color: var(--rec); font-size: .8em; vertical-align: 1px; }
+
+  /* THE SAME LIGHT THE LISTENER PAGE USES. On air should look like one thing
+     across the station, so this is that page's dot, its pulse and its rule
+     that the label takes the colour too. */
+  .live { display:inline-flex; align-items:center; gap:7px; font-size:12px;
+          letter-spacing:.14em; text-transform:uppercase; color:var(--dim);
+          margin:10px 0; }
+  .live .dot { width:7px; height:7px; border-radius:50%; background:#6b7280; }
+  .live.on .dot { background:var(--rec);
+                  animation:airlight 1.2s ease-in-out infinite; }
+  .live.on .lbl { color:var(--rec); }
+  @keyframes airlight { 0%,100% { opacity:1 } 50% { opacity:.45 } }
+  @media (prefers-reduced-motion: reduce) { .live.on .dot { animation:none } }
   body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
          font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
          -webkit-text-size-adjust:100%; }
@@ -292,14 +309,11 @@
   <h1>Wild n Loyal Radio &middot; Host</h1>
 
   <div class="panel">
-    <button id="rec">Start talking</button>
+    <button id="rec"><span class="recdot">&#9679;</span> Record</button>
+    <div class="status">record an audio note and send it to the radio</div>
     <div class="meter"><i id="vu"></i></div>
-    <!-- Beside the button it is about. It sat in the equalizer, three panels
-         down, which is where its slider happens to live and not where a host
-         looks when deciding whether a note should duck the music. -->
     <div class="duckrow">
       <button class="tbtn" id="duck" title="whether the station's music dips under your voice notes">Music dips under my notes</button>
-      <span class="when">notes only &mdash; a live mic always dips the music</span>
     </div>
     <div class="status" id="status">ready</div>
     <div class="err" id="err"></div>
@@ -316,8 +330,16 @@
        because the monitor is the one thing on this console that has already
        been mistaken for transmitting. -->
   <div class="panel" id="airwrap">
-    <label for="airsrc">What goes out</label>
-    <select id="airsrc">
+    <!-- TWO OPTIONS, BOTH LEGIBLE. A select hid one of them behind a click for
+         no gain: there are exactly two ways to broadcast and a host choosing
+         between them wants to read both. The select stays, hidden, because it
+         is the value the rest of this file reads. -->
+    <label>What is being broadcast</label>
+    <div id="airsrcbox">
+      <label class="chk"><input type="radio" name="airsrcr" value="mic" checked> My microphone</label>
+      <label class="chk"><input type="radio" name="airsrcr" value="bucket"> A browser tab &mdash; whatever is playing in it</label>
+    </div>
+    <select id="airsrc" hidden>
       <option value="mic">My microphone</option>
       <option value="bucket">A browser tab &mdash; whatever is playing in it</option>
     </select>
@@ -325,7 +347,14 @@
          to the question the buttons ask. A host presses Go on air and the next
          thing they want to know is whether anything is moving; at the foot of the
          panel that answer was below four paragraphs of notes and a mixing desk. -->
+    <label class="chk">
+      <input type="checkbox" id="airmute"> Pause the station&rsquo;s autoDJ while I am on air
+    </label>
     <div class="meter" id="airlevel"><i id="airvu"></i></div>
+    <!-- The same dot the listener page uses, so on air means the same thing in
+         both places. Above the buttons, because it answers what pressing them
+         did. -->
+    <div class="live" id="airlive"><span class="dot"></span><span class="lbl" id="airstat">off air</span></div>
     <div class="btns">
       <button class="tbtn" id="airbtn">Go on air</button>
       <button class="tbtn" id="airtalk" hidden disabled>Talk over it</button>
@@ -350,7 +379,7 @@
          shared tab can press this without a finger on it. -->
     <div class="btns" id="airrecrow" hidden>
       <input id="airrecname" placeholder="Name this recording" autocomplete="off" maxlength="120">
-      <button class="tbtn" id="airrecbtn" disabled>Record</button>
+      <button class="tbtn" id="airrecbtn" disabled>Record the show</button>
     </div>
     <div class="status" id="airrecnote" hidden></div>
     <!-- The show. Three boxes that are never disabled, and that is the whole
@@ -383,10 +412,10 @@
              placeholder="what to call this broadcast">
       <label for="showtitle">What is going out</label>
       <input id="showtitle" maxlength="120" autocomplete="off"
-             placeholder="the title &mdash; nobody but you can see inside a shared tab">
+             placeholder="the title">
       <label for="showartist">Who it is by</label>
       <input id="showartist" maxlength="120" autocomplete="off"
-             placeholder="the artist, if it has one">
+             placeholder="the artist">
       <label for="shownote">Anything else</label>
       <textarea id="shownote" maxlength="240" rows="2"
                 placeholder="a line for whoever is listening"></textarea>
@@ -408,9 +437,6 @@
     <div class="btns" id="airshotwrap" hidden>
       <button class="tbtn" id="airshot">Take a picture of the tab</button>
     </div>
-    <label class="chk">
-      <input type="checkbox" id="airmute"> Pause the station&rsquo;s autoDJ while I am on air
-    </label>
     <!-- OFF by default, and it has been all three ways in one evening, which is
          worth writing down rather than quietly settling.
 
@@ -427,7 +453,6 @@
          unless somebody said so on this visit. A default that silences a radio
          has to be asked for every time, not remembered from a session where it
          made sense. -->
-    <div class="status" id="airstat">off air</div>
     <div class="status" id="airmsg"></div>
     <div class="err" id="airerr"></div>
   </div>
@@ -744,7 +769,7 @@
     <summary>Streaming <span class="when">&mdash; everything this phone does to your voice before it is sent</span></summary>
     <div class="status" id="capnote">Kept on this device.
       <span class="when">next note</span> lands on the next thing you record;
-      <span class="when">mic reopen</span> needs Stop talking, then Start talking.</div>
+      <span class="when">mic reopen</span> needs Stop, then Record.</div>
 
     <label for="cap_bitrate"><span class="band">Bitrate</span> &mdash; how much detail survives the encoder; higher is a bigger file &mdash; <span id="cap_bitrateval">96000</span> bits/s <span class="when">next note</span></label>
     <div class="ctl">
@@ -803,9 +828,6 @@
        what makes it survive a cleared cache and arrive on a second phone. -->
   <details class="panel" id="preswrap" open>
     <summary>Presets <span class="when">&mdash; both halves of your sound, saved on the server under a name</span></summary>
-    <div class="status" id="presnote">Loading one changes your voice within a quarter second.
-      Bitrate lands on your <span class="when">next note</span>; everything else on Streaming needs
-      Stop talking, then Start talking.</div>
 
     <label for="presname"><span class="band">Name</span> &mdash; what to call this sound; letters, digits, space, hyphen, underscore</label>
     <input id="presname" type="text" maxlength="24" placeholder="dj" autocomplete="off"
@@ -819,14 +841,14 @@
          eye was not, and reported success to nobody. -->
     <div class="status" id="presmsg"></div>
 
-    <label for="preslist"><span class="band">Your saved sounds</span> &mdash; pick one, then Load</label>
+    <label for="preslist"><span class="band">Your saved presets</span></label>
     <select id="preslist" aria-label="Saved presets"></select>
     <div class="btns">
       <button class="tbtn" id="presload" title="apply both halves">Load</button>
       <button class="tbtn" id="presdel" title="remove it from the server">Delete</button>
     </div>
 
-    <label><span class="band">This sound, as one file</span> &mdash; the saved sound picked above: voice, EQ, streaming settings, the desk it was tuned with, and which panels were open. Keep it, mail it to a co-host, or put it back after a mistake.</label>
+    <label><span class="band">This preset, as one file</span></label>
     <div class="btns">
       <button class="tbtn" id="dlall">Download</button>
       <button class="tbtn" id="ulall">Upload</button>
@@ -1588,9 +1610,14 @@
   // nothing, and putting it would file an empty note for liquidsoap to choke
   // on. The count is on the panel so even that is not silent.
   let dropped = 0, lastSlice = '';
+  // SILENT WHEN THERE IS NOTHING TO SAY. It read "Nothing is discarded. A note
+  // of zero bytes is skipped, because there is no audio in it: 0 so far" on
+  // every screen, which is a paragraph explaining that nothing has happened.
+  // A number appears only once there is a number worth seeing.
   const showDrop = () => {
-    $('capdrop').textContent = 'Nothing is discarded. A note of zero bytes is skipped, ' +
-      'because there is no audio in it: ' + dropped + ' so far.' + lastSlice;
+    $('capdrop').textContent = dropped
+      ? dropped + ' empty note' + (dropped === 1 ? '' : 's') + ' skipped.' + lastSlice
+      : '';
   };
   showDrop();
 
@@ -1673,7 +1700,7 @@
     try {
       rec = new MediaRecorder(stream, recorderOpts(mime));
     } catch (e) {
-      $('rec').textContent = 'Start talking';
+      $('rec').innerHTML = '<span class="recdot">&#9679;</span> Record';
       $('rec').classList.remove('recording');
       fail('The recorder refused those Streaming settings: ' + e.name + ' - ' + e.message);
       setStatus('stopped');
@@ -1686,7 +1713,7 @@
       // Reached the ceiling mid-note: end it cleanly and say so, rather than
       // letting caddy reject the whole thing at the door.
       if (bytes >= MAX_BYTES && recording) {
-        end('That note reached the size limit, so it was ended and sent. Press Start talking to carry on.');
+        end('That note reached the size limit, so it was ended and sent. Press Record to carry on.');
       }
     };
     rec.onstop = () => {
@@ -1698,7 +1725,7 @@
     };
     rec.start(CHUNK_MS);
     recording = true;
-    $('rec').textContent = 'Stop talking';
+    $('rec').innerHTML = '<span class="recdot">&#9632;</span> Stop';
     $('rec').classList.add('recording');
     tick();
     capTick = setInterval(tick, 1000);
@@ -1726,7 +1753,7 @@
     if (!recording) return;
     recording = false;
     clearInterval(capTick);
-    $('rec').textContent = 'Start talking';
+    $('rec').innerHTML = '<span class="recdot">&#9679;</span> Record';
     $('rec').classList.remove('recording');
     // Clear the line rather than write to it. tick() left "recording - 0:04"
     // there and the microphone is now shut, so leaving it says something that
@@ -2059,7 +2086,7 @@
         // Word for word. The watcher answers in sentences meant to be read -
         // a rate limit says how many seconds are left - and rewording it here
         // would lose the number that makes it useful.
-        say('derr', 'Not restarted: ' + (ans.error || 'no reason given'));
+        say('derr', ans.error ? 'Not restarted: ' + ans.error : 'Not restarted.');
       }
     } catch (err) {
       say('derr', 'Could not ask for a restart: ' + err.message);
@@ -3929,6 +3956,7 @@
     // Changing the source mid-broadcast would mean rebuilding the stream under
     // a running MediaRecorder, which is a reconnection wearing a dropdown.
     $('airsrc').disabled = airOn || !!airWS;
+    for (const r of airSrcRadios) r.disabled = airOn || !!airWS;
     $('airmute').disabled = airOn || !!airWS;
     // Live only while the air is, and only over a tab: with the microphone as
     // the source it is already everything going out.
@@ -3938,6 +3966,7 @@
   }
 
   function airStat() {
+    $('airlive').classList.toggle('on', airOn);
     if (!airOn) { $('airstat').textContent = 'off air'; return; }
     const s = Math.floor((Date.now() - airStartedAt) / 1000);
     let t = 'on air · ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') +
@@ -4435,7 +4464,10 @@
     const btn = $('airrecbtn');
     btn.disabled = !on;
     btn.classList.toggle('on', !!airKeep);
-    btn.textContent = airKeep ? 'Stop recording' : 'Record';
+    // NOT just "Record": the note button at the top of the console is called
+    // that now, and two buttons with one name on one page is a question a host
+    // should not have to answer. This one keeps a whole broadcast to a file.
+    btn.textContent = airKeep ? 'Stop recording' : 'Record the show';
     // Locked while one runs, and showing what it is called: renaming a file
     // that is already being written to is a promise this cannot keep.
     $('airrecname').disabled = !on || !!airKeep;
@@ -5303,6 +5335,22 @@
   }
 
   $('airbtn').addEventListener('click', () => { if (airOn || airWS) airLeave(); else airGo(); });
+
+  // THE RADIOS ARE WHAT A HOST SEES; the select is what the rest of this file
+  // reads. Keeping both means the choice became legible without seven call
+  // sites having to learn a new way to ask what the source is.
+  const airSrcRadios = [...document.querySelectorAll('input[name="airsrcr"]')];
+  for (const r of airSrcRadios) {
+    r.addEventListener('change', () => {
+      if (!r.checked) return;
+      $('airsrc').value = r.value;
+      $('airsrc').dispatchEvent(new Event('change'));
+    });
+  }
+  // and back the other way, for the preset that restores a saved source
+  $('airsrc').addEventListener('change', () => {
+    for (const r of airSrcRadios) r.checked = r.value === $('airsrc').value;
+  });
 
   function airSrcLook() {
     const tab = $('airsrc').value !== 'mic';
