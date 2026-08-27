@@ -67,6 +67,80 @@ const path = require('path');
 const crypto = require('crypto');
 const cp = require('child_process');
 
+// --- giving a finished recording its length ---------------------------------
+//
+// A webm written by MediaRecorder and cut off when the host stops has no
+// duration in its header: the length is written at the END of a normal file and
+// this one never had an end written. Measured on a real recording:
+//
+//     ffprobe                duration=N/A
+//     decode of first 5s     clean
+//     after -c copy remux    duration=162.543
+//
+// So nothing is wrong with the audio - a browser will play it - but there is no
+// scrubber, seeking does not work, and some players refuse it outright. A
+// stream copy rewrites the header and costs no quality and almost no time,
+// because nothing is re-encoded.
+//
+// FINDING FFMPEG IS THE AWKWARD PART. This process runs as SYSTEM and ffmpeg is
+// installed under a user's AppData, so it is not on the PATH this sees. Hence
+// the search, and hence failing quietly: a recording that did not get its
+// header back is still a recording, and losing one to a missing tool would be
+// the worse outcome by far.
+const FFMPEG_TRIES = [
+  process.env.RADIO_FFMPEG,
+  'ffmpeg',
+  'C:\\Users\\an\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffmpeg.exe',
+  'C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe',
+].filter(Boolean);
+
+let ffmpegPath = null;      // null = not looked yet, false = looked and absent
+function findFfmpeg() {
+  if (ffmpegPath !== null) return ffmpegPath;
+  for (const c of FFMPEG_TRIES) {
+    try {
+      const r = cp.spawnSync(c, ['-version'], { stdio: 'ignore', timeout: 5000 });
+      if (!r.error && r.status === 0) { ffmpegPath = c; return c; }
+    } catch {}
+  }
+  ffmpegPath = false;
+  return false;
+}
+
+// Never throws, never blocks the caller, never deletes the original until the
+// replacement exists and is a plausible size.
+function remux(file) {
+  const ff = findFfmpeg();
+  if (!ff) { log('no ffmpeg found, so', path.basename(file), 'keeps no duration'); return; }
+  const tmp = file + '.remux.webm';
+  fs.rm(tmp, { force: true }, () => {
+    const p = cp.spawn(ff, ['-v', 'error', '-y', '-i', file, '-c', 'copy', tmp],
+                       { stdio: 'ignore' });
+    p.on('error', (e) => log('remux could not start for', path.basename(file) + ':', e.message));
+    p.on('close', (code) => {
+      if (code !== 0) {
+        log('remux failed for', path.basename(file), '- exit', code);
+        fs.rm(tmp, { force: true }, () => {});
+        return;
+      }
+      fs.stat(file, (e1, a) => fs.stat(tmp, (e2, b) => {
+        // A stream copy should come out within a few percent of the original.
+        // Anything wildly smaller means it read a truncated file and wrote a
+        // truncated one, and the original is the better of the two.
+        if (e1 || e2 || b.size < a.size * 0.5) {
+          log('remux of', path.basename(file), 'looked wrong, keeping the original');
+          fs.rm(tmp, { force: true }, () => {});
+          return;
+        }
+        fs.rename(tmp, file, (e3) => {
+          if (e3) { log('could not put the remux in place:', e3.message); return; }
+          log('remuxed', path.basename(file), '- it has a duration now');
+        });
+      }));
+    });
+  });
+}
+
 // --- where things are ------------------------------------------------------
 // Machine environment, like everything else here. Nothing absolute is written
 // in this file.
@@ -560,7 +634,14 @@ class Air {
     if (!cut) return { ok: false, why: 'nothing is being recorded' };
     this.cut = null;
     const secs = (Date.now() - cut.at) / 1000;
-    try { if (cut.stream) cut.stream.end(); } catch {}
+    // AFTER the bytes are actually on disk, not after end() is called - end()
+    // only asks. Remuxing a file still being flushed reads a short one.
+    try {
+      if (cut.stream) {
+        cut.stream.once('close', () => remux(cut.base + '.webm'));
+        cut.stream.end();
+      }
+    } catch {}
     // A sidecar rather than a filename made to carry everything. `backup` and
     // `offset` are the useful half: they say which broadcast this came out of
     // and where in it, so the claim can be checked against the original.
@@ -590,9 +671,13 @@ class Air {
     if (this.cut) this.cutStop('the broadcast ended');
     if (!this.rec) return;
     const r = this.rec;
+    const base = this.recBase;
     this.rec = null;
-    try { r.end(); } catch {}
-    log('recording closed:', this.recBase + '.webm');
+    try {
+      r.once('close', () => remux(base + '.webm'));
+      r.end();
+    } catch {}
+    log('recording closed:', base + '.webm');
   }
 
   // --- towards the harbor ---

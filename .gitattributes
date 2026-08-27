@@ -1,0 +1,22 @@
+# ONE LINE ENDING, AND IT IS LF.
+#
+# This repo was nine files of CRLF, sixteen of LF and a .gitignore that was
+# both. That is not cosmetic here: patches are applied to these files by exact
+# string match, and a script that assumed the wrong one computed its offsets
+# against the wrong line length and cut 33KB out of the Caddyfile.
+#
+# text=auto eol=lf normalises on commit and checks out LF everywhere.
+* text=auto eol=lf
+
+# cmd.exe is the one interpreter with real superstitions about this.
+*.cmd text eol=crlf
+
+# Never touched.
+*.webm binary
+*.jpg  binary
+*.jpeg binary
+*.png  binary
+*.gif  binary
+*.webp binary
+*.mp3  binary
+*.m4a  binary
