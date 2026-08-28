@@ -72,10 +72,28 @@
   .empty { color: var(--dim); font-size: .86rem; padding: 10px 0; }
   footer { text-align: center; margin-top: 34px; color: var(--dim); font-size: .78rem; }
   footer a { color: var(--accent); }
+  /* Only ever seen with scripting off, where it is the only useful thing on
+     the page. Deliberately plain: it must render with nothing but the sheet
+     above it, and it must not look like an error, because nothing is broken -
+     the audio is a plain MP3 and the link below plays it. */
+  noscript .nojs { display:block; background:var(--panel); border:1px solid var(--line);
+                   border-radius:12px; padding:14px 16px; margin-bottom:18px;
+                   color:var(--fg); font-size:14px; line-height:1.5; }
+  noscript .nojs a { color:var(--accent); }
+  noscript .nojs b { font-weight:600; }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <noscript>
+    <div class="nojs">
+      <b>This page needs JavaScript</b> for the player, the chat and what is on
+      now. The radio itself does not: <a href="/stream">open the stream</a> in
+      VLC, or any audio player, and it will play.
+      The recordings are at <a href="/host/recordings/">/host/recordings/</a>,
+      which needs a host password but no scripting.
+    </div>
+  </noscript>
 
   <header>
     <h1>The shows</h1>
