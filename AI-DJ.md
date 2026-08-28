@@ -2,6 +2,11 @@
 
 A self-contained reference. Assumes no prior knowledge of this station.
 
+**Where this lives.** The copy that counts is `AI-DJ.md` in the station repo
+(`$env:RADIO_HOMEAI-DJ.md`, and `radio/AI-DJ.md` in git). Anything under an
+agent's `identity.d/` is a COPY, refreshed from that one. If two disagree, the
+repo is right and the copy is stale.
+
 **What it is.** An internet radio. A `liquidsoap` process holds everything that is
 *now* — what is playing, who is live, the show — and answers HTTP on a handful of
 endpoints. Files on disk hold everything that is *then*. A `caddy` in front does
@@ -9,6 +14,14 @@ routing and credentials. There is no application server and no database.
 
 **What you are.** A *speaker*: a named credential. Everything below is done with
 ordinary HTTP as that speaker. The station never calls you; you call it.
+
+**What is NOT here any more (2026-08-28).** There was a tab watcher that read a
+host's shared tab, split it into moving and still parts, and handed frames to
+`/host/read/` for something to identify. There was an `ai.yaml` noticeboard of
+permissions. Both are gone, along with their routes — nothing was ever on the
+other end of them, and a DJ that can read a tab's DOM gets the title exactly,
+instantly, as text, with no crop, no OCR and no threshold. If you find those
+paths in an older copy of this document, they will 404.
 
 **Base URL.** `https://radio.wildnloyal.org` (also plain `http://`). One host, all
 paths below.
@@ -34,28 +47,6 @@ On the machine (`C:\Users\an\src\radio`):
 The name is the identity everywhere: the folder uploads land in, and **the
 signature on every card posted with it**. A card written by `ai` displays `— ai`
 and no instruction can make it claim otherwise.
-
-### Or over HTTP, with an admin credential
-
-There is an endpoint, and it is **not** the speaker credential — it is a separate
-`admins` login:
-
-```
-PUT /adminapi/req/<anything>.json      {"action":"add","name":"ai"}
-                                       ("password" optional; omitted = generated)
-GET /adminapi/res/<same name>.json     a few seconds later
-    → {"ok":true,"name":"ai","password":"…"}
-```
-
-A watcher outside the request path does the work and writes the answer back. The
-result carries a password in plain text and is **deleted within minutes**, so read
-it promptly. Other actions on that folder: `disable`, `enable`, `remove`.
-
-**This is a larger grant than it looks and an AI DJ does not need it.** Whoever
-holds the admin credential can mint credentials, disable other speakers and
-restart the station. Nothing else in this document requires it. The intended
-shape is: **a human mints once and hands over only the speaker password.** Ask
-for that rather than for admin.
 
 ---
 
@@ -310,122 +301,106 @@ mount frees about five seconds after the last byte.
 
 ## 7 · Recordings
 
-There are **two** of these and they are not the same thing.
-
-### 7.1 The backup — automatic, nobody asks for it
-
-Going live starts it. One file per broadcast, written to `recordings/` (or
-`$env:RADIO_RECORD`), named after the clock and the speaker:
+Every broadcast is written automatically to `recordings/` (or `$env:RADIO_RECORD`):
 
 ```
-20260818-211802-ai.webm     one continuous file, header intact
-20260818-211802-ai.marks.yaml   one YAML document per mark, --- separated
+20260818-211802-ai.webm        one continuous file, header intact
+20260818-211802-ai.marks.yaml  one YAML document per mark, appended
 ```
+
+A mark is a document, not a line in a list:
+
+```yaml
+---
+at: 711
+iso: "2026-08-18T21:18:02.711Z"
+artist: "…"
+title: "…"
+show: "…"
+```
+
+Documents rather than one growing list, deliberately: appending to a list means
+rewriting it, and a half-written list is unparseable where a half-written
+document is only the last one missing. Read it by splitting on `---`.
 
 **One file per broadcast, not one per track** — a webm header exists only in the
 first blob, so a stream cut at a boundary is bytes no decoder opens. `at` is
 milliseconds from the first byte of the recording. Cut by time with `ffmpeg`;
 never cut the stream.
 
-This is insurance. It needs no decision from you and you cannot turn it off.
+**They have a duration (measured 2026-08-28).** A webm that MediaRecorder wrote
+and the host cut off has none — the length is written at the *end* of a normal
+file and this one never had an end written, so `ffprobe` says `duration=N/A`, a
+browser plays it but shows no scrubber, and some players refuse it. The station
+now runs a stream copy when a recording stops, which rewrites the header and
+re-encodes nothing. All thirty files that predate that were given one the same
+way. If you meet one without a duration, `ffmpeg -i in.webm -c copy out.webm`
+is the whole fix.
 
-### 7.2 A named recording — deliberate, and yours to trigger
+A *named* recording (one the host started deliberately) is written as a second
+file alongside the backup, with its own `.yaml` sidecar rather than a filename
+made to carry everything:
 
-**Going live does not mean "recording".** A recording is a stretch somebody
-meant to keep, and it carries a name, because "tonight's show" and "that track
-that just played" are different objects and only one of them can be asked for
-later by name.
-
-```
-POST /host/onair/rec/start?name=Ossanha%20-%20Baden%20Powell
-POST /host/onair/rec/stop
-GET  /host/onair                     → what is on air, and what is being kept
-```
-
-Speaker credential, same as everything else here. The name may also be sent as
-a JSON body `{"name":"…"}` or as the raw body.
-
-```jsonc
-// 200 from /rec/start
-{ "ok": true, "name": "Ossanha - Baden Powell",
-  "slug": "ossanha-baden-powell",
-  "file": "ossanha-baden-powell-20260823-172410.webm",
-  "state": { "onair": true, "who": "ai",
-             "backup": "20260823-172410-ai.webm",
-             "recording": { "name": "…", "by": "ai", "secs": 0.1 } } }
+```yaml
+name: "…"      slug: "…"       by: "…"
+started: "…"   ended: "…"      secs: 0    bytes: 0
+backup: "20260818-211802-ai.webm"    offset: 0    why: "stopped"
 ```
 
-Lands in `recordings/named/` as a **playable file plus a sidecar**:
+`backup` and `offset` are the useful half: they say which broadcast this came
+out of, and where in it.
 
-```jsonc
-{ "name": "Ossanha - Baden Powell", "slug": "…", "by": "ai",
-  "started": "2026-08-23T17:24:10.451Z", "ended": "…", "secs": 214.6,
-  "backup": "20260823-172410-ai.webm",   // which broadcast it came out of
-  "offset": 261                          // and where in it, in ms
-}
+### Listing them
+
+```
+GET /host/recordings/          (speaker auth) — a browsable index
 ```
 
-`backup` and `offset` are the useful half: they let anything check the named
-file against the original rather than take its word for it.
+`Accept: application/json` should get JSON back instead of the HTML listing —
+that is Caddy's `file_server browse` behaviour, **(untested here)**.
 
-Four things worth knowing before you drive this:
+### Transcription
 
-- **Starting while one runs ends it and starts the next.** That is deliberate:
-  segments that meet end to end are exactly what a change detector produces —
-  one track stops because the next began — and refusing would silently lose the
-  second one. So on a detected track change, just POST `start` again.
-- **It is a second file written alongside, not a cut made afterwards.** It is
-  finished and playable the moment you stop it; there is nothing to extract.
-- `409 "nobody is on the air"` means what it says. `409 "no audio has arrived
-  yet"` means the header has not gone past yet — wait a moment and retry.
-- Going off the air closes any named recording with `why: "the broadcast ended"`,
-  so a show that drops does not leave a stub.
-
-The span is **also** written into the backup's `.marks.yaml` as `rec-start` /
-`rec-stop` marks. Two records of the same fact, because the cheap one still
-works when the other does not.
-
-### On formats
-
-Files this station writes for **you** are YAML: the recording marks, the
-sidecars, the noticeboard. Files liquidsoap reads back are still JSON, and that
-is a tool constraint rather than a preference - the build has `yaml.stringify`
-but no `yaml.parse`, so anything the station must read again has to stay JSON.
-
-HTTP responses are JSON throughout. Those are an API, not a file.
-
-There is **no Whisper on this machine** as of 2026-08-19.
+A `whisper-server` **is** running on this machine, listening on
+`127.0.0.1:8089` **(measured 2026-08-25)**. That corrects the older note here
+saying there was none. It is loopback-only, so it is reachable from a process on
+the machine and from nowhere else, and **nothing in the radio calls it yet
+(measured)** — no route proxies to it and no recording is transcribed
+automatically. Treat it as available hardware, not as a feature.
 
 ---
 
-## 8 · The host's instructions
+## 8 · Getting a voice onto the beat
 
-```
-GET /host/ai/ai.yaml      (speaker auth)
-PUT /host/ai/ai.yaml      max 8KB
-```
+Asked often enough by the operator to belong here. It matters to you because
+two of the three steps are settings you can read and set over HTTP, and because
+a host who sounds late is usually looking at the wrong control.
 
-```yaml
-auto_post: false      # write cards on its own
-auto_tag: false       # set artist and title on the live show, which the room sees
-auto_record: false    # start and stop named recordings
-auto_music: false     # queue and skip
-prompt: "who you are, what to notice, how long to be"
-at: "2026-08-24T18:00:00Z"   # written by the console, not by you
-by: "an"                      # who last changed it
-```
+The arithmetic is one line:
 
-- `prompt` — what the host wants. Written by a human in the console.
-- **The four `auto_*` flags** are separate permissions, all `false` by default.
-  Honour each one on its own: `auto_post` is not permission to retitle the show,
-  and `auto_tag` is the one the whole room sees - a wrong title sits on the
-  public page until a person notices. Anything not granted you may still prepare
-  and leave for the host.
+> how late a host lands = their monitor lag + their voice's trip to the station
+> − `air_delay`
 
-The single `auto` flag this replaced asked one question where there were four.
-Writing a card signed with your name, renaming what the whole room can see,
-cutting a recording and choosing the next record are four different amounts of
-trust, and a host will grant one while refusing another.
+So there are three steps, in this order:
+
+1. **Set `air_delay` past what is needed** — a second or two — on the mixing
+   desk. It holds the music back for *every listener*, and **takes effect at the
+   next restart**: it is the one desk control that is not live. Every other one
+   is `interactive.float` and reaches the air the moment it moves.
+2. **Go on air and talk over a beat.** The host should now land EARLY, ahead of
+   the beat they aimed at. That is the point of overshooting.
+3. **Raise `sync` in the console's monitor** until they sit on it. That is
+   headphones only, it moves the moment it is let go, and nothing about the air
+   changes.
+
+**Overshoot deliberately, because `sync` can only ADD delay.** A host who lands
+late has nothing to spend and must go back to step 1 — and step 1 costs a
+restart, which is why it is worth getting past on the first try.
+
+`air_delay` is readable in `GET /likes/now` and settable on the desk. Its cost
+is real and shared: every listener waits that much longer, so it is not a knob
+to leave high for a station nobody talks on. `0.0` is the default and means the
+station holds nothing back.
 
 ---
 
@@ -459,8 +434,6 @@ trust, and a host will grant one while refusing another.
 | `GET/POST` | `/control/show` | the show record |
 | `PUT` | `/host/post/<show.id>/<file>` | a card or its pictures |
 | `GET` | `/posts/<show.id>/<file>` | read one back — public |
-| `GET/PUT` | `/host/ai/ai.yaml` | the host's instructions, and four permissions |
+| `GET` | `/host/recordings/` | browse the recordings |
+| `POST` | `/control/voice/flush` | drop the voice notes queued to air |
 | `WSS` | `/host/onair` | the audio in, subprotocol `webcast` |
-| `POST` | `/host/onair/rec/start?name=` | begin a NAMED recording |
-| `POST` | `/host/onair/rec/stop` | end it, write its sidecar |
-| `GET` | `/host/onair` | who is on, the backup, what is being kept |
