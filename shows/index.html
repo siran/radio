@@ -81,6 +81,18 @@
                    color:var(--fg); font-size:14px; line-height:1.5; }
   noscript .nojs a { color:var(--accent); }
   noscript .nojs b { font-weight:600; }
+  /* A theme is six tokens; --air is a signal and stays.
+     THREE STATES. :root is dark, the media query lights it for a browser that
+     asked and has NOT been overruled, and [data-theme] beats both either way.
+     The :not() guard is the whole trick: without it an explicit dark choice is
+     ignored on a light machine. */
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme]) { --bg:#f6f6f4; --panel:#fff;    --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
+  }
+  :root[data-theme="dark"]  { --bg:#0b0b0e; --panel:#131318; --line:#24242c; --fg:#ecebe8; --dim:#8b8b96; --accent:#4ade80; }
+  :root[data-theme="light"] { --bg:#f6f6f4; --panel:#fff;    --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
+  :root[data-theme="paper"] { --bg:#efe9dd; --panel:#f8f4ea; --line:#ddd3c0; --fg:#2b2620; --dim:#7a7064; --accent:#9a6b3f; }
+  :root[data-theme="night"] { --bg:#070a12; --panel:#0d1220; --line:#1b2438; --fg:#dde6f5; --dim:#7c8aa5; --accent:#5aa9ff; }
 </style>
 </head>
 <body>
@@ -127,6 +139,29 @@
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
+  // ===== how this page looks ===============================================
+  //
+  // '' means auto - the attribute comes off and the OS preference decides again.
+  // There is no data-theme="auto" and should not be: the media query IS the
+  // auto. One key for every page, all same-origin, so a choice made anywhere is
+  // the choice everywhere - which is also how the narrator inside the console's
+  // iframe follows it without a line of wiring.
+  const THEME_KEY = 'wnl.theme';
+  function themeApply(v) {
+    if (v) document.documentElement.setAttribute('data-theme', v);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  try {
+    const saved = localStorage.getItem(THEME_KEY) || '';
+    themeApply(saved);
+    // Another tab, or the console's picker while this sits in its iframe.
+    addEventListener('storage', (e) => {
+      if (e.key === THEME_KEY) {
+        themeApply(e.newValue || '');
+      }
+    });
+  } catch {}
+
 
   // Caddy's own directory listing, asked for as JSON rather than scraped out of
   // the HTML it serves by default. That is the whole discovery mechanism: this

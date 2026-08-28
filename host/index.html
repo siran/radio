@@ -300,6 +300,18 @@
   .postlist .pt { flex:1; min-width:0; color:#a9a9b4; overflow:hidden;
                   text-overflow:ellipsis; white-space:nowrap; }
   .postlist .tbtn { padding:4px 9px; font-size:12px; }
+  /* A theme is five shades; --on and --rec are signals and stay.
+     THREE STATES. :root is dark, the media query lights it for a browser that
+     asked and has NOT been overruled, and [data-theme] beats both either way.
+     The :not() guard is the whole trick: without it an explicit dark choice is
+     ignored on a light machine. */
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme]) { --bg:#f6f6f4; --panel:#fff;    --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; }
+  }
+  :root[data-theme="dark"]  { --bg:#0e0e10; --panel:#17171a; --line:#2a2a30; --fg:#e8e8ea; --dim:#8a8a93; }
+  :root[data-theme="light"] { --bg:#f6f6f4; --panel:#fff;    --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; }
+  :root[data-theme="paper"] { --bg:#efe9dd; --panel:#f8f4ea; --line:#ddd3c0; --fg:#2b2620; --dim:#7a7064; }
+  :root[data-theme="night"] { --bg:#070a12; --panel:#0d1220; --line:#1b2438; --fg:#dde6f5; --dim:#7c8aa5; }
 </style>
 </head>
 <body>
@@ -874,11 +886,51 @@
   <span class="sep">&middot; <a href="/host/recordings/" target="_blank" title="every broadcast is kept; named recordings are under named/">the recordings &#8599;</a></span>
     <span class="sep" id="whoamiwrap" hidden>&middot; <span id="whoami"></span> &middot; <a href="/host/logout">log out</a></span>
   &middot; <a href="/host/logout">sign out</a>
+    <span class="sep">&middot;</span>
+    <select id="theme" title="how this page looks">
+      <option value="">theme: auto</option>
+      <option value="dark">dark</option>
+      <option value="light">light</option>
+      <option value="paper">paper</option>
+      <option value="night">night</option>
+    </select>
 </div>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
+  // ===== how this page looks ===============================================
+  //
+  // '' means auto - the attribute comes off and the OS preference decides again.
+  // There is no data-theme="auto" and should not be: the media query IS the
+  // auto. One key for every page, all same-origin, so a choice made anywhere is
+  // the choice everywhere - which is also how the narrator inside the console's
+  // iframe follows it without a line of wiring.
+  const THEME_KEY = 'wnl.theme';
+  function themeApply(v) {
+    if (v) document.documentElement.setAttribute('data-theme', v);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  try {
+    const saved = localStorage.getItem(THEME_KEY) || '';
+    themeApply(saved);
+    const themeSel = $('theme');
+    if (themeSel) {
+      themeSel.value = saved;
+      themeSel.addEventListener('change', () => {
+        themeApply(themeSel.value);
+        try { localStorage.setItem(THEME_KEY, themeSel.value); } catch {}
+      });
+    }
+    // Another tab, or the console's picker while this sits in its iframe.
+    addEventListener('storage', (e) => {
+      if (e.key === THEME_KEY) {
+        themeApply(e.newValue || '');
+        const s2 = $('theme'); if (s2) s2.value = e.newValue || '';
+      }
+    });
+  } catch {}
+
 
   let stream = null, rec = null, ac = null, analyser = null, raf = 0;
   let parts = [], recording = false, startedAt = 0, bytes = 0;
