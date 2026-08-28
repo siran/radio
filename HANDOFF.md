@@ -491,9 +491,15 @@ Removed; it stops and names the file now.
 
 ## Open, none of it blocking
 
-- **whisper-server**: running on `127.0.0.1:8089`, holding **4.3 GB**, called by
-  nothing. Wire transcription up or stop it — it is the most expensive idle
-  thing on the machine.
+- **whisper-server** on `127.0.0.1:8089`, holding **4.3 GB**, is **not idle and
+  must not be stopped** — this corrects what I wrote above. It belongs to the
+  **eGPT spine** (`node C:\Users\an\bin\egpt\egpt-spine.mjs`, one process that
+  also serves `:23390` and piper on `:23391`); the spine spawns it and it
+  started one second after the spine did. Both nodes transcribe through it:
+  `do` at `127.0.0.1:23390`, `kg` at `192.168.1.102:23390`. 360 remote-worker
+  transcriptions in the current log against a single local `whisper-cli` run.
+  What is true is narrower: **the radio** does not call it, and no recording is
+  transcribed automatically.
 - **`air_delay` is 0.0**, so no host can land on the beat. Step 1 of §8 in
   `AI-DJ.md` needs doing once and costs a liquidsoap restart.
 - **Named recordings work but have never been used** — all 30 are anonymous
