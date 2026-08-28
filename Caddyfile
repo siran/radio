@@ -764,7 +764,11 @@ import relays.caddy
 		import speakers
 		@presets {
 			method GET PUT
-			path /host/presets/presets.json
+			# shows.json beside it: the SHOW record - name, title, artist, note -
+			# kept apart from the sound. They are saved at different moments and for
+			# different reasons: a voice is tuned once and left, a show is named
+			# every time somebody goes on.
+			path /host/presets/presets.json /host/presets/shows.json
 		}
 		handle @presets {
 			# Same measured trap as settings.json above - max_size TRUNCATES

@@ -419,6 +419,15 @@
       <label for="shownote">Anything else</label>
       <textarea id="shownote" maxlength="240" rows="2"
                 placeholder="a line for whoever is listening"></textarea>
+      <!-- SAVED APART FROM THE SOUND. A voice is tuned once and left; a show is
+           named every time somebody goes on, and putting the two in one preset
+           meant loading a voice to get a name back. -->
+      <div class="btns" id="showpresrow">
+        <select id="showpres"><option value="">saved shows&hellip;</option></select>
+        <button class="tbtn" id="showpresload" disabled>Load</button>
+        <button class="tbtn" id="showpressave">Save as&hellip;</button>
+        <button class="tbtn" id="showpresdel" disabled>Delete</button>
+      </div>
       <div class="status" id="showstat"></div>
     </div>
     <!-- Named for what it dips and what it dips UNDER, because this console has
@@ -2603,6 +2612,105 @@
   // The file is written through /host/presets/, which is the /host/setting/
   // block again with a different filename - so caddy files it under whoever
   // authenticated, the browser sends the credential it already holds, and
+  // ===== saved shows =======================================================
+  //
+  // The show record - name, title, artist, note - kept apart from the sound.
+  // They are saved at different moments and for different reasons: a voice is
+  // tuned once and left alone, a show is named every time somebody goes on, and
+  // one preset holding both meant loading a whole voice to get a name back.
+  //
+  // Same shape as presets.json and the same folder, so the same per-speaker
+  // isolation applies: nobody can see or overwrite another host's shows.
+  const SHOWS_URL = '/host/presets/shows.json';
+  const SHOW_KEYS = ['name', 'title', 'artist', 'note'];
+  const SHOW_EL = { name: 'showname', title: 'showtitle', artist: 'showartist', note: 'shownote' };
+  let showSaved = {};
+
+  const showSay = (m) => { $('showstat').textContent = m; };
+
+  function showPresFill() {
+    const sel = $('showpres');
+    const had = sel.value;
+    sel.innerHTML = '<option value="">saved shows\u2026</option>';
+    for (const n of Object.keys(showSaved).sort()) {
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    }
+    sel.value = showSaved[had] ? had : '';
+    const none = !sel.value;
+    $('showpresload').disabled = none;
+    $('showpresdel').disabled = none;
+  }
+
+  async function showPresLoadAll() {
+    try {
+      const r = await fetch(SHOWS_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) return;                       // no file yet is not an error
+      const d = await r.json();
+      if (d && typeof d === 'object') showSaved = d;
+      showPresFill();
+    } catch {}
+  }
+
+  // The whole file every time, for the reason presets.json is written the same
+  // way: a truncated write must not leave one entry half-formed, it must leave
+  // the file unparseable and obviously so.
+  async function showPresWrite() {
+    const r = await fetch(SHOWS_URL, {
+      method: 'PUT', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(showSaved, null, 2) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  }
+
+  $('showpres').addEventListener('change', () => {
+    const none = !$('showpres').value;
+    $('showpresload').disabled = none;
+    $('showpresdel').disabled = none;
+  });
+
+  $('showpresload').addEventListener('click', () => {
+    const n = $('showpres').value;
+    const d = showSaved[n];
+    if (!d) return;
+    for (const k of SHOW_KEYS) if (typeof d[k] === 'string') $(SHOW_EL[k]).value = d[k];
+    // Straight onto the air, the same as typing it would be.
+    showPush();
+    showSay('Loaded show: ' + n + '.');
+  });
+
+  $('showpressave').addEventListener('click', async () => {
+    const suggested = $('showname').value.trim() || $('showpres').value || '';
+    const n = (prompt('Save this show as:', suggested) || '').trim().slice(0, 40);
+    if (!n) return;
+    const d = {};
+    for (const k of SHOW_KEYS) d[k] = $(SHOW_EL[k]).value;
+    showSaved[n] = d;
+    try {
+      await showPresWrite();
+      showPresFill();
+      $('showpres').value = n;
+      $('showpres').dispatchEvent(new Event('change'));
+      showSay('Saved show: ' + n + '.');
+    } catch (e) { showSay('not saved: ' + e.message); }
+  });
+
+  $('showpresdel').addEventListener('click', async () => {
+    const n = $('showpres').value;
+    if (!n || !showSaved[n]) return;
+    if (!confirm('Delete the saved show "' + n + '"? The show on the air is untouched.')) return;
+    const keep = showSaved[n];
+    delete showSaved[n];
+    try {
+      await showPresWrite();
+      showPresFill();
+      showSay('Deleted show: ' + n + '.');
+    } catch (e) { showSaved[n] = keep; showSay('not deleted: ' + e.message); }
+  });
+
+  showPresLoadAll();
+
   // presets.json lands beside settings.json in the speaker's own folder.
   // Liquidsoap never reads it: applying a preset writes settings.json through
   // the read-modify-write below, which is still the only thing that reaches
