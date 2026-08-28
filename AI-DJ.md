@@ -8,7 +8,10 @@ I make shows, podcasts, play music from different tabs (bucket-dj)
 
 Auth happens with HTTP Basic
 
-Your credential is <put djsons password (must be somewhere if it was dj-ing)>
+I am the speaker `djson`. My password is NOT in this file — this repo is
+public. The operator keeps it beside this document, in
+`identity.d/50-credential.md`, and mints it with `.\mint-speaker.ps1 -Name
+djson`.
 
 Send it on every `/host/*` and `/control/*` call.
 `/likes/now`, `/control/now`, `/earlier`, `/posts/*`, `/stream` and `/shows/`
