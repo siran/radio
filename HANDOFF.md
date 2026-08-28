@@ -400,3 +400,112 @@ mechanism and wrong for a nudge — one of them turned "add two grooves" into
 forty-one minutes, and the operator noticed.
 
 Commit per chunk, name the paths, never `add -A`. Update this file.
+
+---
+
+# Session close — 2026-08-28
+
+## Do this first
+
+**There are uncommitted edits to `AI-DJ.md` on Dolly.** The operator rewrote it
+by hand while I was working; `git status` on Dolly shows ` M AI-DJ.md`, 15,262 B.
+**Do not overwrite it, and do not `git checkout` it.** Pull it to reve and read
+it before touching anything:
+
+```
+scp an@dolly:C:/Users/an/src/radio/AI-DJ.md ./AI-DJ.md
+```
+
+Their direction is unmistakable from the diff: **first person, as dj-son**
+("I make shows, podcasts, play music from different tabs (bucket-dj)"), all
+explanatory prose stripped, and a placeholder left in the text:
+`<put djsons password (must be somewhere if it was dj-ing)>`.
+
+**Do not fill that placeholder.** Speaker passwords exist only as bcrypt hashes
+in `speakers.caddy`; nobody has the plaintext, and minting a new one is the
+operator's to do (`.\mint-speaker.ps1 -Name dj-son`). Leave the placeholder and
+say so.
+
+## The task that follows
+
+**Pi is a ~3B model.** The operator said so explicitly and it changes what
+`AI-DJ.md` has to be. The version I wrote is 16 KB of careful prose with
+measured/untested markings, rationale, and history — written for a large model
+reading once. A 3B model needs the opposite:
+
+- imperative, one instruction per line
+- concrete literals, not descriptions of literals
+- the request shape, then the response shape, then nothing
+- no rationale, no history, no "why this was built this way"
+- short enough to sit in a small context beside the actual task
+
+The endpoint facts in it are correct and hard-won — keep them, strip everything
+around them. Their hand edits are the register to match, not a first draft to
+improve.
+
+`HOWTO.md` is the opposite document and should stay long: it is for a person at
+the machine and nothing about it is Pi's problem.
+
+## What is canonical, and the trap that made it matter
+
+`AI-DJ.md` **in the repo** is canonical. It says so in its own second paragraph.
+Two copies live under `.egpt/rooms/radio/identity.d/` and
+`.egpt/rooms/dj-son/identity.d/`; both are copies, both were synced from the
+repo on 2026-08-28, and all three hashed identically at that moment.
+
+They had silently diverged for four days because every edit I made went to the
+`.egpt` copy — which had itself moved from `.egpt/conversations/room/radio/` to
+`.egpt/rooms/radio/` without my noticing. The repo copy, the one anyone cloning
+reads, was the stale one. **After editing the repo copy, sync both.**
+
+## Shipped this session
+
+Themes across all five pages (`028ef48`), `<noscript>` telling a scripting-off
+reader the stream link works (`cd206c0`), `start-radio.cmd` (`b1a4de4`),
+`HOWTO.md` (`7bccfcf`), saved shows kept apart from audio presets (`5373fb0`),
+recordings that carry a duration (`62b08dc`), and the removal of the tab watcher
+and the whole reader contract (`7af64c8`, `5274a5e`).
+
+The station is healthy: three Automatic services, three tasks, liquidsoap flat
+at ~160 MB, 0 of 30 recordings without a duration.
+
+## Three corrections I had to make to myself, worth not repeating
+
+**I reported a boot-resilience gap that did not exist.** I said caddy and icecast
+were bare processes that would not survive a reboot and called it the top
+priority. They are `IcecastServer` and `CaddyServer`, Automatic services, and
+always were — they run under **nssm**, so their service `PathName` is
+`nssm.exe` and a filter matching on binary name misses both. The real command is
+under `HKLM:\SYSTEM\CurrentControlSet\Services\<name>\Parameters`.
+
+**I twice announced a root cause I had reasoned to rather than measured** — an
+ACL that was fine (I had read a `Get-Acl` dump my own `tail` had truncated) and
+a `RADIO_HOME` that resolved perfectly. The actual cause of the `/host/ai` 404
+was Caddy's own handle-block ordering, found by `caddy adapt` and printing the
+routes in evaluation order. When a request behaves wrongly, enumerate the
+server's decision order early; identical-looking config blocks are the trap.
+
+**I wrote a fallback into `start-radio.ps1`** — a built-in copy of the parts list
+used silently when the JSON was missing. `CLAUDE.md` forbids fallbacks by name.
+Removed; it stops and names the file now.
+
+## Open, none of it blocking
+
+- **whisper-server**: running on `127.0.0.1:8089`, holding **4.3 GB**, called by
+  nothing. Wire transcription up or stop it — it is the most expensive idle
+  thing on the machine.
+- **`air_delay` is 0.0**, so no host can land on the beat. Step 1 of §8 in
+  `AI-DJ.md` needs doing once and costs a liquidsoap restart.
+- **Named recordings work but have never been used** — all 30 are anonymous
+  whole broadcasts, which is why nothing says what they are.
+- **Shows archive is a bare link**, not a listing. The operator has said this is
+  fine for now.
+- **Theme choice is read after first paint** — one frame of dark for a
+  light-theme reader. Needs an inline `<head>` script to fix properly.
+
+## Standing permissions the operator has given
+
+`caddy reload` when needed **unless someone is on air**, then ask — check
+`curl http://127.0.0.1:8005/likes/now` for `show.live`. Liquidsoap restarts were
+authorised when there are no listeners. Commit and push without asking when work
+is complete. Translation is dropped: browser auto-translate is the answer.
