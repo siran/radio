@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "The parts of the station, and how to tell whether each one is up.",
+    "",
+    "This file exists so start-radio.ps1 needs no editing to run on another",
+    "machine: change the names and ports here and it adapts. The script has the",
+    "same list built in as a fallback, so a missing or broken file is not fatal -",
+    "it says so and carries on with the defaults.",
+    "",
+    "ORDER MATTERS AND IS THE ORDER HERE. Icecast is the transmitter; liquidsoap",
+    "connects to it and will not if it is absent. Caddy is the front door and can",
+    "come up whenever. The tasks depend on nothing.",
+    "",
+    "'optional' means a part whose absence is worth reporting but is not a broken",
+    "station. Whisper is the only one today: nothing calls it yet."
+  ],
+
+  "services": [
+    { "name": "IcecastServer",   "label": "icecast",    "port": 8000 },
+    { "name": "LiquidsoapRadio", "label": "liquidsoap", "port": 8005 },
+    { "name": "CaddyServer",     "label": "caddy",      "port": 80 }
+  ],
+
+  "tasks": [
+    { "name": "RadioLiveBridge",      "label": "live bridge",      "port": 8007 },
+    { "name": "RadioNarratorWatcher", "label": "narrator watcher" },
+    { "name": "RadioAdminWatcher",    "label": "admin watcher" }
+  ],
+
+  "checks": [
+    { "label": "the station",     "url": "http://127.0.0.1:8005/likes/now" },
+    { "label": "the front door",  "url": "http://127.0.0.1/",              "expect": [200, 301, 302, 308] },
+    { "label": "the live bridge", "url": "http://127.0.0.1:8007/host/onair" }
+  ],
+
+  "environment": ["RADIO_HOME", "RADIO_LIQ"]
+}
