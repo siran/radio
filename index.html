@@ -118,9 +118,28 @@
     --pin: radial-gradient(circle closest-side at 45% 35%,
                            #9d9da8 0 30%, #6a6a75 62%, #43434c 100%);
   }
+  /* A THEME IS SIX TOKENS. Every other custom property on this page is either a
+     signal that must not move - --air and --cut say ON AIR and CUT and mean the
+     same thing on any ground - or a measurement of the record player. Adding a
+     theme is adding one block of these six and one <option>; nothing else in
+     this sheet has to know.
+
+     THREE STATES, NOT TWO. Most people never choose, so the OS preference has to
+     work on its own; anyone who does choose has to beat it. So: :root is dark,
+     the media query lights it up for a browser that asked and has NOT been
+     overruled, and [data-theme] wins over both in either direction. Getting the
+     :not() guard wrong is how a page ends up refusing the light theme it was
+     just asked for, on a dark laptop. */
   @media (prefers-color-scheme: light) {
-    :root { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
+    :root:not([data-theme]) { --bg:#f6f6f4; --panel:#fff; --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
   }
+  :root[data-theme="dark"]  { --bg:#0b0b0e; --panel:#131318; --line:#24242c; --fg:#ecebe8; --dim:#8b8b96; --accent:#4ade80; }
+  :root[data-theme="light"] { --bg:#f6f6f4; --panel:#fff;    --line:#e2e2dd; --fg:#17171a; --dim:#6b6b73; --accent:#16a34a; }
+
+  /* Two more, so the mechanism is exercised by something other than a shade of
+     grey. Both keep the same six names, so nothing downstream changes. */
+  :root[data-theme="paper"] { --bg:#efe9dd; --panel:#f8f4ea; --line:#ddd3c0; --fg:#2b2620; --dim:#7a7064; --accent:#9a6b3f; }
+  :root[data-theme="night"] { --bg:#070a12; --panel:#0d1220; --line:#1b2438; --fg:#dde6f5; --dim:#7c8aa5; --accent:#5aa9ff; }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--fg);
@@ -1876,6 +1895,14 @@
     <a href="/host/">i'm a radio host</a>
     <span class="sep">·</span>
     <a href="/next/">try the newest version &rarr;</a>
+    <span class="sep">·</span>
+    <select id="theme" class="flink" title="how this page looks">
+      <option value="">theme: auto</option>
+      <option value="dark">dark</option>
+      <option value="light">light</option>
+      <option value="paper">paper</option>
+      <option value="night">night</option>
+    </select>
   </footer>
 </div>
 
@@ -1884,6 +1911,37 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
+
+  // ===== how this page looks ===============================================
+  //
+  // Empty means auto: the attribute comes off and the OS preference decides
+  // again, which is why the value is stored as '' rather than the word 'auto' -
+  // there is no data-theme="auto" and there should not be, because the media
+  // query is the auto.
+  //
+  // Read before the first paint would be better than this, but the token blocks
+  // are in the sheet above and the default is dark, so a dark-themed reader sees
+  // nothing at all and a light-themed one sees at worst a frame of dark. That is
+  // a fair trade for keeping this page one file with no build step.
+  const THEME_KEY = 'wnl.theme';
+  function themeApply(v) {
+    if (v) document.documentElement.setAttribute('data-theme', v);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  try {
+    const saved = localStorage.getItem(THEME_KEY) || '';
+    themeApply(saved);
+    const sel = $('theme');
+    if (sel) {
+      sel.value = saved;
+      sel.addEventListener('change', () => {
+        themeApply(sel.value);
+        // A reader who cleared their storage, or is in a private window, still
+        // gets the theme for this visit - it just will not follow them.
+        try { localStorage.setItem(THEME_KEY, sel.value); } catch {}
+      });
+    }
+  } catch {}
   const audio = $('audio'), btn = $('btn'), vol = $('vol');
   const sym = $('btnsym');
   let lastTitle = null, titleSince = Date.now();
