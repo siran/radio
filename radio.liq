@@ -1923,7 +1923,7 @@ end
 show_logged = ref("")
 
 def show_set(req) =
-  show_name   := show_clip(60,  req.query["name"])
+  show_name   := show_clip(255, req.query["name"])
   show_title  := show_clip(120, req.query["title"])
   show_artist := show_clip(120, req.query["artist"])
   show_note   := show_clip(240, req.query["note"])

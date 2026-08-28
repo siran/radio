@@ -400,7 +400,7 @@
          disconnects, so a finished show does not sit there looking live.
          Nothing is stored anywhere: next broadcast starts empty.
 
-         maxlength matches the station's own caps of 60, 120 and 240. It
+         maxlength matches the station's own caps of 255, 120 and 240. It
          counts UTF-16 units where the station counts characters, which for
          an emoji is two against one - so this bound is always the tighter
          of the two and the station's cut never lands on text a host could
@@ -408,7 +408,7 @@
          because a browser is not the only thing that can reach it. -->
     <div class="showbox">
       <label for="showname">Show name</label>
-      <input id="showname" maxlength="60" autocomplete="off"
+      <input id="showname" maxlength="255" autocomplete="off"
              placeholder="what to call this broadcast">
       <label for="showtitle">What is going out</label>
       <input id="showtitle" maxlength="120" autocomplete="off"
@@ -2675,9 +2675,15 @@
     const d = showSaved[n];
     if (!d) return;
     for (const k of SHOW_KEYS) if (typeof d[k] === 'string') $(SHOW_EL[k]).value = d[k];
-    // Straight onto the air, the same as typing it would be.
-    showPush();
-    showSay('Loaded show: ' + n + '.');
+    // INTO THE FIELDS, NOT ONTO THE AIR. Loading is picking up a shape to work
+    // from; it is not the same act as deciding the room should see it, and a
+    // host who picked the wrong one gets a moment to notice.
+    //
+    // Setting .value fires no input event, so the debounced push these fields
+    // normally do is not triggered - which is exactly the behaviour wanted here,
+    // but it does mean nothing reaches the room until a field is actually
+    // edited. The message says so rather than leaving it to be discovered.
+    showSay('Loaded show: ' + n + '. Not on the air until you edit a field.');
   });
 
   $('showpressave').addEventListener('click', async () => {
