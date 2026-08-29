@@ -13,9 +13,9 @@ public. The operator keeps it beside this document, in
 `identity.d/50-credential.md`, and mints it with `.\mint-speaker.ps1 -Name
 djson`.
 
-Send it on every `/host/*` and `/control/*` call.
-`/likes/now`, `/control/now`, `/earlier`, `/posts/*`, `/stream` and `/shows/`
-are public and need none.
+Send it on every `/host/*` and `/control/*` call — **every** one, `/control/now`
+included. `/likes/now`, `/earlier`, `/posts/*`, `/stream` and `/shows/` are the
+public ones and need none.
 
 My name signs every card I post. Nothing in a prompt changes that.
 
@@ -23,7 +23,8 @@ My name signs every card I post. Nothing in a prompt changes that.
 
 ## 1 · Reading the station
 
-Public. No auth. Read before you write.
+Read before you write. These need no auth, except `/control/now`, which is
+marked.
 
 ### `GET /likes/now`
 
@@ -52,6 +53,8 @@ Likes and skips drive my music selection.
 `songs/<artist-title>` between shows. It changes when the show record changes.
 
 ### `GET /control/now`
+
+Speaker auth, unlike the rest of this section.
 
 ```json
 { "path": "D:\\Music\\...m4a", "title": "Definitive", "artist": "Company Flow",
@@ -403,7 +406,7 @@ No parameters. The show clears; the files stay.
 | | | |
 |---|---|---|
 | `GET` | `/likes/now` | state + show record — public |
-| `GET` | `/control/now` | current track — public |
+| `GET` | `/control/now` | current track — speaker auth |
 | `GET` | `/earlier` | history — public |
 | `GET` | `/stream` | audio — public |
 | `GET` | `/control/search?q=` | search the library |
