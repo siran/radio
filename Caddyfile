@@ -117,6 +117,31 @@ import relays.caddy
 
 	root * {env.RADIO_HOME}
 
+	# NO CREDENTIAL OVER CLEARTEXT.
+	#
+	# This snippet is imported by the plaintext http:// site as well as the two
+	# TLS ones, so every authenticated surface below was answering a 401 on port
+	# 80 - measured: `Www-Authenticate: Basic realm="wild n loyal host"` with no
+	# redirect and no HSTS. A host who reaches the http:// URL types their
+	# password into a connection anyone on the path can read, and the
+	# Authorization header then rides every later request in the clear,
+	# including every voice note. That quietly undid the property the /live
+	# block below is written to protect.
+	#
+	# The public half stays plaintext on purpose - shared links depend on :1111
+	# and a listener with no TLS still gets the stream - so only the paths that
+	# ask for a password are sent to https.
+	#
+	# hostport, not host: :1111 is the port measured to arrive from outside, and
+	# its TLS branch answers on the same number, so keeping the port sends a
+	# listener back to a door that is open for them. Redirecting to 443 would
+	# strand anyone who only has 1111 forwarded.
+	@cleartext_private {
+		protocol http
+		path /host* /admin* /adminapi/* /narrator* /control/* /interactive*
+	}
+	redir @cleartext_private https://{http.request.hostport}{http.request.uri} 308
+
 	# Live chat. Same idea as the guestbook: one small file per line.
 	# Ephemeral by nature - delete the folder any time.
 	handle /chat/* {
@@ -1049,6 +1074,40 @@ import relays.caddy
 	}
 
 
+	# The guestbook's folder is the TOP of messages/ and nothing below it.
+	#
+	# Three subtrees share that root and none of them is the guestbook. The
+	# block further down carries no credential on either verb, and caddy's `*`
+	# crosses `/` - the @docs rule says so in its own comment - so `path *.md`
+	# reached every one of these and `file_server browse` listed them:
+	#
+	#   voice/    every speaker's notes, their settings.json, presets and
+	#             playlists. /host/upload/ answers 404 on read to keep these
+	#             private; the same bytes were answering 200 through here. And
+	#             a PUT of a .md landed in a speaker's folder, where the
+	#             narrator watcher speaks every .md and .txt it finds - so an
+	#             unauthenticated request put words on the air as that host,
+	#             around the relay route's folder check, its disabled check and
+	#             its length guard.
+	#   admin/    the admin watcher's requests and its answers. A mint answer
+	#             carries a NEW SPEAKER'S PASSWORD in plain text for the ten
+	#             minutes before the watcher bins it. .gitignore already refuses
+	#             to let that folder reach the remote; it was reaching the
+	#             internet instead.
+	#   restart/  the same shape for restart requests.
+	#
+	# Longer matchers than /messages/*, so these win wherever they sit in this
+	# file - the same reason /messages/private/ below has always been safe.
+	handle /messages/voice/* {
+		respond 404
+	}
+	handle /messages/admin/* {
+		respond 404
+	}
+	handle /messages/restart/* {
+		respond 404
+	}
+
 	handle /messages/private/* {
 		@put {
 			method PUT
@@ -1264,7 +1323,30 @@ import relays.caddy
 		# the page is edited live - never let a browser cache it
 		header Cache-Control "no-cache, must-revalidate"
 		encode zstd gzip
-		file_server
+		# THE STATION IS THE REPO, so the document root is a working checkout and
+		# everything in it that no block above claims is served from here.
+		# Measured: GET /icecast.xml answered 200 with the source and admin
+		# passwords in it, and GET /.git/config answered 200.
+		#
+		# caddy hides the Caddyfile and the three files it imports on its own -
+		# verified in `caddy adapt`, which is why speakers.caddy, admins.caddy
+		# and relays.caddy answer 404 and are NOT listed again here. Nothing
+		# else is hidden automatically, so everything else that must not be
+		# public is named below.
+		#
+		# *.md is already 404 by @docs; it is not repeated here.
+		# live/ stays served - /live/narrator.json is public and the page reads
+		# it. config/ does not: every page reaches those files through a route
+		# with its own root (/host/setting/, /host/desk/, /narrator/config/),
+		# never at /config/.
+		# ONE hide directive, not several. Measured: a second `hide` REPLACES the
+		# first rather than adding to it, so a tidy list broken over four lines
+		# left everything but the last line served - *.liq answered 404 while
+		# icecast.xml went on answering 200. Everything that must not be public
+		# goes on this one line.
+		file_server {
+			hide .git .gitignore .gitattributes .githooks icecast.xml radio-parts.json config recordings cache tests tools *.ps1 *.liq *.js *.cmd *.vbs *.code-workspace
+		}
 	}
 }
 
