@@ -2080,7 +2080,11 @@
 
   function start() {
     audio.src = '/stream?t=' + Date.now();   // always join live, never a stale buffer
-    audio.load();
+    // No audio.load() here. Assigning src already runs the media element's load algorithm, so the
+    // explicit call was redundant - and it cost the press on Brave: with autoplay set to Block, a
+    // load() between the click and play() drops the user gesture, play() rejects NotAllowedError and
+    // the station reads `could not start` while Chrome and Edge play the same page. Measured on
+    // dolly 2026-09-16 with a real click in Brave 153: src+load()+play() rejected, src+play() played.
     // Every press begins audible. The page silences this element on its own
     // account when a skip lands - see topOut - and every path that takes that
     // mute gives it back, but this is the one line that cannot be reasoned
